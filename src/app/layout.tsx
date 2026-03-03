@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Noto_Sans_JP } from "next/font/google";
 import "./globals.css";
 import AppShell from "@/components/AppShell";
+import ToastContainer from "@/components/Toast";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const noto = Noto_Sans_JP({
@@ -26,6 +27,7 @@ export default function RootLayout({
                 className={`${inter.variable} ${noto.variable} font-sans`}
             >
                 <AppShell>{children}</AppShell>
+                <ToastContainer />
             </body>
         </html>
     );
