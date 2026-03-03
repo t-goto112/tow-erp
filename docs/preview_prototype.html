@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TOWMEI ERP - Preview V4</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap"
+        rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+        }
+
+        .sidebar-active {
+            background-color: #f1f5f9;
+            color: #3b82f6;
+            font-weight: 600;
+        }
+
+        .sidebar-active i {
+            color: #3b82f6;
+        }
+
+        .animate-slide-in {
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateY(10px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        ::-webkit-scrollbar {
+            height: 6px;
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+
+        /* Gantt Custom Styles */
+        .gantt-grid {
+            display: grid;
+            grid-template-columns: minmax(180px, 1fr) repeat(31, minmax(34px, 1fr));
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .gantt-header {
+            background: #f8fafc;
+            font-size: 10px;
+            font-weight: 700;
+            color: #94a3b8;
+            text-transform: uppercase;
+        }
+
+        .gantt-cell {
+            border-right: 1px dashed #f1f5f9;
+            padding: 8px 4px;
+            position: relative;
+        }
+
+        .gantt-row {
+            border-bottom: 1px solid #f8fafc;
+            transition: background 0.2s;
+        }
+
+        .gantt-row:hover {
+            background: #f8fafc;
+        }
+
+        .gantt-bar {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            height: 24px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            font-size: 10px;
+            font-weight: 700;
+            color: white;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .bg-gantt-blue {
+            background: linear-gradient(90deg, #3b82f6, #60a5fa);
+            border: 1px solid #2563eb;
+        }
+
+        .bg-gantt-red {
+            background: linear-gradient(90deg, #ef4444, #f87171);
+            border: 1px solid #dc2626;
+        }
+
+        .bg-gantt-gray {
+            background: linear-gradient(90deg, #94a3b8, #cbd5e1);
+            border: 1px solid #64748b;
+            color: #1e293b;
+        }
+
+        /* Tabs in Modal */
+        .tab-btn {
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            border-bottom-color: #3b82f6;
+            color: #3b82f6;
+        }
+
+        .history-dot {
+            position: relative;
+        }
+
+        .history-dot::before {
+            content: '';
+            position: absolute;
+            left: -17px;
+            top: 6px;
+            width: 8px;
+            height: 8px;
+            background: #cbd5e1;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+    </style>
+</head>
+
+<body class="bg-[#F8FAFC] text-slate-800 antialiased overflow-hidden">
+    <div id="app" class="flex h-screen w-full overflow-hidden">
+
+        <!-- Sidebar -->
+        <aside class="hidden md:flex w-64 flex-col bg-white border-r border-slate-200 shrink-0 z-10">
+            <div class="p-6">
+                <!-- LOGO - BLUE THEME -->
+                <div class="flex items-center gap-3">
+                    <div
+                        class="w-8 h-8 flex items-center justify-center border-2 border-blue-600 rounded-bl-xl rounded-tr-xl transform rotate-3">
+                        <span
+                            class="font-bold text-blue-600 text-lg tracking-tighter leading-none italic pr-0.5">T</span>
+                    </div>
+                    <h1 class="text-xl font-bold text-blue-600 tracking-widest uppercase"
+                        style="font-family: 'Inter', sans-serif;">Towmei</h1>
+                </div>
+            </div>
+            <nav class="flex-1 px-4 py-2 space-y-1 overflow-y-auto mt-4">
+                <a href="#" onclick="showPage('dashboard')"
+                    class="nav-item flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition text-slate-500 hover:bg-slate-50"
+                    id="nav-dashboard">
+                    <i data-lucide="layout-dashboard" class="w-5 h-5"></i> ダッシュボード
+                </a>
+                <a href="#" onclick="showPage('orders')"
+                    class="nav-item flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition text-slate-500 hover:bg-slate-50"
+                    id="nav-orders">
+                    <i data-lucide="shopping-cart" class="w-5 h-5"></i> 受注管理
+                </a>
+                <a href="#" onclick="showPage('inventory')"
+                    class="nav-item flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition text-slate-500 hover:bg-slate-50"
+                    id="nav-inventory">
+                    <i data-lucide="box" class="w-5 h-5"></i> 在庫管理
+                </a>
+                <a href="#" onclick="showPage('payments')"
+                    class="nav-item flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition text-slate-500 hover:bg-slate-50"
+                    id="nav-payments">
+                    <i data-lucide="credit-card" class="w-5 h-5"></i> 支払管理
+                </a>
+                <div class="my-4 border-t border-slate-100"></div>
+                <a href="#" onclick="showPage('routing')"
+                    class="nav-item flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition text-slate-500 hover:bg-slate-50"
+                    id="nav-routing">
+                    <i data-lucide="clipboard-edit" class="w-5 h-5"></i> 工程実績・納入
+                </a>
+                <a href="#" onclick="showPage('master')"
+                    class="nav-item flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition text-slate-500 hover:bg-slate-50"
+                    id="nav-master">
+                    <i data-lucide="database" class="w-5 h-5"></i> マスタ管理
+                </a>
+            </nav>
+            <div class="border-t border-slate-100 p-4">
+                <div class="flex items-center gap-3 px-2 py-2 cursor-pointer hover:bg-slate-50 rounded-xl transition"
+                    onclick="showPage('mypage')">
+                    <div
+                        class="w-9 h-9 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
+                        <i data-lucide="user" class="text-blue-600 w-4 h-4"></i>
+                    </div>
+                    <div class="overflow-hidden">
+                        <p class="text-sm font-bold text-slate-700 truncate">田中 義男</p>
+                        <p class="text-[10px] text-slate-400 truncate tracking-wider uppercase">Administrator</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main
+            class="flex-1 flex flex-col bg-white overflow-hidden rounded-tl-3xl border-t border-l border-slate-200/60 shadow-inner my-2 mr-2">
+            <header class="h-16 flex items-center justify-between px-6 md:px-10 shrink-0 z-0">
+                <div class="flex items-center gap-4">
+                    <h2 class="text-xl font-bold text-slate-800 tracking-tight" id="page-title">ダッシュボード</h2>
+                </div>
+                <!-- Search & Filter -->
+                <div
+                    class="hidden md:flex flex-1 max-w-md mx-6 items-center bg-slate-100 rounded-full px-4 py-1.5 border border-slate-200 focus-within:ring-2 focus-within:ring-blue-100 focus-within:bg-white transition shadow-sm">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 mr-2"></i>
+                    <input type="text" placeholder="ロット番号・製品名で検索..."
+                        class="bg-transparent text-sm w-full outline-none text-slate-700 placeholder:text-slate-400 font-medium">
+                    <button
+                        class="ml-2 pl-3 border-l border-slate-300 text-slate-500 hover:text-blue-600 transition flex items-center gap-1.5 shrink-0">
+                        <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i> <span
+                            class="text-[10px] font-bold">絞り込み</span>
+                    </button>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div
+                        class="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 text-slate-600 rounded-full text-xs font-bold">
+                        <i data-lucide="calendar" class="w-3.5 h-3.5"></i> 2024年10月
+                    </div>
+                    <button class="relative p-2 text-slate-400 hover:bg-slate-100 rounded-full transition">
+                        <i data-lucide="bell" class="w-5 h-5"></i>
+                        <span
+                            class="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 border-2 border-white rounded-full"></span>
+                    </button>
+                    <button class="md:hidden p-2 text-slate-500 bg-slate-50 rounded-full">
+                        <i data-lucide="menu" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </header>
+
+            <div id="page-container" class="flex-1 overflow-y-auto px-6 md:px-10 pb-12 animate-slide-in">
+                <!-- Content Injected -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <!-- Lot Detail vertical Modal V4 -->
+    <div id="lot-detail-modal" class="fixed inset-0 bg-slate-900/40 z-50 flex justify-end hidden animate-fade-in"
+        onclick="closeModal(event)">
+        <div class="w-full max-w-lg bg-white h-full shadow-2xl flex flex-col transform translate-x-full transition-transform duration-300"
+            id="lot-modal-content" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center p-6 border-b border-slate-100">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+                        <i data-lucide="box" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg">ロット詳細管理</h3>
+                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Lot Tracking & History
+                        </p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="showReworkSection()"
+                        class="px-3 py-1.5 bg-amber-50 text-amber-600 text-[10px] font-bold rounded-lg hover:bg-amber-100 border border-amber-200 transition flex items-center gap-1">
+                        <i data-lucide="rotate-ccw" class="w-3 h-3"></i> 差戻し実行
+                    </button>
+                    <button onclick="closeModal(event, true)"
+                        class="p-2 text-slate-400 hover:bg-slate-100 rounded-full"><i data-lucide="x"
+                            class="w-5 h-5"></i></button>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex px-6 border-b border-slate-100 bg-slate-50/50">
+                <button onclick="switchModalTab('status')" id="tab-status"
+                    class="tab-btn active px-6 py-3 text-xs font-bold text-slate-400">工程状況</button>
+                <button onclick="switchModalTab('history')" id="tab-history"
+                    class="tab-btn px-6 py-3 text-xs font-bold text-slate-400">修正記録</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-6 space-y-8">
+                <!-- Basic Info (Read/Edit) -->
+                <div class="border-b border-slate-100 pb-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <span
+                                class="text-[10px] text-slate-400 font-bold uppercase tracking-widest block mb-1">製品名</span>
+                            <h4 class="text-xl font-bold text-slate-800 editable">牛刀 210mm VG10</h4>
+                        </div>
+                        <div class="text-right">
+                            <span
+                                class="text-[10px] text-slate-400 font-bold uppercase tracking-widest block mb-1">ロット番号</span>
+                            <p class="text-sm font-mono font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">#240901-A
+                            </p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <span
+                                class="text-[10px] text-slate-400 font-bold uppercase tracking-widest block mb-1">発注日</span>
+                            <p class="text-sm font-bold editable">2024年09月01日</p>
+                        </div>
+                        <div>
+                            <span
+                                class="text-[10px] text-slate-400 font-bold uppercase tracking-widest block mb-1">受注枚数</span>
+                            <p class="text-sm font-bold editable">120 個</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vertical Process List -->
+                <div id="modal-tab-content-status">
+                    <h5 class="text-xs font-bold text-slate-800 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <i data-lucide="layers" class="w-4 h-4 text-blue-500"></i> 工程別 詳細ステータス
+                    </h5>
+
+                    <div class="space-y-6">
+                        <!-- Card 1 (Current Process) -->
+                        <div class="border-2 border-amber-200 rounded-2xl overflow-hidden shadow-md">
+                            <div
+                                class="bg-amber-50 px-5 py-3 border-b border-amber-100 flex justify-between items-center">
+                                <h6 class="font-bold text-amber-800 flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-amber-500"></span> 本研ぎ
+                                </h6>
+                            </div>
+                            <div class="p-5 space-y-4 text-sm bg-white">
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <span
+                                            class="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-tighter">納入日</span>
+                                        <input type="date" value="2024-10-10" id="input-date-delivery-本研ぎ"
+                                            class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold shadow-inner focus:ring-2 focus:ring-blue-500 outline-none">
+                                    </div>
+                                    <div>
+                                        <span
+                                            class="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-tighter">完了予定日</span>
+                                        <input type="date" value="2024-10-15" id="input-date-deadline-本研ぎ"
+                                            class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold shadow-inner text-red-600 focus:ring-2 focus:ring-blue-500 outline-none">
+                                    </div>
+                                </div>
+                                <div class="pt-4 mt-2 border-t border-slate-50">
+                                    <label
+                                        class="block text-[10px] text-slate-400 font-bold mb-1 uppercase tracking-tighter">仕掛数量</label>
+                                    <div class="flex items-center gap-2">
+                                        <input type="number" value="100" id="input-qty-本研ぎ"
+                                            class="w-24 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold shadow-inner focus:ring-2 focus:ring-blue-500 outline-none">
+                                        <span class="text-xs font-bold text-slate-400">個</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 2 -->
+                        <div class="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                            <div
+                                class="bg-slate-50 px-5 py-3 border-b border-slate-200 flex justify-between items-center">
+                                <h6 class="font-bold text-slate-700 flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-blue-500"></span> 再熱処理
+                                </h6>
+                            </div>
+                            <div class="p-5 space-y-4 text-sm bg-white">
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <span
+                                            class="text-[10px] text-slate-400 font-bold block mb-1 uppercase">納入日</span>
+                                        <input type="date" value="2024-10-12" id="input-date-delivery-再熱処理"
+                                            class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold outline-none">
+                                    </div>
+                                    <div>
+                                        <span
+                                            class="text-[10px] text-slate-400 font-bold block mb-1 uppercase">完了予定日</span>
+                                        <input type="date" value="2024-10-22" id="input-date-deadline-再熱処理"
+                                            class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold text-blue-600 outline-none">
+                                    </div>
+                                </div>
+                                <div class="pt-4 mt-2 border-t border-slate-50">
+                                    <label
+                                        class="block text-[10px] text-slate-400 font-bold mb-1 uppercase">仕掛数量</label>
+                                    <div class="flex items-center gap-2">
+                                        <input type="number" value="20" id="input-qty-再熱処理"
+                                            class="w-24 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold shadow-inner outline-none">
+                                        <span class="text-xs font-bold text-slate-400">個</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- History List -->
+                <div id="modal-tab-content-history" class="hidden animate-fade-in">
+                    <h5 class="text-xs font-bold text-slate-800 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <i data-lucide="history" class="w-4 h-4 text-blue-500"></i> 修正記録・イベント
+                    </h5>
+                    <div id="history-container" class="pl-4 border-l-2 border-slate-100 space-y-8 py-2">
+                        <div class="history-dot">
+                            <p class="text-[10px] text-slate-400 font-bold mb-1">2024/10/16 14:20 | 田中 義男</p>
+                            <p class="text-sm font-bold text-slate-700">数量修正: <span
+                                    class="text-slate-400 line-through">115</span> → 120個</p>
+                            <p class="text-xs text-slate-500 mt-1 bg-slate-50 p-2 rounded-lg">理由: 入力ミス修正（納品伝票と相違）</p>
+                        </div>
+                        <div class="history-dot">
+                            <p class="text-[10px] text-slate-400 font-bold mb-1">2024/10/14 09:30 | 加藤 研磨</p>
+                            <p class="text-sm font-bold text-slate-700">手直し発生: 熱処理工程へ差し戻し (20個)</p>
+                            <p class="text-xs text-slate-500 mt-1 bg-amber-50 p-2 rounded-lg border border-amber-100">
+                                理由: 焼き入れ不備のため再度熱処理を依頼</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-6 border-t border-slate-100 bg-white flex gap-3">
+                <button onclick="saveLotChanges()"
+                    class="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition">変更を保存</button>
+                <button onclick="showPage('routing'); closeModal(event, true);"
+                    class="p-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition">報告画面へ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Templates -->
+    <!-- 1. DASHBOARD -->
+    <template id="dashboard-tpl">
+        <div class="space-y-8">
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm">
+                    <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">受注残高</p>
+                    <h3 class="text-3xl font-bold tracking-tight">¥1,248,000</h3>
+                </div>
+                <div class="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm">
+                    <div class="flex justify-between items-start">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">仕掛品累計</p>
+                        <span class="text-xl font-bold tracking-tight">452 <span
+                                class="text-xs font-medium text-slate-500 ml-0.5">個</span></span>
+                    </div>
+                    <div class="mt-2 text-[10px] text-slate-500 font-bold border-t border-slate-100 pt-2 space-y-1">
+                        <div class="flex justify-between"><span>牛刀 210mm (#240901)</span><span>120個</span></div>
+                        <div class="flex justify-between"><span>三徳 165mm (#240905)</span><span>200個</span></div>
+                    </div>
+                </div>
+                <div class="bg-blue-600 p-6 rounded-3xl shadow-lg shadow-blue-600/20 text-white">
+                    <p class="text-[10px] text-blue-100 font-bold uppercase tracking-widest mb-1">今月の支払確定額</p>
+                    <h3 class="text-3xl font-bold tracking-tight">¥428,500</h3>
+                </div>
+            </div>
+
+            <!-- Gantt with Range Filter -->
+            <div class="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden flex flex-col">
+                <div
+                    class="p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <h4 class="font-bold flex items-center gap-2"><i data-lucide="calendar-days"
+                            class="w-5 h-5 text-blue-500"></i> 生産ガントチャート</h4>
+                    <div class="flex bg-slate-100 p-1 rounded-xl text-[10px] font-bold">
+                        <button class="px-3 py-1.5 bg-white shadow-sm rounded-lg text-slate-800">今月</button>
+                        <button
+                            class="px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-800 transition">前後1ヶ月</button>
+                        <button
+                            class="px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-800 transition flex items-center gap-1"><i
+                                data-lucide="calendar" class="w-3 h-3"></i> 範囲入力</button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto bg-white">
+                    <div class="min-w-[1200px]">
+                        <div class="gantt-grid gantt-header border-b border-slate-100">
+                            <div class="gantt-cell p-3 font-bold text-xs text-slate-500">製品 / ロット</div>
+                            <div class="gantt-cell text-center">1</div>
+                            <div class="gantt-cell text-center">2</div>
+                            <div class="gantt-cell text-center">3</div>
+                            <div class="gantt-cell text-center">4</div>
+                            <div class="gantt-cell text-center">5</div>
+                            <div class="gantt-cell text-center">6</div>
+                            <div class="gantt-cell text-center">7</div>
+                            <div class="gantt-cell text-center">8</div>
+                            <div class="gantt-cell text-center">9</div>
+                            <div class="gantt-cell text-center">10</div>
+                            <div class="gantt-cell text-center">11</div>
+                            <div class="gantt-cell text-center">12</div>
+                            <div class="gantt-cell text-center">13</div>
+                            <div class="gantt-cell text-center">14</div>
+                            <div class="gantt-cell text-center bg-blue-50 text-blue-600 font-bold">15</div>
+                            <div class="gantt-cell text-center">16</div>
+                            <div class="gantt-cell text-center">17</div>
+                            <div class="gantt-cell text-center">18</div>
+                            <div class="gantt-cell text-center">19</div>
+                            <div class="gantt-cell text-center">20</div>
+                            <div class="gantt-cell text-center">21</div>
+                            <div class="gantt-cell text-center">22</div>
+                            <div class="gantt-cell text-center">23</div>
+                            <div class="gantt-cell text-center">24</div>
+                            <div class="gantt-cell text-center">25</div>
+                            <div class="gantt-cell text-center">26</div>
+                            <div class="gantt-cell text-center">27</div>
+                            <div class="gantt-cell text-center">28</div>
+                            <div class="gantt-cell text-center">29</div>
+                            <div class="gantt-cell text-center">30</div>
+                            <div class="gantt-cell text-center">31</div>
+                        </div>
+                        <div class="gantt-grid gantt-row h-14 relative group">
+                            <div class="gantt-cell flex flex-col justify-center px-4">
+                                <span class="font-bold text-[10px]">牛刀 210mm</span>
+                                <span class="font-mono text-[8px] text-blue-500 mt-0.5">#240901-A</span>
+                            </div>
+                            <div style="grid-column: 2 / 33; position: relative;">
+                                <div class="gantt-bar bg-gantt-red" style="left: 3%; width: 32%;">熱処理 (10/12締切・超過)</div>
+                            </div>
+                        </div>
+                        <div class="gantt-grid gantt-row h-14 relative group">
+                            <div class="gantt-cell flex flex-col justify-center px-4">
+                                <span class="font-bold text-[10px]">三徳 165mm</span>
+                                <span class="font-mono text-[8px] text-blue-500 mt-0.5">#240905-B</span>
+                            </div>
+                            <div style="grid-column: 2 / 33; position: relative;">
+                                <div class="gantt-bar bg-gantt-blue" style="left: 22%; width: 55%;">荒研ぎ (10/25締切)</div>
+                            </div>
+                        </div>
+                        <div class="gantt-grid gantt-row h-14 relative group bg-slate-50/30">
+                            <div class="gantt-cell flex flex-col justify-center px-4">
+                                <span class="font-bold text-[10px]">ペティ 120mm</span>
+                                <span class="font-mono text-[8px] text-blue-500 mt-0.5">#240910-C</span>
+                            </div>
+                            <div style="grid-column: 2 / 33; position: relative;">
+                                <div class="gantt-bar bg-gantt-blue" style="left: 55%; width: 35%;">柄付け (10/30締切)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WIP Table -->
+            <div class="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm">
+                <h4 class="font-bold mb-4">工程別仕掛一覧 <span
+                        class="text-[10px] font-normal text-slate-400 ml-2">行クリックでカード編集画面へ</span></h4>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm min-w-[500px]">
+                        <thead>
+                            <tr class="text-[10px] text-slate-400 uppercase font-bold border-b border-slate-100">
+                                <th class="py-3 px-2">製品</th>
+                                <th class="py-3">ロット</th>
+                                <th class="py-3 text-right">数</th>
+                                <th class="py-3 pl-8">現工程</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-50">
+                            <tr class="hover:bg-blue-50 transition cursor-pointer"
+                                onclick="openModal('lot-detail-modal')">
+                                <td class="py-4 px-2 font-bold text-slate-700">牛刀 210mm</td>
+                                <td class="py-4 text-xs font-mono">#240901-A</td>
+                                <td class="py-4 text-right font-bold">120個</td>
+                                <td class="py-4 pl-8"><span
+                                        class="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold rounded-md">本研ぎ</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Alerts (With Data) -->
+            <div class="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm">
+                <h4 class="font-bold mb-6 flex items-center gap-2 text-red-600"><i data-lucide="alert-triangle"
+                        class="w-5 h-5"></i> 納期アラート</h4>
+                <div class="space-y-4">
+                    <div class="flex items-center gap-4 p-4 bg-red-50/50 rounded-2xl border border-red-100">
+                        <div class="w-10 h-10 bg-red-500 rounded-xl flex items-center justify-center text-white"><i
+                                data-lucide="clock" class="w-5 h-5"></i></div>
+                        <div>
+                            <p class="text-xs font-bold">#240910-C (柄付) <span
+                                    class="bg-red-500 text-white px-1.5 py-0.5 rounded ml-2">超過</span></p>
+                            <p class="text-[10px] text-red-600 font-bold mt-1 uppercase tracking-tighter">完了予定日: 10月12日
+                                (超過中)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- 2. ROUTING V4 (Flexible Process Select) -->
+    <template id="routing-tpl">
+        <div class="max-w-4xl mx-auto space-y-8">
+            <h3 class="text-2xl font-bold tracking-tight mb-8">工程実績の報告と納入</h3>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- A. Delivery / Register Process Inbound -->
+                <div class="bg-white p-8 rounded-3xl border border-blue-100 shadow-sm relative group overflow-hidden">
+                    <div
+                        class="absolute -right-4 -top-4 w-32 h-32 bg-blue-50 rounded-full opacity-50 group-hover:scale-110 transition duration-500">
+                    </div>
+                    <div class="flex items-center gap-3 mb-8 relative">
+                        <div
+                            class="w-12 h-12 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-600/20 flex items-center justify-center">
+                            <i data-lucide="truck" class="w-6 h-6"></i>
+                        </div>
+                        <h4 class="font-bold text-lg">納入報告</h4>
+                    </div>
+                    <form class="space-y-6 relative">
+                        <div>
+                            <label
+                                class="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">対象ロット</label>
+                            <select
+                                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500">
+                                <option>#240901-A | 牛刀210mm</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label
+                                class="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">納入工程
+                                (自由に選択)</label>
+                            <select
+                                class="w-full bg-blue-50/50 border border-blue-200 rounded-xl px-4 py-3 text-sm font-bold text-blue-700 outline-none">
+                                <option>荒研ぎ (加藤研磨)</option>
+                                <option>熱処理 (関市熱処理)</option>
+                                <option>本研ぎ (加藤研磨)</option>
+                                <option>柄付け (自社)</option>
+                            </select>
+                        </div>
+
+                        <!-- 納入報告：不要項目の削除済み -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label
+                                    class="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">納入数</label>
+                                <input type="number" value="120" id="delivery-total"
+                                    class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none"
+                                    oninput="calculateRouting()" />
+                            </div>
+                            <div>
+                                <label
+                                    class="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">納入日</label>
+                                <input type="date" value="2024-10-15"
+                                    class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none" />
+                            </div>
+                        </div>
+                        <div>
+                            <label
+                                class="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest text-blue-600">工程完了予定日
+                                (納期設定)</label>
+                            <input type="date" value="2024-10-25"
+                                class="w-full bg-blue-50/30 border border-blue-200 rounded-xl px-4 py-3 text-sm font-bold text-blue-700 outline-none" />
+                        </div>
+                        <button type="button"
+                            class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 transition">納入報告</button>
+                    </form>
+                </div>
+
+                <!-- B. Completion Report -->
+                <div class="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm relative group overflow-hidden">
+                    <div
+                        class="absolute -right-4 -top-4 w-32 h-32 bg-slate-50 rounded-full group-hover:scale-110 transition duration-500">
+                    </div>
+                    <div class="flex items-center gap-3 mb-8 relative">
+                        <div class="w-12 h-12 bg-slate-800 text-white rounded-2xl flex items-center justify-center"><i
+                                data-lucide="check-circle" class="w-6 h-6"></i></div>
+                        <h4 class="font-bold text-lg">完了報告</h4>
+                    </div>
+                    <form class="space-y-6 relative">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="col-span-2">
+                                <label
+                                    class="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">報告ロット
+                                    & 工程</label>
+                                <select
+                                    class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-800">
+                                    <option>#240905-B | 三徳165mm (荒研ぎ)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="bg-slate-50 rounded-2xl p-5 border border-slate-200">
+                            <div class="flex justify-between items-center mb-4"><span
+                                    class="text-[10px] font-bold text-slate-400 uppercase">工程開始時の数量</span><span
+                                    class="text-sm font-bold" id="start-qty">200個</span></div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label
+                                        class="block text-[10px] font-bold text-slate-800 mb-2 uppercase">完了数量</label>
+                                    <input type="number" id="routing-complete" value="195" oninput="calculateRouting()"
+                                        class="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-lg font-bold text-indigo-700 shadow-sm outline-none" />
+                                </div>
+                                <div>
+                                    <label
+                                        class="block text-[10px] font-bold text-red-500 mb-2 uppercase leading-tight">未完了もしくは不良数量</label>
+                                    <input type="number" id="routing-defect" value="5" readonly
+                                        class="w-full bg-red-50 text-red-600 border border-red-100 rounded-xl px-4 py-3 text-lg font-bold outline-none cursor-not-allowed" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label
+                                    class="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">搬出日
+                                    (実績終了日)</label>
+                                <input type="date" value="2024-10-15"
+                                    class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-slate-800" />
+                            </div>
+                            <div>
+                                <label
+                                    class="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest text-emerald-600">自動処理</label>
+                                <div
+                                    class="bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl px-3 py-2 text-[10px] font-bold h-full flex flex-col justify-center">
+                                    完了分は次工程の納入待ちとなります。<br>※最終工程の場合は自動で在庫へ計上されます。
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button"
+                            class="w-full bg-slate-800 text-white font-bold py-4 rounded-2xl shadow-lg shadow-slate-800/20 hover:bg-slate-700 transition">完了報告</button>
+                    </form>
+                </div>
+
+                <!-- C. Rework Section (New) -->
+                <div id="rework-section"
+                    class="bg-white p-8 rounded-3xl border border-amber-200 shadow-sm relative group overflow-hidden lg:col-span-2">
+                    <div class="flex items-center gap-3 mb-8 relative">
+                        <div class="w-12 h-12 bg-amber-600 text-white rounded-2xl flex items-center justify-center"><i
+                                data-lucide="rotate-ccw" class="w-6 h-6"></i></div>
+                        <div>
+                            <h4 class="font-bold text-lg">差戻し報告</h4>
+                            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Send back to
+                                previous process</p>
+                        </div>
+                    </div>
+                    <form id="rework-form" class="grid grid-cols-1 md:grid-cols-4 gap-6 relative">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 mb-2 uppercase">対象ロット</label>
+                            <select
+                                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none">
+                                <option>#240901-A | 牛刀210mm</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 mb-2 uppercase">差戻し元 (現工程)</label>
+                            <select id="rework-from"
+                                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-amber-500">
+                                <option value="本研ぎ">本研ぎ (100個あり)</option>
+                                <option value="荒研ぎ">荒研ぎ (0個)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-amber-600 mb-2 uppercase">差戻し先工程</label>
+                            <select id="rework-to"
+                                class="w-full bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm font-bold text-amber-700 outline-none">
+                                <option value="熱処理">熱処理 (関市熱処理)</option>
+                                <option value="鍛造">鍛造 (自社)</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-500 mb-2 uppercase">差戻し数量</label>
+                                <input type="number" id="rework-qty" value="10"
+                                    class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none" />
+                            </div>
+                            <div class="flex items-end">
+                                <button type="button" onclick="executeRework()"
+                                    class="w-full bg-amber-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-amber-600/20 hover:bg-amber-700 transition">実行</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </template>
+    </template>
+
+    <!-- 3. PAYMENTS -->
+    <template id="payments-tpl">
+        <div class="space-y-8">
+            <div
+                class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
+                        <i data-lucide="wallet" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold">支払金額の確認</h3>
+                        <p class="text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">Payment Balances
+                        </p>
+                    </div>
+                </div>
+                <div class="flex gap-4 w-full md:w-auto">
+                    <div class="bg-slate-50 border border-slate-200 px-4 py-2 rounded-2xl">
+                        <span class="text-[9px] text-slate-400 font-bold uppercase block">確定済 (当月)</span>
+                        <span class="text-lg font-bold text-slate-700">¥428,500</span>
+                    </div>
+                    <div class="bg-blue-50 border border-blue-100 px-4 py-2 rounded-2xl">
+                        <span class="text-[9px] text-blue-400 font-bold uppercase block">見込額 (来月以降)</span>
+                        <span class="text-lg font-bold text-blue-600">¥852,000</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h4 class="font-bold flex items-center gap-2">注文ロット別コスト内訳</h4>
+                    <select class="text-xs font-bold bg-slate-100 border-none rounded-lg px-3 py-1.5 outline-none">
+                        <option>2024年10月</option>
+                        <option>2024年09月</option>
+                    </select>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm min-w-[600px]">
+                        <thead>
+                            <tr class="text-[10px] text-slate-400 uppercase font-bold border-b border-slate-100">
+                                <th class="py-3">ロット番号</th>
+                                <th class="py-3">製品名</th>
+                                <th class="py-3 text-right">数量</th>
+                                <th class="py-3 text-right">単価</th>
+                                <th class="py-3 text-right">小計</th>
+                                <th class="py-3 text-center">ステータス</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-50">
+                            <tr>
+                                <td class="py-4 font-mono text-xs">#240901-A</td>
+                                <td class="py-4 font-bold">牛刀 210mm</td>
+                                <td class="py-4 text-right">120</td>
+                                <td class="py-4 text-right">¥1,200</td>
+                                <td class="py-4 text-right font-bold">¥144,000</td>
+                                <td class="py-4 text-center"><span
+                                        class="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded border border-emerald-100">支払完了</span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="py-4 font-mono text-xs">#240905-B</td>
+                                <td class="py-4 font-bold">三徳 165mm</td>
+                                <td class="py-4 text-right">200</td>
+                                <td class="py-4 text-right">¥950</td>
+                                <td class="py-4 text-right font-bold">¥190,000</td>
+                                <td class="py-4 text-center"><span
+                                        class="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded border border-blue-100">確定済み</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- 4. INVENTORY -->
+    <template id="inventory-tpl">
+        <div class="space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-3xl border border-slate-200/60 shadow-sm">
+                    <span class="text-[10px] text-slate-400 font-bold uppercase tracking-widest block mb-1">総在庫点数</span>
+                    <span class="text-2xl font-bold">1,452 <span
+                            class="text-xs font-normal text-slate-400 ml-1">点</span></span>
+                </div>
+                <div class="bg-white p-5 rounded-3xl border border-slate-200/60 shadow-sm border-l-4 border-l-red-400">
+                    <span class="text-[10px] text-red-400 font-bold uppercase tracking-widest block mb-1">欠品/低在庫</span>
+                    <span class="text-2xl font-bold text-red-500">12 <span
+                            class="text-xs font-normal text-slate-400 ml-1">種</span></span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden">
+                <div class="p-6 border-b border-slate-100 flex justify-between items-center">
+                    <h4 class="font-bold flex items-center gap-2"><i data-lucide="package"
+                            class="w-5 h-5 text-slate-400"></i> 在庫一覧</h4>
+                    <div class="flex gap-2">
+                        <button
+                            class="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold transition">CSV出力</button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm min-w-[700px]">
+                        <thead>
+                            <tr class="text-[10px] text-slate-400 uppercase font-bold border-b border-slate-100">
+                                <th class="py-4 px-6">製品コード</th>
+                                <th class="py-4">製品名</th>
+                                <th class="py-4">カテゴリ</th>
+                                <th class="py-4 text-right">現在庫</th>
+                                <th class="py-4 text-right">適正在庫</th>
+                                <th class="py-4 text-center">状態</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-50">
+                            <tr class="hover:bg-slate-50 transition">
+                                <td class="py-4 px-6 font-mono text-xs text-slate-400">KN-G210</td>
+                                <td class="py-4 font-bold text-slate-700">牛刀 210mm VG10</td>
+                                <td class="py-4 text-xs font-medium text-slate-500">包丁</td>
+                                <td class="py-4 text-right font-bold">15</td>
+                                <td class="py-4 text-right text-slate-400">50</td>
+                                <td class="py-4 text-center"><span
+                                        class="px-2 py-1 bg-red-50 text-red-600 text-[10px] font-bold rounded underline decoration-red-200">低在庫</span>
+                                </td>
+                            </tr>
+                            <tr class="hover:bg-slate-50 transition">
+                                <td class="py-4 px-6 font-mono text-xs text-slate-400">KN-S165</td>
+                                <td class="py-4 font-bold text-slate-700">三徳 165mm モリブデン</td>
+                                <td class="py-4 text-xs font-medium text-slate-500">包丁</td>
+                                <td class="py-4 text-right font-bold">85</td>
+                                <td class="py-4 text-right text-slate-400">100</td>
+                                <td class="py-4 text-center"><span
+                                        class="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded">良好</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- 5. MYPAGE -->
+    <template id="mypage-tpl">
+        <div class="max-w-2xl mx-auto space-y-8">
+            <h3 class="text-2xl font-bold tracking-tight">マイページ設定</h3>
+
+            <div class="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden">
+                <div class="p-6 border-b border-slate-100">
+                    <h5 class="text-sm font-bold text-slate-800 flex items-center gap-2"><i data-lucide="user"
+                            class="w-4 h-4 text-slate-400"></i> アカウント情報</h5>
+                </div>
+                <div class="p-6 space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 mb-2 uppercase">ユーザー名</label>
+                            <input type="text" value="田中 義男"
+                                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-600">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 mb-2 uppercase">メールアドレス</label>
+                            <input type="email" value="tanaka@towmei.co.jp"
+                                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-600">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden">
+                <div class="p-6 border-b border-slate-100">
+                    <h5 class="text-sm font-bold text-slate-800 flex items-center gap-2"><i data-lucide="lock"
+                            class="w-4 h-4 text-slate-400"></i> パスワード変更</h5>
+                </div>
+                <div class="p-6 space-y-6">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 mb-2 uppercase">現在のパスワード</label>
+                        <input type="password"
+                            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-600">
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 mb-2 uppercase">新しいパスワード</label>
+                            <input type="password"
+                                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-600">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 mb-2 uppercase">パスワード確認</label>
+                            <input type="password"
+                                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-600">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden">
+                <div class="p-6 border-b border-slate-100">
+                    <h5 class="text-sm font-bold text-slate-800 flex items-center gap-2"><i data-lucide="palette"
+                            class="w-4 h-4 text-slate-400"></i> デザイン・通知設定</h5>
+                </div>
+                <div class="p-6 space-y-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-bold text-slate-700">ダークモード</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">暗いテーマに切り替えます</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" class="sr-only peer">
+                            <div
+                                class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all">
+                            </div>
+                        </label>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-bold text-slate-700">メール通知</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">納期アラートをメールで受け取ります</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" class="sr-only peer" checked>
+                            <div
+                                class="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all">
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <button
+                class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 transition">設定を保存</button>
+        </div>
+    </template>
+
+    <!-- 6. MASTER -->
+    <template id="master-tpl">
+        <div class="space-y-8">
+            <h3 class="text-2xl font-bold tracking-tight">マスタ管理</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div
+                    class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer group">
+                    <div
+                        class="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition">
+                        <i data-lucide="package" class="w-6 h-6"></i>
+                    </div>
+                    <h4 class="font-bold text-slate-800">製品マスタ</h4>
+                    <p class="text-xs text-slate-400 mt-2">製品コード、型番、カテゴリの設定</p>
+                </div>
+                <div
+                    class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer group">
+                    <div
+                        class="w-12 h-12 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition">
+                        <i data-lucide="users" class="w-6 h-6"></i>
+                    </div>
+                    <h4 class="font-bold text-slate-800">仕入先・外注先</h4>
+                    <p class="text-xs text-slate-400 mt-2">外注工場の連絡先、対応工程の設定</p>
+                </div>
+                <div
+                    class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer group">
+                    <div
+                        class="w-12 h-12 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition">
+                        <i data-lucide="layers" class="w-6 h-6"></i>
+                    </div>
+                    <h4 class="font-bold text-slate-800">工程・設備マスタ</h4>
+                    <p class="text-xs text-slate-400 mt-2">製造工程、ライン、設備の定義</p>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        const pages = ['dashboard', 'orders', 'inventory', 'payments', 'master', 'routing', 'mypage'];
+
+        function showPage(page) {
+            const container = document.getElementById('page-container');
+            const template = document.getElementById(`${page}-tpl`);
+
+            pages.forEach(p => {
+                const nav = document.getElementById(`nav-${p}`);
+                if (nav) {
+                    if (p === page) nav.classList.add('sidebar-active');
+                    else nav.classList.remove('sidebar-active');
+                }
+            });
+
+            const titles = {
+                dashboard: 'ダッシュボード',
+                orders: '受注管理',
+                inventory: '在庫管理',
+                payments: '支払管理',
+                master: 'マスタ・各種設定',
+                routing: '工程実績・納入報告',
+                mypage: 'マイアカウント'
+            };
+            document.getElementById('page-title').innerText = titles[page] || '';
+
+            container.classList.remove('animate-slide-in');
+            void container.offsetWidth;
+
+            container.innerHTML = '';
+            if (template) {
+                container.appendChild(template.content.cloneNode(true));
+                if (page === 'routing') calculateRouting();
+            } else {
+                container.innerHTML = `<div class='p-12 text-center text-slate-400 h-full flex flex-col items-center justify-center'><i data-lucide="constructor" class="w-12 h-12 mb-4 opacity-20"></i> <p>${titles[page]}コンテンツ開発中</p></div>`;
+            }
+            container.classList.add('animate-slide-in');
+            lucide.createIcons();
+        }
+
+        // Modal UX
+        function openModal(id) {
+            const modal = document.getElementById(id);
+            const content = document.getElementById('lot-modal-content');
+            modal.classList.remove('hidden');
+            setTimeout(() => content.classList.remove('translate-x-full'), 10);
+            lucide.createIcons();
+        }
+
+        function closeModal(event, force = false) {
+            const modal = document.getElementById('lot-detail-modal');
+            const content = document.getElementById('lot-modal-content');
+            if (force || event.target === modal) {
+                content.classList.add('translate-x-full');
+                setTimeout(() => modal.classList.add('hidden'), 300);
+            }
+        }
+
+        // Helper for automatic calculation in Routing page
+        function calculateRouting() {
+            const startStr = document.getElementById('start-qty')?.innerText || '200';
+            const startQty = parseInt(startStr.replace('個', '')) || 0;
+            const completeQty = parseInt(document.getElementById('routing-complete')?.value) || 0;
+            const defectEl = document.getElementById('routing-defect');
+            if (defectEl) {
+                let defect = startQty - completeQty;
+                defectEl.value = Math.max(0, defect);
+            }
+        }
+
+        // Modal Tab System
+        function switchModalTab(tab) {
+            const statusContent = document.getElementById('modal-tab-content-status');
+            const historyContent = document.getElementById('modal-tab-content-history');
+            const statusBtn = document.getElementById('tab-status');
+            const historyBtn = document.getElementById('tab-history');
+
+            if (tab === 'status') {
+                statusContent.classList.remove('hidden');
+                historyContent.classList.add('hidden');
+                statusBtn.classList.add('active');
+                historyBtn.classList.remove('active');
+            } else {
+                statusContent.classList.add('hidden');
+                historyContent.classList.remove('hidden');
+                statusBtn.classList.remove('active');
+                historyBtn.classList.add('active');
+            }
+            lucide.createIcons();
+        }
+
+        function showReworkSection() {
+            showPage('routing');
+            setTimeout(() => {
+                const rework = document.getElementById('rework-section');
+                if (rework) {
+                    rework.scrollIntoView({ behavior: 'smooth' });
+                    rework.classList.add('ring-4', 'ring-amber-400/30', 'transition-all');
+                    setTimeout(() => rework.classList.remove('ring-4'), 2000);
+                }
+            }, 100);
+            closeModal(null, true);
+        }
+
+        // V5.2 Logic: Simulated State DB
+        const STATEDB = {
+            totalWip: 452,
+            delayed: 12,
+            lots: {
+                '#240901-A': {
+                    '本研ぎ': { qty: 100, delivery: '2024-10-10', deadline: '2024-10-15' },
+                    '再熱処理': { qty: 20, delivery: '2024-10-12', deadline: '2024-10-22' }
+                }
+            }
+        };
+
+        // Real-time Badge Update (V5.2)
+        function updateBadge(process, val) {
+            console.log("updateBadge called for:", process, "with value:", val);
+            const cards = document.querySelectorAll('.border-slate-200.rounded-2xl');
+            cards.forEach(card => {
+                const titleEl = card.querySelector('h6');
+                if (titleEl && titleEl.textContent.trim().includes(process)) {
+                    // Find the badge span (it has bg-slate-600)
+                    const badge = card.querySelector('.bg-slate-600');
+                    if (badge) {
+                        badge.innerText = `${val || 0}個`;
+                        console.log("Updated badge for", process, "to", val);
+                    }
+                }
+            });
+        }
+
+        // Deferred Save Logic (V5.2)
+        function saveLotChanges() {
+            const lotId = '#240901-A'; // Fixed for prototype
+            const processes = ['本研ぎ', '再熱処理'];
+            let logs = [];
+
+            processes.forEach(proc => {
+                const qtyInput = document.getElementById(`input-qty-${proc}`);
+                const delInput = document.getElementById(`input-date-delivery-${proc}`);
+                const dedInput = document.getElementById(`input-date-deadline-${proc}`);
+
+                if (qtyInput) {
+                    const newVal = qtyInput.value;
+                    const oldVal = STATEDB.lots[lotId]?.[proc]?.qty;
+                    if (newVal != oldVal) {
+                        logs.push({ proc, field: '数量', old: oldVal, new: newVal });
+                        STATEDB.lots[lotId][proc].qty = parseInt(newVal);
+                    }
+                }
+                if (delInput) {
+                    const newVal = delInput.value;
+                    const oldVal = STATEDB.lots[lotId]?.[proc]?.delivery;
+                    if (newVal != oldVal) {
+                        logs.push({ proc, field: '納入日', old: oldVal, new: newVal });
+                        STATEDB.lots[lotId][proc].delivery = newVal;
+                    }
+                }
+                if (dedInput) {
+                    const newVal = dedInput.value;
+                    const oldVal = STATEDB.lots[lotId]?.[proc]?.deadline;
+                    if (newVal != oldVal) {
+                        logs.push({ proc, field: '完了予定日', old: oldVal, new: newVal });
+                        STATEDB.lots[lotId][proc].deadline = newVal;
+                    }
+                }
+            });
+
+            if (logs.length > 0) {
+                logs.forEach(log => logUpdate(log.proc, log.field, log.old, log.new));
+
+                // Dashboard Update logic
+                const procQty = parseInt(document.getElementById('input-qty-本研ぎ')?.value || 100);
+                const diff = procQty - 100;
+                STATEDB.totalWip = 452 + diff;
+
+                // Update WIP display in Dashboard (Find card by its label)
+                const wipDisplay = Array.from(document.querySelectorAll('.bg-white.p-6.rounded-2xl'))
+                    .find(card => card.innerText.includes('仕掛品累計'))
+                    ?.querySelector('.text-3xl.font-bold.text-slate-800');
+
+                if (wipDisplay) {
+                    wipDisplay.innerText = STATEDB.totalWip.toLocaleString();
+                }
+
+                // Update Lot List count (visual only)
+                const lotRows = document.querySelectorAll('tr');
+                lotRows.forEach(row => {
+                    if (row.innerText.includes(lotId)) {
+                        const cells = row.querySelectorAll('td');
+                        if (cells.length > 3) {
+                            cells[3].innerHTML = `<span class="font-bold text-slate-700">${120 + diff}個</span>`;
+                        }
+                    }
+                });
+
+                alert('保存完了：履歴を作成し、データベースとダッシュボードを更新しました。');
+                switchModalTab('history');
+            } else {
+                alert('変更はありません。');
+            }
+        }
+
+        // V5.2 Logic: Simulated Rework with Qty Update
+        function executeRework() {
+            const from = document.getElementById('rework-from').value;
+            const to = document.getElementById('rework-to').value;
+            const qty = parseInt(document.getElementById('rework-qty').value) || 0;
+
+            alert(`${from} から ${to} へ ${qty}個 を差戻しました。\n(シミュレーションとして履歴に工程名を明記します)`);
+
+            logUpdate(from, '差戻し', qty, `→ ${to} へ`);
+
+            // Visual feedback
+            const btn = document.querySelector('#rework-form button');
+            if (btn) {
+                btn.innerHTML = '<i data-lucide="check" class="w-4 h-4 mr-2"></i>完了';
+                btn.classList.add('bg-emerald-600');
+                lucide.createIcons();
+            }
+        }
+
+        // V5.2 Logic: Update History with Process Name (工程明示型)
+        function logUpdate(process, field, oldVal, newVal) {
+            console.log("logUpdate called:", process, field, oldVal, newVal);
+            const container = document.getElementById('history-container');
+            if (!container) {
+                console.error("history-container NOT FOUND");
+                return;
+            }
+
+            const now = new Date().toLocaleString('ja-JP');
+            const newHistory = document.createElement('div');
+            newHistory.className = 'history-dot animate-fade-in mb-6';
+            newHistory.innerHTML = `
+                <p class="text-[10px] text-slate-400 font-bold mb-1">${now} | 管理者</p>
+                <p class="text-sm font-bold text-slate-700">[${process}] ${field}修正: <span class="text-slate-400 line-through">${oldVal}</span> → ${newVal}</p>
+                <p class="text-xs text-slate-500 mt-1 bg-blue-50 p-2 rounded-lg italic border border-blue-100">内容: 工程データを保存確定しました</p>
+            `;
+            container.prepend(newHistory);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            showPage('dashboard');
+            lucide.createIcons();
+        });
+    </script>
+</body>
+
+</html>
