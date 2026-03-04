@@ -85,7 +85,7 @@ export default function MasterPage() {
 
     const updateProcess = (gi: number, pi: number, field: string, value: string) => {
         const arr = [...formGroups];
-        (arr[gi].templates[pi] as Record<string, unknown>)[field] = value;
+        (arr[gi].templates[pi] as unknown as Record<string, unknown>)[field] = value;
         setFormGroups(arr);
     };
 
@@ -97,7 +97,7 @@ export default function MasterPage() {
 
     const updateSubcontractor = (gi: number, pi: number, si: number, field: "name" | "unitPrice", value: string | number) => {
         const arr = [...formGroups];
-        (arr[gi].templates[pi].subcontractors[si] as Record<string, unknown>)[field] = value;
+        (arr[gi].templates[pi].subcontractors[si] as unknown as Record<string, unknown>)[field] = value;
         setFormGroups(arr);
     };
 
