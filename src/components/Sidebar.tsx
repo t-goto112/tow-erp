@@ -10,6 +10,7 @@ import {
     ClipboardEdit,
     Database,
     User,
+    Shield,
 } from "lucide-react";
 
 const navItems = [
@@ -22,6 +23,7 @@ const navItems = [
 const subNavItems = [
     { href: "/routing", icon: ClipboardEdit, label: "工程実績・納入" },
     { href: "/master", icon: Database, label: "マスタ管理" },
+    { href: "/admin", icon: Shield, label: "管理者設定" },
 ];
 
 export default function Sidebar() {
@@ -52,8 +54,8 @@ export default function Sidebar() {
                             key={item.href}
                             href={item.href}
                             className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition ${active
-                                    ? "bg-slate-100 text-blue-600 font-semibold"
-                                    : "text-slate-500 hover:bg-slate-50"
+                                ? "bg-slate-100 text-blue-600 font-semibold"
+                                : "text-slate-500 hover:bg-slate-50"
                                 }`}
                         >
                             <item.icon
@@ -74,8 +76,8 @@ export default function Sidebar() {
                             key={item.href}
                             href={item.href}
                             className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition ${active
-                                    ? "bg-slate-100 text-blue-600 font-semibold"
-                                    : "text-slate-500 hover:bg-slate-50"
+                                ? "bg-slate-100 text-blue-600 font-semibold"
+                                : "text-slate-500 hover:bg-slate-50"
                                 }`}
                         >
                             <item.icon

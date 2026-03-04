@@ -1,216 +1,208 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
-    Package,
     Plus,
-    Search,
-    Edit2,
     Trash2,
-    Copy,
-    Settings2,
-    X,
-    Loader2,
+    Edit2,
     Check,
+    Loader2,
+    ChevronRight,
+    ArrowUp,
+    ArrowDown,
+    X,
+    Package,
 } from "lucide-react";
-import { store, type MockProduct, type MockProcessMaster, type MockSubcontractor } from "@/lib/mockStore";
+import { store, type MockProduct, type ProcessTemplate } from "@/lib/mockStore";
 import { showToast } from "@/components/Toast";
 import Modal from "@/components/Modal";
 import ConfirmDialog from "@/components/ConfirmDialog";
 
-type Tab = "products" | "processes" | "subcontractors";
-
 export default function MasterPage() {
-    const [tab, setTab] = useState<Tab>("products");
-    const [search, setSearch] = useState("");
-    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-    const [editItem, setEditItem] = useState<any>(null);
+    const [products, setProducts] = useState<MockProduct[]>([]);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editProduct, setEditProduct] = useState<MockProduct | null>(null);
     const [deleteId, setDeleteId] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+    const [step, setStep] = useState<1 | 2>(1); // 1=商品登録、2=工程登録
 
-    // Form states
+    // 商品フォーム
     const [formName, setFormName] = useState("");
     const [formCode, setFormCode] = useState("");
     const [formCost, setFormCost] = useState("");
-    const [formParallel, setFormParallel] = useState(false);
-    const [formCategory, setFormCategory] = useState("自社");
-    const [formContact, setFormContact] = useState("");
 
-    const [products, setProducts] = useState<MockProduct[]>([]);
-    const [processes, setProcesses] = useState<MockProcessMaster[]>([]);
-    const [subcontractors, setSubcontractors] = useState<MockSubcontractor[]>([]);
+    // 工程テンプレート
+    const [formProcesses, setFormProcesses] = useState<ProcessTemplate[]>([]);
 
-    const refreshData = useCallback(() => {
-        setProducts([...store.products]);
-        setProcesses([...store.processMasters]);
-        setSubcontractors([...store.subcontractors]);
-    }, []);
+    const [loading, setLoading] = useState(false);
 
-    useEffect(() => {
-        refreshData();
-        const unsub = store.subscribe(refreshData);
-        return unsub;
-    }, [refreshData]);
+    const refresh = useCallback(() => setProducts([...store.products]), []);
+    useEffect(() => { refresh(); return store.subscribe(refresh); }, [refresh]);
 
     const resetForm = () => {
-        setFormName(""); setFormCode(""); setFormCost(""); setFormParallel(false); setFormCategory("自社"); setFormContact("");
+        setFormName(""); setFormCode(""); setFormCost("");
+        setFormProcesses([]);
+        setStep(1);
+        setEditProduct(null);
     };
 
-    const openAddModal = () => {
-        resetForm();
-        setEditItem(null);
-        setIsAddModalOpen(true);
+    const openNew = () => { resetForm(); setIsModalOpen(true); };
+
+    const openEdit = (p: MockProduct) => {
+        setEditProduct(p);
+        setFormName(p.name); setFormCode(p.code); setFormCost(String(p.materialCost));
+        setFormProcesses(JSON.parse(JSON.stringify(p.processTemplates)));
+        setStep(1);
+        setIsModalOpen(true);
     };
 
-    const openEditModal = (item: any) => {
-        setEditItem(item);
-        if (tab === "products") { setFormName(item.name); setFormCode(item.code); setFormCost(String(item.materialCost)); }
-        else if (tab === "processes") { setFormName(item.name); setFormParallel(item.isParallel); setFormCategory(item.category); }
-        else { setFormName(item.name); setFormContact(item.contactInfo); }
-        setIsAddModalOpen(true);
+    const handleNext = () => {
+        if (!formName || !formCode) { showToast("error", "商品コードと商品名は必須です"); return; }
+        if (formProcesses.length === 0) {
+            setFormProcesses([{ id: `pt${Date.now()}`, name: "", subcontractors: [{ name: "", unitPrice: 0 }], sortOrder: 1 }]);
+        }
+        setStep(2);
+    };
+
+    const addProcess = () => {
+        setFormProcesses(prev => [...prev, {
+            id: `pt${Date.now()}`,
+            name: "",
+            subcontractors: [{ name: "", unitPrice: 0 }],
+            sortOrder: prev.length + 1,
+        }]);
+    };
+
+    const removeProcess = (idx: number) => {
+        setFormProcesses(prev => prev.filter((_, i) => i !== idx).map((p, i) => ({ ...p, sortOrder: i + 1 })));
+    };
+
+    const moveProcess = (idx: number, dir: -1 | 1) => {
+        const arr = [...formProcesses];
+        const newIdx = idx + dir;
+        if (newIdx < 0 || newIdx >= arr.length) return;
+        [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
+        setFormProcesses(arr.map((p, i) => ({ ...p, sortOrder: i + 1 })));
+    };
+
+    const updateProcess = (idx: number, field: string, value: any) => {
+        const arr = [...formProcesses];
+        (arr[idx] as any)[field] = value;
+        setFormProcesses(arr);
+    };
+
+    const addSubcontractor = (procIdx: number) => {
+        const arr = [...formProcesses];
+        arr[procIdx].subcontractors.push({ name: "", unitPrice: 0 });
+        setFormProcesses(arr);
+    };
+
+    const updateSubcontractor = (procIdx: number, subIdx: number, field: string, value: any) => {
+        const arr = [...formProcesses];
+        (arr[procIdx].subcontractors[subIdx] as any)[field] = value;
+        setFormProcesses(arr);
+    };
+
+    const removeSubcontractor = (procIdx: number, subIdx: number) => {
+        const arr = [...formProcesses];
+        arr[procIdx].subcontractors = arr[procIdx].subcontractors.filter((_, i) => i !== subIdx);
+        setFormProcesses(arr);
     };
 
     const handleSave = async () => {
         setLoading(true);
         await new Promise(r => setTimeout(r, 300));
-        if (tab === "products") {
-            if (!formName || !formCode) { showToast("error", "商品名とコードは必須です"); setLoading(false); return; }
-            store.createProduct({ name: formName, code: formCode, materialCost: Number(formCost) || 0 });
-            showToast("success", `商品「${formName}」を登録しました`);
-        } else if (tab === "processes") {
-            if (!formName) { showToast("error", "工程名は必須です"); setLoading(false); return; }
-            store.createProcessMaster({ name: formName, isParallel: formParallel, category: formCategory });
-            showToast("success", `工程「${formName}」を登録しました`);
+
+        const data = {
+            name: formName, code: formCode,
+            materialCost: Number(formCost) || 0,
+            processTemplates: formProcesses.filter(p => p.name),
+        };
+
+        if (editProduct) {
+            store.updateProduct(editProduct.id, data);
+            showToast("success", `「${formName}」を更新しました`);
         } else {
-            if (!formName) { showToast("error", "外注先名は必須です"); setLoading(false); return; }
-            store.createSubcontractor({ name: formName, contactInfo: formContact });
-            showToast("success", `外注先「${formName}」を登録しました`);
+            store.createProduct(data);
+            showToast("success", `「${formName}」を登録しました`);
         }
+
         setLoading(false);
-        setIsAddModalOpen(false);
+        setIsModalOpen(false);
         resetForm();
     };
 
     const handleDelete = async () => {
         if (!deleteId) return;
-        const tableMap = { products: "products" as const, processes: "processMasters" as const, subcontractors: "subcontractors" as const };
-        store.deleteItem(tableMap[tab], deleteId);
+        store.deleteProduct(deleteId);
         showToast("success", "削除しました");
         setDeleteId(null);
     };
 
-    const handleDuplicate = (p: MockProduct) => {
-        store.createProduct({ name: p.name + " (コピー)", code: p.code + "-COPY", materialCost: p.materialCost });
-        showToast("success", `「${p.name}」を複製しました`);
-    };
-
-    const tabLabels = { products: "商品", processes: "工程", subcontractors: "外注先" };
-
     return (
         <div className="space-y-4 animate-in fade-in duration-300">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                <div className="flex gap-1 bg-white rounded-xl p-1 border border-slate-200 shadow-sm w-fit">
-                    {(["products", "processes", "subcontractors"] as Tab[]).map(t => (
-                        <button key={t} onClick={() => setTab(t)} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${tab === t ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"}`}>
-                            {tabLabels[t]}
-                        </button>
-                    ))}
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="relative flex-1 max-w-sm">
-                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input type="text" placeholder="検索..." value={search} onChange={e => setSearch(e.target.value)}
-                            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition" />
-                    </div>
-                    <button onClick={openAddModal}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-95 transition-all shrink-0">
-                        <Plus size={18} /> 新規登録
-                    </button>
-                </div>
+            <div className="flex items-center justify-between">
+                <h3 className="text-xl font-black text-slate-800">商品マスタ管理</h3>
+                <button onClick={openNew}
+                    className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all">
+                    <Plus size={16} /> 新規登録
+                </button>
             </div>
 
-            {/* Product Table */}
-            {tab === "products" && (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <table className="w-full text-sm">
-                        <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest font-bold">
-                            <tr><th className="px-4 py-3 text-left">コード</th><th className="px-4 py-3 text-left">商品名</th><th className="px-4 py-3 text-left">材料費</th><th className="px-4 py-3 text-left">工程数</th><th className="px-4 py-3"></th></tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100/60">
-                            {products.filter(p => p.name.includes(search) || p.code.includes(search)).map(p => (
-                                <tr key={p.id} className="hover:bg-slate-50/50 transition">
-                                    <td className="px-4 py-3 font-mono text-xs font-bold text-blue-600">{p.code}</td>
-                                    <td className="px-4 py-3 font-medium text-slate-700">{p.name}</td>
-                                    <td className="px-4 py-3 text-slate-600">¥{p.materialCost.toLocaleString()}</td>
-                                    <td className="px-4 py-3 text-slate-500">{p.processCount}工程</td>
-                                    <td className="px-4 py-3">
-                                        <div className="flex items-center gap-1 justify-end">
-                                            <button title="複製" onClick={() => handleDuplicate(p)} className="p-1.5 rounded-md hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition"><Copy size={14} /></button>
-                                            <button title="編集" onClick={() => openEditModal(p)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition"><Edit2 size={14} /></button>
-                                            <button title="削除" onClick={() => setDeleteId(p.id)} className="p-1.5 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 transition"><Trash2 size={14} /></button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
+            {/* 商品カード一覧 */}
+            <div className="space-y-3">
+                {products.map(p => (
+                    <div key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition">
+                        <div className="flex items-start justify-between mb-3">
+                            <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="font-mono text-xs font-bold text-blue-600">{p.code}</span>
+                                    <span className="font-bold text-slate-800">{p.name}</span>
+                                </div>
+                                <p className="text-xs text-slate-400">材料費: ¥{p.materialCost.toLocaleString()} | {p.processTemplates.length}工程</p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition"><Edit2 size={14} /></button>
+                                <button onClick={() => setDeleteId(p.id)} className="p-1.5 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 transition"><Trash2 size={14} /></button>
+                            </div>
+                        </div>
 
-            {tab === "processes" && (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <table className="w-full text-sm">
-                        <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest font-bold">
-                            <tr><th className="px-4 py-3 text-left">工程名</th><th className="px-4 py-3 text-left">並列可</th><th className="px-4 py-3 text-left">区分</th><th className="px-4 py-3"></th></tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100/60">
-                            {processes.filter(p => p.name.includes(search)).map(p => (
-                                <tr key={p.id} className="hover:bg-slate-50/50 transition">
-                                    <td className="px-4 py-3 font-medium text-slate-700">{p.name}</td>
-                                    <td className="px-4 py-3">{p.isParallel ? <span className="text-emerald-500 text-[10px] font-bold bg-emerald-50 px-1.5 py-0.5 rounded">並列可</span> : <span className="text-slate-300 text-[10px]">単一</span>}</td>
-                                    <td className="px-4 py-3 text-slate-400 text-xs">{p.category}</td>
-                                    <td className="px-4 py-3">
-                                        <div className="flex items-center gap-1 justify-end">
-                                            <button title="編集" onClick={() => openEditModal(p)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition"><Edit2 size={14} /></button>
-                                            <button title="削除" onClick={() => setDeleteId(p.id)} className="p-1.5 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 transition"><Trash2 size={14} /></button>
-                                        </div>
-                                    </td>
-                                </tr>
+                        {/* 工程フロー表示 */}
+                        <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                            {p.processTemplates.sort((a, b) => a.sortOrder - b.sortOrder).map((pt, i) => (
+                                <div key={pt.id} className="flex items-center gap-1 shrink-0">
+                                    <div className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-center">
+                                        <p className="text-[10px] font-bold text-slate-600">{pt.name}</p>
+                                        <p className="text-[9px] text-slate-400">{pt.subcontractors.map(s => s.name).join(", ")}</p>
+                                    </div>
+                                    {i < p.processTemplates.length - 1 && <ChevronRight className="w-3 h-3 text-slate-300 shrink-0" />}
+                                </div>
                             ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
+                        </div>
+                    </div>
+                ))}
+                {products.length === 0 && (
+                    <div className="text-center py-20 bg-white rounded-xl border border-dashed border-slate-200"><p className="text-sm text-slate-400">商品が登録されていません</p></div>
+                )}
+            </div>
 
-            {tab === "subcontractors" && (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <table className="w-full text-sm">
-                        <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest font-bold">
-                            <tr><th className="px-4 py-3 text-left">名前</th><th className="px-4 py-3 text-left">連絡先</th><th className="px-4 py-3 text-left">単価設定</th><th className="px-4 py-3"></th></tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100/60">
-                            {subcontractors.filter(s => s.name.includes(search)).map(s => (
-                                <tr key={s.id} className="hover:bg-slate-50/50 transition">
-                                    <td className="px-4 py-3 font-medium text-slate-700">{s.name}</td>
-                                    <td className="px-4 py-3 text-slate-400 text-xs">{s.contactInfo || "—"}</td>
-                                    <td className="px-4 py-3"><span className="px-2 py-0.5 rounded-full bg-slate-100 text-[10px] font-bold text-slate-500">{s.rateCount}件</span></td>
-                                    <td className="px-4 py-3">
-                                        <div className="flex items-center gap-1 justify-end">
-                                            <button title="編集" onClick={() => openEditModal(s)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition"><Edit2 size={14} /></button>
-                                            <button title="削除" onClick={() => setDeleteId(s.id)} className="p-1.5 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 transition"><Trash2 size={14} /></button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-
-            {/* 新規登録/編集モーダル */}
-            <Modal open={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); resetForm(); }} title={editItem ? `${tabLabels[tab]}を編集` : `${tabLabels[tab]}を新規登録`} subtitle="Master Data Management">
+            {/* 商品登録・編集モーダル */}
+            <Modal open={isModalOpen} onClose={() => { setIsModalOpen(false); resetForm(); }}
+                title={editProduct ? "商品を編集" : "商品を新規登録"}
+                subtitle={step === 1 ? "Step 1: 商品情報" : "Step 2: 工程登録"}
+                width="max-w-2xl">
                 <div className="space-y-5">
-                    {tab === "products" && (
+                    {/* ステップインジケーター */}
+                    <div className="flex items-center gap-2 mb-2">
+                        <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${step === 1 ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>
+                            <Package size={12} /> 商品情報
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-slate-300" />
+                        <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${step === 2 ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>
+                            工程登録
+                        </div>
+                    </div>
+
+                    {step === 1 && (
                         <>
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">商品コード</label>
@@ -224,50 +216,68 @@ export default function MasterPage() {
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">材料費 (円)</label>
                                 <input type="number" value={formCost} onChange={e => setFormCost(e.target.value)} placeholder="800" className="input-base" />
                             </div>
+                            <button onClick={handleNext}
+                                className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                                次へ：工程登録 <ArrowDown className="w-5 h-5" />
+                            </button>
                         </>
                     )}
-                    {tab === "processes" && (
+
+                    {step === 2 && (
                         <>
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">工程名</label>
-                                <input type="text" value={formName} onChange={e => setFormName(e.target.value)} placeholder="鍛造" className="input-base" />
+                            <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
+                                {formProcesses.map((proc, pi) => (
+                                    <div key={proc.id} className="bg-slate-50 rounded-2xl border border-slate-200 p-4">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <span className="text-xs font-black text-slate-500">工程 {pi + 1}</span>
+                                            <div className="flex items-center gap-1">
+                                                <button onClick={() => moveProcess(pi, -1)} disabled={pi === 0} className="p-1 rounded hover:bg-white text-slate-400 hover:text-blue-600 disabled:opacity-30"><ArrowUp size={14} /></button>
+                                                <button onClick={() => moveProcess(pi, 1)} disabled={pi === formProcesses.length - 1} className="p-1 rounded hover:bg-white text-slate-400 hover:text-blue-600 disabled:opacity-30"><ArrowDown size={14} /></button>
+                                                <button onClick={() => removeProcess(pi)} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 size={14} /></button>
+                                            </div>
+                                        </div>
+                                        <div className="mb-3">
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">工程名</label>
+                                            <input type="text" value={proc.name} onChange={e => updateProcess(pi, "name", e.target.value)} placeholder="鍛造" className="input-base text-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">外注先・単価</label>
+                                            {proc.subcontractors.map((sub, si) => (
+                                                <div key={si} className="flex items-center gap-2 mb-2">
+                                                    <input type="text" value={sub.name} onChange={e => updateSubcontractor(pi, si, "name", e.target.value)} placeholder="鍛造所 田中" className="input-base text-xs flex-1" />
+                                                    <input type="number" value={sub.unitPrice || ""} onChange={e => updateSubcontractor(pi, si, "unitPrice", Number(e.target.value))} placeholder="¥単価" className="input-base text-xs w-24" />
+                                                    {proc.subcontractors.length > 1 && (
+                                                        <button onClick={() => removeSubcontractor(pi, si)} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 shrink-0"><X size={14} /></button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                            <button type="button" onClick={() => addSubcontractor(pi)} className="text-[10px] text-blue-600 font-bold hover:underline">+ 外注先を追加</button>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                            <div className="flex items-center gap-3">
-                                <label className="relative inline-flex items-center cursor-pointer">
-                                    <input type="checkbox" checked={formParallel} onChange={e => setFormParallel(e.target.checked)} className="sr-only peer" />
-                                    <div className="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all" />
-                                </label>
-                                <span className="text-sm font-bold text-slate-600">並列加工可</span>
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">区分</label>
-                                <select value={formCategory} onChange={e => setFormCategory(e.target.value)} className="select-base">
-                                    <option>自社</option><option>外注</option>
-                                </select>
+
+                            <button type="button" onClick={addProcess}
+                                className="w-full py-3 border-2 border-dashed border-slate-300 text-slate-500 font-bold rounded-2xl hover:border-blue-400 hover:text-blue-600 transition text-sm">
+                                + 工程を追加
+                            </button>
+
+                            <div className="flex gap-3">
+                                <button onClick={() => setStep(1)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition text-sm">
+                                    ← 商品情報に戻る
+                                </button>
+                                <button onClick={handleSave} disabled={loading}
+                                    className="flex-1 bg-blue-600 text-white font-black py-3 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2">
+                                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5" /> {editProduct ? "変更を保存" : "登録する"}</>}
+                                </button>
                             </div>
                         </>
                     )}
-                    {tab === "subcontractors" && (
-                        <>
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">外注先名</label>
-                                <input type="text" value={formName} onChange={e => setFormName(e.target.value)} placeholder="鍛造所 田中" className="input-base" />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">連絡先</label>
-                                <input type="text" value={formContact} onChange={e => setFormContact(e.target.value)} placeholder="0575-22-XXXX" className="input-base" />
-                            </div>
-                        </>
-                    )}
-                    <button onClick={handleSave} disabled={loading}
-                        className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2">
-                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5" /> {editItem ? "変更を保存" : "登録する"}</>}
-                    </button>
                 </div>
             </Modal>
 
             <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={handleDelete}
-                title="データを削除しますか？" message="この操作は取り消せません。関連するデータにも影響する可能性があります。" confirmLabel="削除する" danger />
+                title="商品を削除しますか？" message="この商品に紐づく工程データもすべて削除されます。" confirmLabel="削除する" danger />
         </div>
     );
 }
