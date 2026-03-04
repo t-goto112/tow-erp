@@ -11,6 +11,8 @@ export default function InventoryPage() {
     const [inventory, setInventory] = useState<MockInventory[]>([]);
     const [lots, setLots] = useState<MockLot[]>([]);
     const [adjustItem, setAdjustItem] = useState<MockInventory | null>(null);
+    const [warehouseEditItem, setWarehouseEditItem] = useState<MockInventory | null>(null);
+    const [newWarehouse, setNewWarehouse] = useState("");
     const [newQuantity, setNewQuantity] = useState("");
     const [adjReason, setAdjReason] = useState("棚卸による差異修正");
     const [loading, setLoading] = useState(false);
@@ -25,6 +27,15 @@ export default function InventoryPage() {
         store.adjustInventory(adjustItem.id, Number(newQuantity), adjReason);
         showToast("success", `在庫を ${adjustItem.quantity} → ${newQuantity} に修正しました`);
         setLoading(false); setAdjustItem(null); setNewQuantity("");
+    };
+
+    const handleUpdateWarehouse = async () => {
+        if (!warehouseEditItem) return;
+        setLoading(true);
+        await new Promise(r => setTimeout(r, 300));
+        store.updateWarehouse(warehouseEditItem.id, newWarehouse);
+        showToast("success", `倉庫を「${newWarehouse || "未設定"}」に更新しました`);
+        setLoading(false); setWarehouseEditItem(null); setNewWarehouse("");
     };
 
     // 完成品在庫（ロット記載なし、同製品を集約）
@@ -65,8 +76,13 @@ export default function InventoryPage() {
                                 <tr key={item.id} className="hover:bg-slate-50/50 transition">
                                     <td className="px-4 py-3 font-bold text-slate-700">{item.product}</td>
                                     <td className="px-4 py-3 text-right font-black text-lg">{item.quantity}</td>
-                                    <td className="px-4 py-3 text-xs text-slate-400">{item.warehouse}</td>
-                                    <td className="px-4 py-3">
+                                    <td className="px-4 py-3 text-xs text-slate-400 group cursor-pointer" onClick={() => { setWarehouseEditItem(item); setNewWarehouse(item.warehouse || ""); }}>
+                                        <div className="flex items-center gap-1 hover:text-blue-600 transition">
+                                            {item.warehouse || <span className="text-slate-300 italic">未設定</span>}
+                                            <Edit2 size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-right">
                                         <button onClick={() => { setAdjustItem(item); setNewQuantity(String(item.quantity)); }} className="p-1.5 rounded-md hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition" title="数量修正"><Edit2 size={14} /></button>
                                     </td>
                                 </tr>
@@ -108,20 +124,15 @@ export default function InventoryPage() {
                                                 <td className="px-3 py-2 text-right font-bold">{proc.currentQty > 0 ? <span className="text-blue-600">{proc.currentQty}</span> : <span className="text-slate-300">0</span>}</td>
                                                 <td className="px-3 py-2 text-right font-bold text-emerald-600">{proc.completedQty}</td>
                                                 <td className="px-3 py-2 text-right">{proc.lossQty > 0 ? <span className="text-red-500 font-bold">{proc.lossQty}</span> : <span className="text-slate-300">0</span>}</td>
-                                                <td className="px-3 py-2 text-center">
-                                                    <span className={`inline-block w-2 h-2 rounded-full ${proc.status === "completed" ? "bg-emerald-500" : proc.status === "in_progress" ? "bg-blue-500" : "bg-slate-300"}`} />
+                                                <td className="px-3 py-2 text-center text-[10px] font-bold">
+                                                    {proc.status === "completed" ? <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">完了</span> :
+                                                        proc.status === "in_progress" ? <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded">仕掛</span> :
+                                                            <span className="text-slate-400 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded">未着手</span>}
                                                 </td>
                                             </tr>
                                         ))}
                                     </tbody>
                                 </table>
-                            </div>
-                            {/* プログレスバー */}
-                            <div className="flex gap-0.5 h-2 rounded-full overflow-hidden bg-slate-100 mt-3">
-                                {lot.processes.map(p => {
-                                    const pct = lot.totalQty > 0 ? (p.completedQty / lot.totalQty) * 100 : 0;
-                                    return <div key={p.id} style={{ width: `${Math.max(pct, 1)}%` }} className={`rounded-full ${p.status === "completed" ? "bg-emerald-400" : p.status === "in_progress" ? "bg-blue-400" : "bg-slate-200"}`} />;
-                                })}
                             </div>
                         </div>
                     ))}
@@ -155,6 +166,22 @@ export default function InventoryPage() {
                         <button onClick={handleAdjust} disabled={loading || !newQuantity}
                             className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2">
                             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5" /> 在庫を修正する</>}
+                        </button>
+                    </div>
+                )}
+            </Modal>
+
+            {/* 倉庫編集モーダル */}
+            <Modal open={!!warehouseEditItem} onClose={() => setWarehouseEditItem(null)} title="保管場所の変更" subtitle={warehouseEditItem?.product}>
+                {warehouseEditItem && (
+                    <div className="space-y-5">
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">倉庫名</label>
+                            <input type="text" value={newWarehouse} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewWarehouse(e.target.value)} placeholder="例：第1倉庫 A列" className="input-base text-sm" />
+                        </div>
+                        <button onClick={handleUpdateWarehouse} disabled={loading}
+                            className="w-full bg-blue-600 text-white font-black py-3 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2">
+                            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5" /> 保存する</>}
                         </button>
                     </div>
                 )}

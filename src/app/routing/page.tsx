@@ -28,6 +28,10 @@ export default function RoutingPage() {
     const [confirmLoss, setConfirmLoss] = useState(false);
     const [loading, setLoading] = useState(false);
 
+    // 最終工程の分岐
+    const [shipMode, setShipMode] = useState<"inventory" | "ship" | null>(null);
+    const [warehouseName, setWarehouseName] = useState("本社倉庫");
+
     const refresh = useCallback(() => setLots([...store.lots]), []);
     useEffect(() => { refresh(); return store.subscribe(refresh); }, [refresh]);
 
@@ -56,6 +60,7 @@ export default function RoutingPage() {
         if (selectedLot) {
             setFwdQty(""); setFwdCompletionDate(""); setFwdDeliveryDate(""); setFwdDueDate(""); setFwdOverride(""); setFwdNextSub("");
             setBackQty(""); setBackDate(""); setBackDueDate(""); setBackPrevSub("");
+            setShipMode(null);
             // 外注先が1つしかない場合は固定
             if (nextProcessSubs.length === 1) setFwdNextSub(nextProcessSubs[0].name);
             if (prevProcessSubs.length === 1) setBackPrevSub(prevProcessSubs[0].name);
@@ -82,6 +87,34 @@ export default function RoutingPage() {
         const result = store.moveBack(selectedLot.id, selectedProcessIdx, Number(backQty), backDate, backDueDate, backPrevSub || undefined);
         if (result.ok) { showToast("warning", `${backQty}個を前工程へ差戻しました`); setBackQty(""); setBackDate(""); setBackDueDate(""); }
         else { showToast("error", result.error || "エラー"); }
+        setLoading(false);
+    };
+
+    const handleMoveToInventory = async () => {
+        if (!selectedLot || !selectedProc) return;
+        setLoading(true);
+        const result = store.moveToInventory(selectedLot.id, selectedProcessIdx, Number(fwdQty), warehouseName);
+        if (result.ok) {
+            showToast("success", `${fwdQty}個を${warehouseName}へ移動しました`);
+            setFwdQty("");
+            setShipMode(null);
+        } else {
+            showToast("error", result.error || "エラー");
+        }
+        setLoading(false);
+    };
+
+    const handleShip = async () => {
+        if (!selectedLot || !selectedProc) return;
+        setLoading(true);
+        const result = store.shipAndInvoice(selectedLot.id, selectedProcessIdx, Number(fwdQty));
+        if (result.ok) {
+            showToast("success", `${fwdQty}個を出荷し、売上を計上しました`);
+            setFwdQty("");
+            setShipMode(null);
+        } else {
+            showToast("error", result.error || "エラー");
+        }
         setLoading(false);
     };
 
@@ -151,10 +184,45 @@ export default function RoutingPage() {
                                 </div>
                             )}
                             <div><label className="block text-[10px] font-black text-slate-400 mb-1">特値 (任意)</label><input type="number" value={fwdOverride} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdOverride(e.target.value)} placeholder="空欄=標準単価" className="input-base" /></div>
-                            <button onClick={handleForward} disabled={loading || !fwdQty || !fwdCompletionDate || !fwdDeliveryDate || !fwdDueDate}
-                                className="w-full bg-blue-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
-                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ArrowRight className="w-4 h-4" /> 次工程へ送る</>}
-                            </button>
+
+                            {isLastProcess ? (
+                                <div className="pt-2 space-y-3 border-t border-slate-100 mt-2">
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setShipMode("inventory")} className={`flex-1 py-3 rounded-xl text-xs font-bold border-2 transition-all ${shipMode === "inventory" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200"}`}>在庫へ移動</button>
+                                        <button onClick={() => setShipMode("ship")} className={`flex-1 py-3 rounded-xl text-xs font-bold border-2 transition-all ${shipMode === "ship" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200"}`}>発送・納品</button>
+                                    </div>
+
+                                    {shipMode === "inventory" && (
+                                        <div className="animate-in slide-in-from-top-2 duration-200">
+                                            <label className="block text-[10px] font-black text-slate-400 mb-1">保管倉庫</label>
+                                            <select value={warehouseName} onChange={(e) => setWarehouseName(e.target.value)} className="select-base mb-3">
+                                                <option value="本社倉庫">本社倉庫</option>
+                                                <option value="資材倉庫">資材倉庫</option>
+                                                <option value="外部倉庫A">外部倉庫A</option>
+                                            </select>
+                                            <button onClick={handleMoveToInventory} disabled={loading || !fwdQty || !fwdCompletionDate}
+                                                className="w-full bg-blue-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
+                                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4" /> 在庫へ移動を確定</>}
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {shipMode === "ship" && (
+                                        <div className="animate-in slide-in-from-top-2 duration-200">
+                                            <p className="text-[10px] text-slate-500 mb-3 bg-emerald-50 p-2 rounded-lg border border-emerald-100">受注残と連動し、出荷枚数を更新します。売上が自動計上されます。</p>
+                                            <button onClick={handleShip} disabled={loading || !fwdQty || !fwdCompletionDate}
+                                                className="w-full bg-emerald-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
+                                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4" /> 発送・売上計上を確定</>}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <button onClick={handleForward} disabled={loading || !fwdQty || !fwdCompletionDate || !fwdDeliveryDate || !fwdDueDate}
+                                    className="w-full bg-blue-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
+                                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ArrowRight className="w-4 h-4" /> 次工程へ送る</>}
+                                </button>
+                            )}
                         </div>
 
                         {/* 差戻し + ロス */}

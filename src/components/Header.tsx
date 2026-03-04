@@ -1,6 +1,7 @@
 "use client";
 
-import { Bell, Menu } from "lucide-react";
+import { Menu } from "lucide-react";
+import NotificationCenter from "./NotificationCenter";
 
 interface HeaderProps {
     title: string;
@@ -16,10 +17,7 @@ export default function Header({ title }: HeaderProps) {
             </div>
 
             <div className="flex items-center gap-3">
-                <button className="relative p-2 text-slate-400 hover:bg-slate-100 rounded-full transition">
-                    <Bell className="w-5 h-5" />
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 border-2 border-white rounded-full" />
-                </button>
+                <NotificationCenter />
                 <button className="md:hidden p-2 text-slate-500 bg-slate-50 rounded-full">
                     <Menu className="w-5 h-5" />
                 </button>

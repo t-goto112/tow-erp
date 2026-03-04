@@ -83,9 +83,9 @@ export default function MasterPage() {
         setFormGroups(arr);
     };
 
-    const updateProcess = (gi: number, pi: number, field: string, value: string) => {
+    const updateProcess = (gi: number, pi: number, field: string, value: any) => {
         const arr = [...formGroups];
-        (arr[gi].templates[pi] as unknown as Record<string, unknown>)[field] = value;
+        (arr[gi].templates[pi] as any)[field] = value;
         setFormGroups(arr);
     };
 
@@ -239,6 +239,14 @@ export default function MasterPage() {
                                                 <div className="mb-3">
                                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">工程名</label>
                                                     <input type="text" value={proc.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateProcess(gi, pi, "name", e.target.value)} placeholder="鍛造" className="input-base text-sm" />
+                                                </div>
+                                                <div className="mb-3 flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200">
+                                                    <input type="checkbox" id={`assembly-cb-${gi}-${pi}`} checked={!!proc.isAssemblyPoint}
+                                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateProcess(gi, pi, "isAssemblyPoint", e.target.checked as any)}
+                                                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300" />
+                                                    <label htmlFor={`assembly-cb-${gi}-${pi}`} className="text-[10px] font-bold text-slate-600 cursor-pointer">
+                                                        この工程で別グループのパーツを組み付ける（実績報告時に仕掛パーツ在庫を消費）
+                                                    </label>
                                                 </div>
                                                 <div>
                                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">外注先・単価</label>

@@ -71,6 +71,7 @@ export interface ProcessTemplate {
     name: string;
     subcontractors: { name: string; unitPrice: number }[];
     sortOrder: number;
+    isAssemblyPoint?: boolean; // 新規: 他のパーツグループをここで組み付けるか
 }
 
 export interface PaymentLine {
@@ -91,7 +92,7 @@ export interface MockInventory {
     product: string;
     code: string;
     quantity: number;
-    type: "product" | "material";
+    type: "product" | "material" | "parts"; // パーツを追加
     warehouse: string;
 }
 
@@ -200,7 +201,7 @@ function createInitialProducts(): MockProduct[] {
                         { id: "pt2", name: "荒研ぎ", subcontractors: [{ name: "研ぎ工房 山本", unitPrice: 200 }, { name: "研ぎ工房 佐藤", unitPrice: 220 }], sortOrder: 2 },
                         { id: "pt3", name: "熱処理", subcontractors: [{ name: "熱処理 鈴木", unitPrice: 300 }], sortOrder: 3 },
                         { id: "pt4", name: "仕上げ研ぎ", subcontractors: [{ name: "研ぎ工房 佐藤", unitPrice: 250 }], sortOrder: 4 },
-                        { id: "pt5", name: "柄付け", subcontractors: [{ name: "自社", unitPrice: 0 }], sortOrder: 5 },
+                        { id: "pt5", name: "柄付け", subcontractors: [{ name: "自社", unitPrice: 0 }], sortOrder: 5, isAssemblyPoint: true },
                     ]
                 },
             ]
@@ -313,10 +314,30 @@ class MockStore {
             next.currentQty += qty;
             if (next.status === "pending") next.status = "in_progress";
             next.deliveries.push({ id: `d${uid()}`, qty, deliveryDate: nextDeliveryDate, completionDate: "", dueDate: nextDueDate });
+
+            // 組み付けポイントの場合、ここでパーツ在庫を消費する（シミュレーション）
+            const nextTpl = this.products.find(p => p.id === lot.productId)?.processGroups[next.groupIndex]?.templates.find(t => t.name === next.name);
+            if (nextTpl && nextTpl.isAssemblyPoint) {
+                // 同じ工程内の他パーツを消費する（簡易実装として、在庫から減らすか、マイナス在庫として記録）
+                const partsInv = this.inventory.find(i => i.product === `${lot.product} (パーツ)` && i.type === "parts");
+                if (partsInv) {
+                    partsInv.quantity = Math.max(0, partsInv.quantity - qty);
+                } else {
+                    // なければマイナス在庫として記録（後からパーツ実績が上がる場合）
+                    this.inventory.push({ id: `inv${uid()}`, product: `${lot.product} (パーツ)`, code: "", quantity: -qty, type: "parts", warehouse: "未定義" });
+                }
+            }
+
         } else {
-            const existing = this.inventory.find(i => i.product === lot.product && i.type === "product");
-            if (existing) existing.quantity += qty;
-            else this.inventory.push({ id: `inv${uid()}`, product: lot.product, code: "", quantity: qty, type: "product", warehouse: "本社倉庫" });
+            // 最終工程の場合
+            if (proc.groupIndex > 0) {
+                // 別グループ（別パーツ）の場合は「仕掛パーツ在庫」として登録
+                const existingPart = this.inventory.find(i => i.product === `${lot.product} (パーツ)` && i.type === "parts");
+                if (existingPart) existingPart.quantity += qty;
+                else this.inventory.push({ id: `inv${uid()}`, product: `${lot.product} (パーツ)`, code: "", quantity: qty, type: "parts", warehouse: "仕掛パーツ置場" });
+            }
+            // ※メイングループの最終工程の場合は、明示的に「在庫へ移動」か「出荷設定」で処理するためここでは何もしない（未分類バッファとして保持するか、何もしない）
+            // 旧来の在庫自動追加ロジックは削除し、UI側で Move To Inventory / Ship ボタンで制御する
         }
 
         if (lot.status === "created") lot.status = "in_progress";
@@ -471,10 +492,65 @@ class MockStore {
         this.notify();
     }
 
-    // ─── 在庫 ───
+    // ─── 在庫・出荷処理 (V4追加) ───
     adjustInventory(id: string, newQty: number, reason: string) {
         const item = this.inventory.find(i => i.id === id);
         if (item) { const old = item.quantity; item.quantity = newQty; this.addHistory("在庫修正", `${item.product}: ${old} → ${newQty} (${reason})`); this.notify(); }
+    }
+
+    updateWarehouse(id: string, warehouse: string) {
+        const item = this.inventory.find(i => i.id === id);
+        if (item) { item.warehouse = warehouse; this.addHistory("倉庫変更", `${item.product} → ${warehouse}`); this.notify(); }
+    }
+
+    moveToInventory(lotId: string, processIndex: number, qty: number, warehouse: string): { ok: boolean; error?: string } {
+        const lot = this.lots.find(l => l.id === lotId);
+        if (!lot) return { ok: false, error: "ロットが見つかりません" };
+        const proc = lot.processes[processIndex];
+        if (!proc) return { ok: false, error: "工程が見つかりません" };
+        if (qty > proc.currentQty) return { ok: false, error: `移動数が現在数(${proc.currentQty})を超えています` };
+
+        proc.currentQty -= qty;
+        proc.completedQty += qty;
+        if (proc.currentQty === 0 && proc.lossConfirmed) proc.status = "completed";
+        if (lot.processes.every(p => p.status === "completed")) lot.status = "completed";
+
+        const existing = this.inventory.find(i => i.product === lot.product && i.type === "product" && i.warehouse === warehouse);
+        if (existing) existing.quantity += qty;
+        else this.inventory.push({ id: `inv${uid()}`, product: lot.product, code: "", quantity: qty, type: "product", warehouse });
+
+        this.addHistory("在庫移動", `${lot.lotNumber} → ${warehouse}へ${qty}個`);
+        this.notify();
+        return { ok: true };
+    }
+
+    shipAndInvoice(lotId: string, processIndex: number, qty: number): { ok: boolean; error?: string } {
+        const lot = this.lots.find(l => l.id === lotId);
+        if (!lot) return { ok: false, error: "ロットが見つかりません" };
+        const proc = lot.processes[processIndex];
+        if (!proc) return { ok: false, error: "工程が見つかりません" };
+        if (qty > proc.currentQty) return { ok: false, error: `出荷数が現在数(${proc.currentQty})を超えています` };
+
+        // 該当商品の未完了受注を探し、出荷数を割り当てる
+        let remainingQty = qty;
+        this.orders.filter(o => o.status !== "completed" && o.status !== "cancelled").forEach(order => {
+            const item = order.items.find(i => i.product === lot.product);
+            if (item && remainingQty > 0) {
+                const diff = Math.min(remainingQty, item.qty - item.shipped);
+                item.shipped += diff;
+                remainingQty -= diff;
+                if (order.items.every(xi => xi.shipped >= xi.qty)) order.status = "completed";
+            }
+        });
+
+        proc.currentQty -= qty;
+        proc.completedQty += qty;
+        if (proc.currentQty === 0 && proc.lossConfirmed) proc.status = "completed";
+        if (lot.processes.every(p => p.status === "completed")) lot.status = "completed";
+
+        this.addHistory("発送・納品", `${lot.lotNumber} → ${qty}個出荷、売上計上`);
+        this.notify();
+        return { ok: true };
     }
 
     // ─── 権限 ───

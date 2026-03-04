@@ -21,7 +21,7 @@ export default function Dashboard() {
 
     const lots = store.lots;
     const orderBacklog = store.totalOrderBacklog;
-    const paymentDue = store.paymentLines.filter(p => p.status === "pre_payment" || p.status === "paid").reduce((s, p) => s + p.amount, 0);
+    const paymentDue = store.paymentLines.filter(p => p.status === "pre_payment").reduce((s, p) => s + p.amount, 0);
 
     // 仕掛品をロットで集計
     const wipByLot = lots.filter(l => l.status !== "completed").map(lot => {
@@ -54,21 +54,21 @@ export default function Dashboard() {
 
     // ガントチャートのロットグループ用データ
     const ganttLots = lots.filter(l => l.status !== "completed").map(lot => {
-        const bars: { name: string; sub: string; start: string; end: string; color: string; isCurrent: boolean }[] = [];
+        const bars: { name: string; sub: string; start: string; end: string; color: string; isCurrent: boolean; total: number; wip: number; comp: number; }[] = [];
         lot.processes.forEach(proc => {
             if (proc.deliveries.length === 0 && proc.status === "pending") return;
             const starts = proc.deliveries.map(d => d.deliveryDate).filter(Boolean).sort();
             const ends = proc.deliveries.map(d => d.completionDate || d.dueDate).filter(Boolean).sort();
             const barStart = starts[0] || "";
             const barEnd = ends[ends.length - 1] || "";
-            if (!barStart || !barEnd) return;
-            const color = proc.status === "completed" ? "bg-emerald-400" : proc.status === "in_progress" ? "bg-blue-400" : "bg-slate-300";
-            bars.push({ name: proc.name, sub: proc.subcontractor, start: barStart, end: barEnd, color, isCurrent: proc.status === "in_progress" });
+            const isOverdue = new Date(barEnd) < new Date(todayStr) && proc.status !== "completed";
+            const color = proc.status === "completed" ? "bg-emerald-400" : isOverdue ? "bg-red-400" : "bg-blue-400";
+            bars.push({ name: proc.name, sub: proc.subcontractor, start: barStart, end: barEnd, color, isCurrent: proc.status === "in_progress", total: proc.currentQty + proc.completedQty, wip: proc.currentQty, comp: proc.completedQty });
         });
         return { lot, bars };
     });
 
-    const dayWidth = ganttRange === "3month" ? 8 : 14;
+    const dayWidth = ganttRange === "3month" ? 12 : 24;
 
     return (
         <div className="space-y-6 animate-in fade-in duration-300">
@@ -105,17 +105,20 @@ export default function Dashboard() {
                 <div className="overflow-x-auto">
                     <div style={{ minWidth: ganttDates.days.length * dayWidth + 200 }} className="relative">
                         {/* 日付ヘッダー */}
-                        <div className="flex border-b border-slate-100 sticky top-0 bg-white z-10">
-                            <div className="w-[200px] shrink-0 px-4 py-2 text-[10px] font-bold text-slate-400 uppercase">ロット / 工程</div>
-                            <div className="flex">
+                        <div className="flex border-b border-slate-100 sticky top-0 bg-white z-20">
+                            <div className="w-[200px] shrink-0 px-4 py-2 text-[10px] font-bold text-slate-400 uppercase bg-white z-30 sticky left-0 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">ロット / 工程</div>
+                            <div className="flex relative">
                                 {ganttDates.days.map((d: string, i: number) => {
                                     const dt = new Date(d);
                                     const isToday = d === todayStr;
                                     const isFirst = dt.getDate() === 1;
                                     return (
-                                        <div key={d} style={{ width: dayWidth }} className={`text-center border-l ${isFirst ? "border-slate-200" : "border-slate-50"} ${isToday ? "bg-blue-50" : ""}`}>
-                                            {(i === 0 || isFirst) && <div className="text-[8px] font-bold text-slate-400">{dt.getMonth() + 1}月</div>}
-                                            <div className={`text-[8px] ${isToday ? "text-blue-600 font-black" : "text-slate-300"}`}>{dt.getDate()}</div>
+                                        <div key={d} style={{ width: dayWidth }} className={`text-center relative`}>
+                                            <div className={`h-full absolute left-0 border-l ${isFirst ? "border-slate-300 border-l-2" : "border-slate-100"} ${isToday ? "bg-blue-50/50" : ""} z-0 pointer-events-none`} style={{ height: "1000px" }} />
+                                            <div className={`relative z-10 bg-white ${isToday ? "bg-blue-50" : ""}`}>
+                                                {(i === 0 || isFirst) && <div className="text-[8px] font-bold text-slate-400 whitespace-nowrap">{dt.getMonth() + 1}月</div>}
+                                                <div className={`text-[8px] ${isToday ? "text-blue-600 font-black" : "text-slate-300"}`}>{dt.getDate()}</div>
+                                            </div>
                                         </div>
                                     );
                                 })}
@@ -126,12 +129,12 @@ export default function Dashboard() {
                         {ganttLots.map(({ lot, bars }) => (
                             <div key={lot.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition">
                                 {/* ロットヘッダー */}
-                                <div className="flex items-center cursor-pointer" onClick={() => setSelectedLot(lot)}>
-                                    <div className="w-[200px] shrink-0 px-4 py-2">
+                                <div className="flex items-center cursor-pointer sticky left-0 z-10 bg-white hover:bg-slate-50" onClick={() => setSelectedLot(lot)}>
+                                    <div className="w-[200px] shrink-0 px-4 py-2 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                                         <div className="flex items-center gap-1.5">
                                             <span className="font-mono text-xs font-bold text-blue-600">{lot.lotNumber}</span>
-                                            <span className="text-[10px] text-slate-500">{lot.product}</span>
-                                            <ChevronRight className="w-3 h-3 text-slate-300 ml-auto" />
+                                            <span className="text-[10px] text-slate-500 truncate" title={lot.product}>{lot.product}</span>
+                                            <ChevronRight className="w-3 h-3 text-slate-300 shrink-0 ml-auto" />
                                         </div>
                                     </div>
                                     <div className="flex-1 relative h-2">
@@ -164,14 +167,16 @@ export default function Dashboard() {
                                             "from-slate-300 to-slate-400";
                                     return (
                                         <div key={bi} className="flex items-center">
-                                            <div className="w-[200px] shrink-0 px-4 pl-8 border-r border-slate-50">
-                                                <span className="text-[10px] text-slate-400">{bar.name}</span>
+                                            <div className="w-[200px] shrink-0 px-4 pl-8 border-r border-slate-100 sticky left-0 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10">
+                                                <span className="text-[10px] text-slate-400 truncate block" title={bar.name}>{bar.name}</span>
                                             </div>
-                                            <div className="relative h-7 flex-1 border-b border-slate-50/50">
-                                                <div className={`absolute top-1 rounded-full h-5 bg-gradient-to-r ${gradient} shadow-sm cursor-pointer hover:scale-[1.02] hover:brightness-110 transition-all z-10`}
+                                            <div className="relative h-7 flex-1 border-b border-transparent">
+                                                <div className={`absolute top-1 rounded-full h-5 bg-gradient-to-r ${gradient} shadow-sm cursor-pointer hover:scale-[1.02] hover:brightness-110 transition-all z-10 flex items-center shadow-md`}
                                                     style={{ left: left + 2, width: width - 4 }}
-                                                    title={`${bar.name}: ${bar.start} ~ ${bar.end}`}>
-                                                    <span className="text-[9px] text-white font-black px-2 truncate block leading-5">{bar.sub}</span>
+                                                    title={`${bar.name} [${bar.sub}]: ${bar.start} ~ ${bar.end}`}>
+                                                    <span className="text-[9px] text-white font-black px-2 truncate leading-5 flex-1 select-none">
+                                                        {bar.total} ({bar.wip}/{bar.comp})
+                                                    </span>
                                                 </div>
                                             </div>
                                         </div>
@@ -214,11 +219,13 @@ export default function Dashboard() {
                                     </div>
                                     <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition" />
                                 </div>
-                                <div className="flex gap-0.5 h-2 rounded-full overflow-hidden bg-slate-100 mt-3">
-                                    {lot.processes.map(p => {
-                                        const pct = lot.totalQty > 0 ? (p.completedQty / lot.totalQty) * 100 : 0;
-                                        return <div key={p.id} style={{ width: `${Math.max(pct, 1)}%` }} className={`rounded-full ${p.status === "completed" ? "bg-emerald-400" : p.status === "in_progress" ? "bg-blue-400" : "bg-slate-200"}`} />;
-                                    })}
+                                <div className="mt-3 bg-slate-50 rounded-lg p-2 flex flex-wrap gap-2 text-[10px] text-slate-500 font-bold border border-slate-100">
+                                    {lot.processes.map(p => (
+                                        <div key={p.id} className={`flex items-center gap-1 py-0.5 px-2 rounded-md ${p.status === "completed" ? "bg-emerald-100 text-emerald-700" : p.status === "in_progress" ? "bg-blue-100 text-blue-700" : "bg-white border border-slate-200"}`}>
+                                            <span className="font-black text-[9px]">{p.name}</span>
+                                            <span className="opacity-70">: 仕掛{p.currentQty}/完了{p.completedQty}</span>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         );
