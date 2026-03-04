@@ -76,7 +76,7 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <SummaryCard icon={<Wallet className="w-5 h-5" />} label="受注残高" value={`¥${orderBacklog.toLocaleString()}`} sub={`${store.orders.filter(o => o.status !== "completed" && o.status !== "cancelled").length}件`} color="bg-blue-50 text-blue-600" />
                 <SummaryCard icon={<Layers className="w-5 h-5" />} label="仕掛品" value={`${wipByLot.reduce((s, l) => s + l.wipQty, 0)}`} sub={`${wipByLot.length}ロット`} color="bg-amber-50 text-amber-600" />
-                <SummaryCard icon={<TrendingUp className="w-5 h-5" />} label="支払予定" value={`¥${paymentDue.toLocaleString()}`} sub="未払+確認待" color="bg-emerald-50 text-emerald-600" />
+                <SummaryCard icon={<TrendingUp className="w-5 h-5" />} label="支払予定" value={`¥${paymentDue.toLocaleString()}`} sub="未払額" color="bg-emerald-50 text-emerald-600" />
             </div>
 
             {/* ガントチャート */}
@@ -114,7 +114,7 @@ export default function Dashboard() {
                                     const isFirst = dt.getDate() === 1;
                                     return (
                                         <div key={d} style={{ width: dayWidth }} className={`text-center relative`}>
-                                            <div className={`h-full absolute left-0 border-l ${isFirst ? "border-slate-300 border-l-2" : "border-slate-100"} ${isToday ? "bg-blue-50/50" : ""} z-0 pointer-events-none`} style={{ height: "1000px" }} />
+                                            <div className={`h-full absolute left-0 border-l ${isFirst ? "border-slate-300 border-l-2" : "border-slate-100"} ${isToday ? "bg-blue-50/50" : ""} z-[-1] pointer-events-none`} style={{ height: "1000px" }} />
                                             <div className={`relative z-10 bg-white ${isToday ? "bg-blue-50" : ""}`}>
                                                 {(i === 0 || isFirst) && <div className="text-[8px] font-bold text-slate-400 whitespace-nowrap">{dt.getMonth() + 1}月</div>}
                                                 <div className={`text-[8px] ${isToday ? "text-blue-600 font-black" : "text-slate-300"}`}>{dt.getDate()}</div>
@@ -212,18 +212,18 @@ export default function Dashboard() {
                                             <span className="text-xs text-slate-500">{lot.product}</span>
                                         </div>
                                         <div className="flex gap-3 text-[10px] text-slate-400 font-bold">
-                                            <span>総数: {lot.totalQty}</span>
+                                            <span>受注数: {lot.totalQty}</span>
                                             <span>仕掛: {lot.wipQty}</span>
                                             {currentProc && <span className="text-blue-600">{currentProc.name}</span>}
                                         </div>
                                     </div>
                                     <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition" />
                                 </div>
-                                <div className="mt-3 bg-slate-50 rounded-lg p-2 flex flex-wrap gap-2 text-[10px] text-slate-500 font-bold border border-slate-100">
+                                <div className="mt-3 bg-slate-50 rounded-lg p-2 overflow-x-auto flex gap-2 text-[10px] text-slate-400 font-bold border border-slate-100 no-scrollbar">
                                     {lot.processes.map(p => (
-                                        <div key={p.id} className={`flex items-center gap-1 py-0.5 px-2 rounded-md ${p.status === "completed" ? "bg-emerald-100 text-emerald-700" : p.status === "in_progress" ? "bg-blue-100 text-blue-700" : "bg-white border border-slate-200"}`}>
-                                            <span className="font-black text-[9px]">{p.name}</span>
-                                            <span className="opacity-70">: 仕掛{p.currentQty}/完了{p.completedQty}</span>
+                                        <div key={p.id} className={`flex items-center gap-1 py-0.5 px-2 rounded-md shrink-0 ${p.status === "completed" ? "bg-emerald-100 text-emerald-700" : p.status === "in_progress" ? "bg-blue-100 text-blue-700" : "bg-white border border-slate-200"}`}>
+                                            <span className="font-black text-[9px] whitespace-nowrap">{p.name}</span>
+                                            <span className="opacity-70 whitespace-nowrap">: 仕掛{p.currentQty}/完了{p.completedQty}</span>
                                         </div>
                                     ))}
                                 </div>

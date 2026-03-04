@@ -167,8 +167,12 @@ export default function RoutingPage() {
                             <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2"><ArrowRight className="w-4 h-4 text-blue-500" /> 次工程へ送る</h4>
                             <div><label className="block text-[10px] font-black text-slate-400 mb-1">数量</label><input type="number" value={fwdQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdQty(e.target.value)} max={selectedProc.currentQty} className="input-base" placeholder={`最大 ${selectedProc.currentQty}`} /></div>
                             <div><label className="block text-[10px] font-black text-slate-400 mb-1">現工程完了日 *</label><input type="date" value={fwdCompletionDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdCompletionDate(e.target.value)} className="input-base" /></div>
-                            <div><label className="block text-[10px] font-black text-slate-400 mb-1">次工程搬入日 *</label><input type="date" value={fwdDeliveryDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdDeliveryDate(e.target.value)} className="input-base" /></div>
-                            <div><label className="block text-[10px] font-black text-slate-400 mb-1">次工程完了予定日 *</label><input type="date" value={fwdDueDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdDueDate(e.target.value)} className="input-base" /></div>
+                            {!isLastProcess && (
+                                <>
+                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1">次工程搬入日 *</label><input type="date" value={fwdDeliveryDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdDeliveryDate(e.target.value)} className="input-base" /></div>
+                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1">次工程完了予定日 *</label><input type="date" value={fwdDueDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdDueDate(e.target.value)} className="input-base" /></div>
+                                </>
+                            )}
                             {/* 外注先選択 */}
                             {!isLastProcess && nextProcessSubs.length > 0 && (
                                 <div>
@@ -195,11 +199,7 @@ export default function RoutingPage() {
                                     {shipMode === "inventory" && (
                                         <div className="animate-in slide-in-from-top-2 duration-200">
                                             <label className="block text-[10px] font-black text-slate-400 mb-1">保管倉庫</label>
-                                            <select value={warehouseName} onChange={(e) => setWarehouseName(e.target.value)} className="select-base mb-3">
-                                                <option value="本社倉庫">本社倉庫</option>
-                                                <option value="資材倉庫">資材倉庫</option>
-                                                <option value="外部倉庫A">外部倉庫A</option>
-                                            </select>
+                                            <input type="text" value={warehouseName} onChange={(e) => setWarehouseName(e.target.value)} placeholder="例：本社倉庫" className="input-base mb-3" />
                                             <button onClick={handleMoveToInventory} disabled={loading || !fwdQty || !fwdCompletionDate}
                                                 className="w-full bg-blue-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
                                                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4" /> 在庫へ移動を確定</>}
