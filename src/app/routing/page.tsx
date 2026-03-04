@@ -1,17 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import {
-    CheckCircle,
-    AlertTriangle,
-    ArrowRight,
-    Loader2,
-    Trash2,
-    CornerDownLeft,
-    DollarSign,
-    CalendarDays,
-} from "lucide-react";
-import { store, type MockLot } from "@/lib/mockStore";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { ArrowRight, ArrowLeft, AlertTriangle, Loader2, Check } from "lucide-react";
+import { store, type MockLot, type ProcessEntry } from "@/lib/mockStore";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
 
@@ -20,220 +11,210 @@ export default function RoutingPage() {
     const [selectedLotId, setSelectedLotId] = useState("");
     const [selectedProcessIdx, setSelectedProcessIdx] = useState(0);
 
-    // 次工程へ
-    const [moveQty, setMoveQty] = useState(0);
-    const [completionDate, setCompletionDate] = useState(new Date().toISOString().split("T")[0]);
-    const [nextDeliveryDate, setNextDeliveryDate] = useState("");
-    const [nextDueDate, setNextDueDate] = useState("");
-    const [overridePrice, setOverridePrice] = useState("");
+    // 次工程
+    const [fwdQty, setFwdQty] = useState("");
+    const [fwdCompletionDate, setFwdCompletionDate] = useState("");
+    const [fwdDeliveryDate, setFwdDeliveryDate] = useState("");
+    const [fwdDueDate, setFwdDueDate] = useState("");
+    const [fwdOverride, setFwdOverride] = useState("");
+    const [fwdNextSub, setFwdNextSub] = useState("");
 
     // 差戻し
-    const [backQty, setBackQty] = useState(0);
-    const [returnDate, setReturnDate] = useState(new Date().toISOString().split("T")[0]);
-    const [prevDueDate, setPrevDueDate] = useState("");
+    const [backQty, setBackQty] = useState("");
+    const [backDate, setBackDate] = useState("");
+    const [backDueDate, setBackDueDate] = useState("");
+    const [backPrevSub, setBackPrevSub] = useState("");
 
+    const [confirmLoss, setConfirmLoss] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [confirmLossOpen, setConfirmLossOpen] = useState(false);
 
     const refresh = useCallback(() => setLots([...store.lots]), []);
     useEffect(() => { refresh(); return store.subscribe(refresh); }, [refresh]);
 
-    const selectedLot = lots.find(l => l.id === selectedLotId);
-    const selectedProcess = selectedLot?.processes[selectedProcessIdx];
-    const prevProcess = selectedLot?.processes[selectedProcessIdx - 1];
-    const nextProcess = selectedLot?.processes[selectedProcessIdx + 1];
+    const activeLots = lots.filter(l => l.status !== "completed");
+    const selectedLot = activeLots.find(l => l.id === selectedLotId) || null;
+    const selectedProc = selectedLot?.processes[selectedProcessIdx] || null;
 
-    useEffect(() => { if (lots.length > 0 && !selectedLotId) setSelectedLotId(lots[0].id); }, [lots, selectedLotId]);
+    // 次工程の外注先候補
+    const nextProcessSubs = useMemo(() => {
+        if (!selectedLot || !selectedProc) return [];
+        const nextIdx = selectedProcessIdx + 1;
+        if (nextIdx >= selectedLot.processes.length) return [];
+        const nextProcName = selectedLot.processes[nextIdx].name;
+        return store.getSubcontractorsForProcess(selectedLot.productId, nextProcName);
+    }, [selectedLot, selectedProc, selectedProcessIdx]);
 
-    const handleMoveForward = async () => {
-        if (!selectedLot || moveQty <= 0) return;
+    // 前工程の外注先候補
+    const prevProcessSubs = useMemo(() => {
+        if (!selectedLot || selectedProcessIdx <= 0) return [];
+        const prevProcName = selectedLot.processes[selectedProcessIdx - 1].name;
+        return store.getSubcontractorsForProcess(selectedLot.productId, prevProcName);
+    }, [selectedLot, selectedProcessIdx]);
+
+    // ロット選択時に初期化
+    useEffect(() => {
+        if (selectedLot) {
+            setFwdQty(""); setFwdCompletionDate(""); setFwdDeliveryDate(""); setFwdDueDate(""); setFwdOverride(""); setFwdNextSub("");
+            setBackQty(""); setBackDate(""); setBackDueDate(""); setBackPrevSub("");
+            // 外注先が1つしかない場合は固定
+            if (nextProcessSubs.length === 1) setFwdNextSub(nextProcessSubs[0].name);
+            if (prevProcessSubs.length === 1) setBackPrevSub(prevProcessSubs[0].name);
+        }
+    }, [selectedLotId, selectedProcessIdx, nextProcessSubs, prevProcessSubs, selectedLot]);
+
+    const handleForward = async () => {
+        if (!selectedLot || !selectedProc) return;
         setLoading(true);
-        await new Promise(r => setTimeout(r, 300));
-        const result = store.moveForward(selectedLot.id, selectedProcessIdx, moveQty, completionDate, nextDeliveryDate, nextDueDate, overridePrice ? Number(overridePrice) : undefined);
+        await new Promise(r => setTimeout(r, 200));
+        const result = store.moveForward(selectedLot.id, selectedProcessIdx, Number(fwdQty), fwdCompletionDate, fwdDeliveryDate, fwdDueDate, {
+            overridePrice: fwdOverride ? Number(fwdOverride) : undefined,
+            nextSubcontractor: fwdNextSub || undefined,
+        });
+        if (result.ok) { showToast("success", `${fwdQty}個を次工程へ送りました`); setFwdQty(""); setFwdCompletionDate(""); setFwdDeliveryDate(""); setFwdDueDate(""); setFwdOverride(""); }
+        else { showToast("error", result.error || "エラー"); }
         setLoading(false);
-        if (result.ok) { showToast("success", `${moveQty}個を次工程へ移動しました`); setMoveQty(0); setOverridePrice(""); }
-        else showToast("error", result.error || "エラー");
     };
 
-    const handleMoveBack = async () => {
-        if (!selectedLot || backQty <= 0) return;
-        setLoading(true);
-        await new Promise(r => setTimeout(r, 300));
-        const result = store.moveBack(selectedLot.id, selectedProcessIdx, backQty, returnDate, prevDueDate);
-        setLoading(false);
-        if (result.ok) { showToast("warning", `${backQty}個を前工程へ差戻しました`); setBackQty(0); }
-        else showToast("error", result.error || "エラー");
-    };
-
-    const handleConfirmLoss = async () => {
+    const handleBack = async () => {
         if (!selectedLot) return;
-        const result = store.confirmLoss(selectedLot.id, selectedProcessIdx);
-        if (result.ok) showToast("success", `${result.lossQty}個をロス確定しました`);
-        else showToast("error", result.error || "エラー");
+        setLoading(true);
+        await new Promise(r => setTimeout(r, 200));
+        const result = store.moveBack(selectedLot.id, selectedProcessIdx, Number(backQty), backDate, backDueDate, backPrevSub || undefined);
+        if (result.ok) { showToast("warning", `${backQty}個を前工程へ差戻しました`); setBackQty(""); setBackDate(""); setBackDueDate(""); }
+        else { showToast("error", result.error || "エラー"); }
+        setLoading(false);
     };
+
+    const handleConfirmLoss = () => {
+        if (!selectedLot) return;
+        const r = store.confirmLoss(selectedLot.id, selectedProcessIdx);
+        if (r.ok) showToast("success", `${r.lossQty}個をロスとして確定しました`);
+    };
+
+    const isLastProcess = selectedLot ? selectedProcessIdx === selectedLot.processes.length - 1 : false;
 
     return (
-        <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
-            <h3 className="text-2xl font-black tracking-tight text-slate-800">工程実績の報告</h3>
-
+        <div className="space-y-5 animate-in fade-in duration-300">
             {/* ロット・工程選択 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label="対象ロット">
-                    <select value={selectedLotId} onChange={e => { setSelectedLotId(e.target.value); setSelectedProcessIdx(0); }} className="select-base">
-                        {lots.map(l => <option key={l.id} value={l.id}>{l.lotNumber} | {l.product} ({l.totalQty}個)</option>)}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">ロット</label>
+                    <select value={selectedLotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setSelectedLotId(e.target.value); setSelectedProcessIdx(0); }}
+                        className="select-base">
+                        <option value="">選択してください</option>
+                        {activeLots.map(l => <option key={l.id} value={l.id}>{l.lotNumber} — {l.product} ({l.totalQty}個)</option>)}
                     </select>
-                </Field>
-                <Field label="対象工程">
-                    <select value={selectedProcessIdx} onChange={e => setSelectedProcessIdx(Number(e.target.value))} className="select-base">
-                        {selectedLot?.processes.map((p, i) => <option key={p.id} value={i}>{p.name} ({p.subcontractor}) — 現在: {p.currentQty}個</option>)}
-                    </select>
-                </Field>
+                </div>
+                {selectedLot && (
+                    <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">工程</label>
+                        <select value={selectedProcessIdx} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedProcessIdx(Number(e.target.value))}
+                            className="select-base">
+                            {selectedLot.processes.map((p, i) => <option key={p.id} value={i}>{p.name} — {p.subcontractor} (現在:{p.currentQty})</option>)}
+                        </select>
+                    </div>
+                )}
             </div>
 
-            {/* 工程バー */}
-            {selectedLot && (
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 overflow-x-auto">
-                    <div className="flex items-center gap-1 min-w-[600px]">
-                        {selectedLot.processes.map((p, i) => {
-                            const isActive = i === selectedProcessIdx;
-                            const barColor = p.status === "completed" ? "bg-emerald-500" : p.status === "in_progress" ? "bg-blue-500" : "bg-slate-200";
-                            return (
-                                <div key={p.id} className="flex-1 flex flex-col items-center gap-1.5 cursor-pointer group" onClick={() => setSelectedProcessIdx(i)}>
-                                    <div className={`w-full h-2.5 rounded-full transition-all ${barColor} ${isActive ? "ring-2 ring-blue-400 ring-offset-2" : "opacity-60 group-hover:opacity-100"}`} />
-                                    <span className={`text-[9px] font-bold uppercase tracking-wider ${isActive ? "text-blue-600" : "text-slate-400"}`}>{p.name}</span>
-                                    <span className={`text-[10px] font-black ${isActive ? "text-slate-800" : "text-slate-400"}`}>{p.currentQty}個</span>
-                                </div>
-                            );
-                        })}
+            {selectedProc && (
+                <>
+                    {/* 現工程ステータス */}
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                        <div className="grid grid-cols-4 gap-4 text-center">
+                            <div><p className="text-[10px] font-bold text-slate-400">現在数</p><p className="text-2xl font-black text-slate-800">{selectedProc.currentQty}</p></div>
+                            <div><p className="text-[10px] font-bold text-slate-400">完了数</p><p className="text-2xl font-black text-emerald-600">{selectedProc.completedQty}</p></div>
+                            <div><p className="text-[10px] font-bold text-slate-400">ロス</p><p className="text-2xl font-black text-red-500">{selectedProc.lossQty}</p></div>
+                            <div><p className="text-[10px] font-bold text-slate-400">単価</p><p className="text-2xl font-black">{selectedProc.unitPriceOverride ? <span className="text-amber-600">¥{selectedProc.unitPriceOverride}</span> : <span className="text-slate-600">¥{selectedProc.unitPrice}</span>}</p></div>
+                        </div>
                     </div>
-                </div>
-            )}
 
-            {selectedProcess && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* A. 次工程へ */}
-                    <div className="bg-white p-6 md:p-8 rounded-3xl border border-blue-100 shadow-sm relative overflow-hidden">
-                        <div className="absolute -right-4 -top-4 w-32 h-32 bg-blue-50 rounded-full opacity-40" />
-                        <div className="flex items-center gap-3 mb-6 relative">
-                            <div className="w-12 h-12 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-600/20 flex items-center justify-center"><ArrowRight className="w-6 h-6" /></div>
-                            <div>
-                                <h4 className="font-black text-lg text-slate-800">次工程へ送る</h4>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{selectedProcess.name} → {nextProcess?.name || "在庫計上"}</p>
-                            </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* 次工程へ送る */}
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+                            <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2"><ArrowRight className="w-4 h-4 text-blue-500" /> 次工程へ送る</h4>
+                            <div><label className="block text-[10px] font-black text-slate-400 mb-1">数量</label><input type="number" value={fwdQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdQty(e.target.value)} max={selectedProc.currentQty} className="input-base" placeholder={`最大 ${selectedProc.currentQty}`} /></div>
+                            <div><label className="block text-[10px] font-black text-slate-400 mb-1">現工程完了日 *</label><input type="date" value={fwdCompletionDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdCompletionDate(e.target.value)} className="input-base" /></div>
+                            <div><label className="block text-[10px] font-black text-slate-400 mb-1">次工程搬入日 *</label><input type="date" value={fwdDeliveryDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdDeliveryDate(e.target.value)} className="input-base" /></div>
+                            <div><label className="block text-[10px] font-black text-slate-400 mb-1">次工程完了予定日 *</label><input type="date" value={fwdDueDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdDueDate(e.target.value)} className="input-base" /></div>
+                            {/* 外注先選択 */}
+                            {!isLastProcess && nextProcessSubs.length > 0 && (
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 mb-1">次工程 外注先</label>
+                                    {nextProcessSubs.length === 1 ? (
+                                        <input type="text" value={nextProcessSubs[0].name} disabled className="input-base bg-slate-50 text-slate-500" />
+                                    ) : (
+                                        <select value={fwdNextSub} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFwdNextSub(e.target.value)} className="select-base">
+                                            <option value="">選択</option>
+                                            {nextProcessSubs.map(s => <option key={s.name} value={s.name}>{s.name} (¥{s.unitPrice})</option>)}
+                                        </select>
+                                    )}
+                                </div>
+                            )}
+                            <div><label className="block text-[10px] font-black text-slate-400 mb-1">特値 (任意)</label><input type="number" value={fwdOverride} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdOverride(e.target.value)} placeholder="空欄=標準単価" className="input-base" /></div>
+                            <button onClick={handleForward} disabled={loading || !fwdQty || !fwdCompletionDate || !fwdDeliveryDate || !fwdDueDate}
+                                className="w-full bg-blue-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
+                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ArrowRight className="w-4 h-4" /> 次工程へ送る</>}
+                            </button>
                         </div>
 
-                        <div className="space-y-4 relative">
-                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 flex justify-between items-center">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">現在数</span>
-                                <span className="text-2xl font-black text-blue-600">{selectedProcess.currentQty}<span className="text-xs text-slate-400 ml-1">個</span></span>
-                            </div>
-
-                            <Field label="完了数（次工程へ送る数）">
-                                <input type="number" value={moveQty || ""} onChange={e => setMoveQty(Math.max(0, Number(e.target.value)))} max={selectedProcess.currentQty} className="input-base text-xl font-black text-blue-600" placeholder="0" />
-                            </Field>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                <Field label="現工程完了日 *" labelColor="text-blue-500">
-                                    <input type="date" value={completionDate} onChange={e => setCompletionDate(e.target.value)} className="input-base text-xs" />
-                                </Field>
-                                <Field label="次工程搬入日 *" labelColor="text-blue-500">
-                                    <input type="date" value={nextDeliveryDate} onChange={e => setNextDeliveryDate(e.target.value)} className="input-base text-xs" />
-                                </Field>
-                                <Field label="次工程完了予定日 *" labelColor="text-blue-500">
-                                    <input type="date" value={nextDueDate} onChange={e => setNextDueDate(e.target.value)} className="input-base text-xs" />
-                                </Field>
-                            </div>
-
-                            <Field label="特値設定（任意）">
-                                <div className="flex items-center gap-2">
-                                    <DollarSign className="w-4 h-4 text-slate-400 shrink-0" />
-                                    <input type="number" value={overridePrice} onChange={e => setOverridePrice(e.target.value)} placeholder={`通常: ¥${selectedProcess.unitPrice.toLocaleString()}`} className="input-base text-xs" />
-                                </div>
-                            </Field>
-
-                            {moveQty > 0 && moveQty <= selectedProcess.currentQty && (
-                                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3 text-xs space-y-1">
-                                    <div className="flex justify-between font-bold text-blue-700">
-                                        <span>経費計算</span>
-                                        <span>¥{(moveQty * (Number(overridePrice) || selectedProcess.unitPriceOverride || selectedProcess.unitPrice)).toLocaleString()}</span>
-                                    </div>
+                        {/* 差戻し + ロス */}
+                        <div className="space-y-4">
+                            {selectedProcessIdx > 0 && (
+                                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+                                    <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2"><ArrowLeft className="w-4 h-4 text-amber-500" /> 差戻し</h4>
+                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1">数量</label><input type="number" value={backQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackQty(e.target.value)} max={selectedProc.currentQty} className="input-base" /></div>
+                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1">差戻し日 *</label><input type="date" value={backDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackDate(e.target.value)} className="input-base" /></div>
+                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1">前工程完了予定日 *</label><input type="date" value={backDueDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackDueDate(e.target.value)} className="input-base" /></div>
+                                    {/* 前工程 外注先選択 */}
+                                    {prevProcessSubs.length > 0 && (
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 mb-1">前工程 外注先</label>
+                                            {prevProcessSubs.length === 1 ? (
+                                                <input type="text" value={prevProcessSubs[0].name} disabled className="input-base bg-slate-50 text-slate-500" />
+                                            ) : (
+                                                <select value={backPrevSub} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setBackPrevSub(e.target.value)} className="select-base">
+                                                    <option value="">選択</option>
+                                                    {prevProcessSubs.map(s => <option key={s.name} value={s.name}>{s.name} (¥{s.unitPrice})</option>)}
+                                                </select>
+                                            )}
+                                        </div>
+                                    )}
+                                    <button onClick={handleBack} disabled={loading || !backQty || !backDate || !backDueDate}
+                                        className="w-full bg-amber-500 text-white font-bold py-3 rounded-2xl shadow-lg shadow-amber-500/20 hover:bg-amber-600 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
+                                        <ArrowLeft className="w-4 h-4" /> 差戻す
+                                    </button>
                                 </div>
                             )}
 
-                            <button onClick={handleMoveForward}
-                                disabled={loading || moveQty <= 0 || moveQty > selectedProcess.currentQty || !completionDate || !nextDeliveryDate || !nextDueDate}
-                                className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 disabled:shadow-none flex items-center justify-center gap-2">
-                                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><CheckCircle className="w-5 h-5" /> 完了報告を実行</>}
-                            </button>
+                            {selectedProc.currentQty > 0 && !selectedProc.lossConfirmed && (
+                                <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-5 space-y-3">
+                                    <h4 className="font-bold text-sm text-red-600 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> ロス確定</h4>
+                                    <p className="text-xs text-slate-500">現在数 {selectedProc.currentQty}個 を廃棄(ロス)として確定します。</p>
+                                    <button onClick={() => setConfirmLoss(true)} className="w-full bg-red-500 text-white font-bold py-3 rounded-2xl shadow-lg shadow-red-500/20 hover:bg-red-600 active:scale-[0.98] transition-all text-sm">ロス確定</button>
+                                </div>
+                            )}
                         </div>
                     </div>
 
-                    {/* B. 差戻し＋ロス */}
-                    <div className="space-y-6">
-                        {selectedProcessIdx > 0 && (
-                            <div className="bg-white p-6 rounded-3xl border border-amber-100 shadow-sm">
-                                <div className="flex items-center gap-3 mb-5">
-                                    <div className="w-10 h-10 bg-amber-500 text-white rounded-xl flex items-center justify-center"><CornerDownLeft className="w-5 h-5" /></div>
-                                    <div>
-                                        <h4 className="font-bold text-slate-800">前工程へ差戻し</h4>
-                                        <p className="text-[10px] text-slate-400 font-bold">{selectedProcess.name} → {prevProcess?.name}</p>
-                                    </div>
+                    {/* 操作履歴 */}
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                        <h4 className="font-bold text-sm text-slate-800 mb-3">操作履歴</h4>
+                        <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                            {store.history.filter(h => h.lotNumber === selectedLot?.lotNumber).slice(0, 10).map(h => (
+                                <div key={h.id} className="flex items-center gap-3 text-xs py-1.5 border-b border-slate-50">
+                                    <span className="text-slate-300 text-[10px]">{new Date(h.timestamp).toLocaleString("ja-JP")}</span>
+                                    <span className="font-bold text-slate-600">{h.action}</span>
+                                    <span className="text-slate-400">{h.detail}</span>
                                 </div>
-                                <div className="space-y-3">
-                                    <Field label="差戻し数">
-                                        <input type="number" value={backQty || ""} onChange={e => setBackQty(Math.max(0, Number(e.target.value)))} max={selectedProcess.currentQty} placeholder="0" className="input-base text-amber-700 font-bold" />
-                                    </Field>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <Field label="差戻し日 *" labelColor="text-amber-600">
-                                            <input type="date" value={returnDate} onChange={e => setReturnDate(e.target.value)} className="input-base text-xs" />
-                                        </Field>
-                                        <Field label="前工程完了予定日 *" labelColor="text-amber-600">
-                                            <input type="date" value={prevDueDate} onChange={e => setPrevDueDate(e.target.value)} className="input-base text-xs" />
-                                        </Field>
-                                    </div>
-                                    <button onClick={handleMoveBack}
-                                        disabled={loading || backQty <= 0 || backQty > selectedProcess.currentQty || !returnDate || !prevDueDate}
-                                        className="w-full px-6 py-3 bg-amber-500 text-white font-bold rounded-2xl shadow-lg shadow-amber-500/20 hover:bg-amber-600 active:scale-[0.98] transition-all disabled:bg-slate-300 disabled:shadow-none flex items-center justify-center gap-2">
-                                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CornerDownLeft className="w-4 h-4" /> 差戻しを実行</>}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
-                        {selectedProcess.currentQty > 0 && !selectedProcess.lossConfirmed && (
-                            <div className="bg-white p-6 rounded-3xl border border-red-100 shadow-sm">
-                                <div className="flex items-center gap-3 mb-4">
-                                    <div className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center"><Trash2 className="w-5 h-5" /></div>
-                                    <div>
-                                        <h4 className="font-bold text-slate-800">ロス数確定</h4>
-                                        <p className="text-[10px] text-slate-400 font-bold">残り未完了数を廃棄扱いにする</p>
-                                    </div>
-                                </div>
-                                <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center justify-between mb-4">
-                                    <span className="text-xs font-bold text-red-600">廃棄対象</span>
-                                    <span className="text-2xl font-black text-red-600">{selectedProcess.currentQty}<span className="text-xs ml-1">個</span></span>
-                                </div>
-                                <button onClick={() => setConfirmLossOpen(true)}
-                                    className="w-full bg-red-500 text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-red-500/20 hover:bg-red-600 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
-                                    <AlertTriangle className="w-5 h-5" /> ロス数を確定する
-                                </button>
-                            </div>
-                        )}
+                            ))}
+                            {store.history.filter(h => h.lotNumber === selectedLot?.lotNumber).length === 0 && <p className="text-xs text-slate-400">履歴なし</p>}
+                        </div>
                     </div>
-                </div>
+                </>
             )}
 
-            <ConfirmDialog open={confirmLossOpen} onClose={() => setConfirmLossOpen(false)} onConfirm={handleConfirmLoss}
-                title="ロス数を確定しますか？" message={`${selectedProcess?.name || ""}に残っている ${selectedProcess?.currentQty || 0}個 が確定ロスとなり工程完了します。`} confirmLabel="ロスを確定" danger />
-        </div>
-    );
-}
-
-function Field({ label, labelColor, children }: { label: string; labelColor?: string; children: React.ReactNode }) {
-    return (
-        <div>
-            <label className={`block text-[10px] font-black mb-2 uppercase tracking-widest ${labelColor || "text-slate-400"}`}>{label}</label>
-            {children}
+            <ConfirmDialog open={confirmLoss} onClose={() => setConfirmLoss(false)} onConfirm={handleConfirmLoss}
+                title="ロスを確定しますか？" message={`${selectedProc?.currentQty || 0}個を廃棄として記録します。この操作は取り消せません。`} confirmLabel="ロス確定" danger />
         </div>
     );
 }

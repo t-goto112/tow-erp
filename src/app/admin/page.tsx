@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Shield, Users, Check, X, Eye, Edit2, Loader2 } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { Shield, Check, X, Eye, Edit2 } from "lucide-react";
 import { store, type UserPermission } from "@/lib/mockStore";
 import { showToast } from "@/components/Toast";
 
@@ -27,7 +27,7 @@ export default function AdminPage() {
         if (!user) return;
         const current = user.permissions[page]?.[type] ?? false;
         store.updatePermission(userId, page, type, !current);
-        showToast("success", `権限を更新しました`);
+        showToast("success", "権限を更新しました");
     };
 
     const pages = Object.keys(pageNames);
@@ -59,7 +59,7 @@ export default function AdminPage() {
                             <tr className="bg-slate-50/50">
                                 <th></th>
                                 {pages.map(p => (
-                                    <th key={`${p}-header`} colSpan={2} className="px-1 pb-2 border-l border-slate-100">
+                                    <th key={`${p}-sub`} colSpan={2} className="px-1 pb-2 border-l border-slate-100">
                                         <div className="flex justify-center gap-2">
                                             <span className="text-[8px] text-slate-300 flex items-center gap-0.5"><Eye size={8} /> 閲覧</span>
                                             <span className="text-[8px] text-slate-300 flex items-center gap-0.5"><Edit2 size={8} /> 編集</span>
@@ -86,18 +86,12 @@ export default function AdminPage() {
                                         return (
                                             <td key={page} colSpan={2} className="px-1 py-3 border-l border-slate-100">
                                                 <div className="flex justify-center gap-2">
-                                                    <button
-                                                        onClick={() => !isAdmin && togglePermission(user.userId, page, "view")}
-                                                        disabled={isAdmin}
-                                                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition ${perm.view ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-300"} ${isAdmin ? "cursor-not-allowed opacity-50" : "hover:opacity-80"}`}
-                                                    >
+                                                    <button onClick={() => !isAdmin && togglePermission(user.userId, page, "view")} disabled={isAdmin}
+                                                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition ${perm.view ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-300"} ${isAdmin ? "cursor-not-allowed opacity-50" : "hover:opacity-80"}`}>
                                                         {perm.view ? <Check size={12} /> : <X size={12} />}
                                                     </button>
-                                                    <button
-                                                        onClick={() => !isAdmin && togglePermission(user.userId, page, "edit")}
-                                                        disabled={isAdmin}
-                                                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition ${perm.edit ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-300"} ${isAdmin ? "cursor-not-allowed opacity-50" : "hover:opacity-80"}`}
-                                                    >
+                                                    <button onClick={() => !isAdmin && togglePermission(user.userId, page, "edit")} disabled={isAdmin}
+                                                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition ${perm.edit ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-300"} ${isAdmin ? "cursor-not-allowed opacity-50" : "hover:opacity-80"}`}>
                                                         {perm.edit ? <Check size={12} /> : <X size={12} />}
                                                     </button>
                                                 </div>
@@ -112,9 +106,7 @@ export default function AdminPage() {
             </div>
 
             <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4">
-                <p className="text-xs text-slate-400 font-bold">
-                    💡 管理者アカウント (admin@towmei.co.jp) の権限は変更できません。一般ユーザーの閲覧・編集権限をチェックボックスで個別に設定できます。
-                </p>
+                <p className="text-xs text-slate-400 font-bold">💡 管理者アカウントの権限は変更できません。一般ユーザーの閲覧・編集権限をチェックボックスで個別に設定できます。</p>
             </div>
         </div>
     );

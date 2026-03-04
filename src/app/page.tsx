@@ -1,341 +1,339 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
-    AlertTriangle,
-    Wallet,
-    TrendingUp,
-    Package,
-    Layers,
-    ArrowRight,
-    CalendarDays,
-    ChevronRight,
-    X,
-    Check,
-    Loader2,
-    Edit2,
+    AlertTriangle, Wallet, TrendingUp, Layers, CalendarDays,
+    ChevronRight, X, Check, Edit2,
 } from "lucide-react";
 import { store, type MockLot, type ProcessEntry, type Delivery } from "@/lib/mockStore";
 import { showToast } from "@/components/Toast";
-import Link from "next/link";
 import Modal from "@/components/Modal";
 
 export default function Dashboard() {
     const [, setTick] = useState(0);
     const [selectedLot, setSelectedLot] = useState<MockLot | null>(null);
     const [ganttRange, setGanttRange] = useState<"month" | "3month" | "custom">("month");
+    const [customFrom, setCustomFrom] = useState("");
+    const [customTo, setCustomTo] = useState("");
 
-    const refresh = useCallback(() => setTick(t => t + 1), []);
+    const refresh = useCallback(() => setTick((t: number) => t + 1), []);
     useEffect(() => { refresh(); return store.subscribe(refresh); }, [refresh]);
 
     const lots = store.lots;
     const orderBacklog = store.totalOrderBacklog;
-    const completedInventory = store.inventory.filter(i => i.type === "product").reduce((s, i) => s + i.quantity, 0);
     const paymentDue = store.paymentLines.filter(p => p.status === "pre_payment" || p.status === "paid").reduce((s, p) => s + p.amount, 0);
 
-    // 仕掛品をロット(製品)ごとに集計
+    // 仕掛品をロットで集計
     const wipByLot = lots.filter(l => l.status !== "completed").map(lot => {
         const wipQty = lot.processes.reduce((s, p) => s + p.currentQty, 0);
         return { ...lot, wipQty };
     }).filter(l => l.wipQty > 0 || l.status === "created");
 
-    // 納期アラート
     const alerts = store.deadlineAlerts;
 
     // ガントチャートの日付範囲
-    const today = new Date();
-    const ganttStart = new Date(today);
-    ganttStart.setDate(1); // 今月1日
-    if (ganttRange === "3month") ganttStart.setMonth(ganttStart.getMonth() - 1);
-    const ganttEnd = new Date(ganttStart);
-    if (ganttRange === "month") ganttEnd.setMonth(ganttEnd.getMonth() + 1);
-    else ganttEnd.setMonth(ganttEnd.getMonth() + 3);
+    const todayDate = new Date();
+    const todayStr = todayDate.toISOString().split("T")[0];
 
-    const totalDays = Math.ceil((ganttEnd.getTime() - ganttStart.getTime()) / (1000 * 60 * 60 * 24));
-    const dayWidth = 100 / totalDays;
+    const ganttDates = useMemo(() => {
+        let start: Date, end: Date;
+        if (ganttRange === "custom" && customFrom && customTo) {
+            start = new Date(customFrom); end = new Date(customTo);
+        } else {
+            start = new Date(todayDate); start.setDate(1);
+            end = new Date(start);
+            if (ganttRange === "3month") { start.setMonth(start.getMonth() - 1); end.setMonth(end.getMonth() + 2); end.setDate(0); }
+            else { end.setMonth(end.getMonth() + 1); end.setDate(0); }
+        }
+        const days: string[] = [];
+        const cur = new Date(start);
+        while (cur <= end) { days.push(cur.toISOString().split("T")[0]); cur.setDate(cur.getDate() + 1); }
+        return { days, start: days[0], end: days[days.length - 1] };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ganttRange, customFrom, customTo]);
 
-    function dayOffset(dateStr: string) {
-        const d = new Date(dateStr);
-        return Math.ceil((d.getTime() - ganttStart.getTime()) / (1000 * 60 * 60 * 24));
-    }
+    // ガントチャートのロットグループ用データ
+    const ganttLots = lots.filter(l => l.status !== "completed").map(lot => {
+        const bars: { name: string; sub: string; start: string; end: string; color: string; isCurrent: boolean }[] = [];
+        lot.processes.forEach(proc => {
+            if (proc.deliveries.length === 0 && proc.status === "pending") return;
+            const starts = proc.deliveries.map(d => d.deliveryDate).filter(Boolean).sort();
+            const ends = proc.deliveries.map(d => d.completionDate || d.dueDate).filter(Boolean).sort();
+            const barStart = starts[0] || "";
+            const barEnd = ends[ends.length - 1] || "";
+            if (!barStart || !barEnd) return;
+            const color = proc.status === "completed" ? "bg-emerald-400" : proc.status === "in_progress" ? "bg-blue-400" : "bg-slate-300";
+            bars.push({ name: proc.name, sub: proc.subcontractor, start: barStart, end: barEnd, color, isCurrent: proc.status === "in_progress" });
+        });
+        return { lot, bars };
+    });
 
-    // ガントバー色
-    const barColors = ["bg-blue-400", "bg-emerald-400", "bg-amber-400", "bg-purple-400", "bg-rose-400", "bg-cyan-400"];
+    const dayWidth = ganttRange === "3month" ? 8 : 14;
 
     return (
         <div className="space-y-6 animate-in fade-in duration-300">
-            {/* ── KPI カード ── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <SummaryCard label="受注残高" value={`¥${orderBacklog.toLocaleString()}`} icon={TrendingUp} color="blue" href="/orders" />
-                {wipByLot.map(lot => (
-                    <div key={lot.id} className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md hover:border-blue-200 transition-all" onClick={() => setSelectedLot(lot)}>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">{lot.product}</p>
-                        <p className="text-xl font-black text-amber-600">{lot.wipQty}<span className="text-xs text-slate-400 ml-1">仕掛</span></p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">{lot.lotNumber}</p>
-                    </div>
-                ))}
-                <SummaryCard label="完成品在庫" value={`${completedInventory}個`} icon={Package} color="emerald" href="/inventory" />
-                <SummaryCard label="支払確定額" value={`¥${paymentDue.toLocaleString()}`} icon={Wallet} color="purple" href="/payments" />
+            {/* サマリーカード (完成品在庫削除) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <SummaryCard icon={<Wallet className="w-5 h-5" />} label="受注残高" value={`¥${orderBacklog.toLocaleString()}`} sub={`${store.orders.filter(o => o.status !== "completed" && o.status !== "cancelled").length}件`} color="bg-blue-50 text-blue-600" />
+                <SummaryCard icon={<Layers className="w-5 h-5" />} label="仕掛品" value={`${wipByLot.reduce((s, l) => s + l.wipQty, 0)}`} sub={`${wipByLot.length}ロット`} color="bg-amber-50 text-amber-600" />
+                <SummaryCard icon={<TrendingUp className="w-5 h-5" />} label="支払予定" value={`¥${paymentDue.toLocaleString()}`} sub="未払+確認待" color="bg-emerald-50 text-emerald-600" />
             </div>
 
-            {/* ── ガントチャート ── */}
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 overflow-hidden">
-                <div className="flex items-center justify-between mb-4">
+            {/* ガントチャート */}
+            <section className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+                <div className="flex items-center justify-between p-4 border-b border-slate-100">
                     <div className="flex items-center gap-2">
                         <CalendarDays className="w-5 h-5 text-blue-500" />
-                        <h3 className="font-black text-sm text-slate-800">生産ガントチャート</h3>
+                        <h3 className="font-black text-slate-800">ガントチャート</h3>
                     </div>
-                    <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
-                        {[{ k: "month" as const, l: "今月" }, { k: "3month" as const, l: "3ヶ月" }].map(r => (
-                            <button key={r.k} onClick={() => setGanttRange(r.k)}
-                                className={`px-3 py-1 rounded-md text-xs font-bold transition ${ganttRange === r.k ? "bg-white text-blue-600 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}>
-                                {r.l}
+                    <div className="flex items-center gap-1.5">
+                        {(["month", "3month", "custom"] as const).map(r => (
+                            <button key={r} onClick={() => setGanttRange(r)}
+                                className={`px-3 py-1 rounded-lg text-xs font-bold transition ${ganttRange === r ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-100"}`}>
+                                {r === "month" ? "今月" : r === "3month" ? "3ヵ月" : "範囲選択"}
                             </button>
                         ))}
                     </div>
                 </div>
-
-                {/* ヘッダー */}
-                <div className="overflow-x-auto pb-2">
-                    <div style={{ minWidth: "700px" }}>
+                {ganttRange === "custom" && (
+                    <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-100">
+                        <input type="date" value={customFrom} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomFrom(e.target.value)} className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white" />
+                        <span className="text-xs text-slate-400">〜</span>
+                        <input type="date" value={customTo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomTo(e.target.value)} className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white" />
+                    </div>
+                )}
+                <div className="overflow-x-auto">
+                    <div style={{ minWidth: ganttDates.days.length * dayWidth + 200 }} className="relative">
                         {/* 日付ヘッダー */}
-                        <div className="flex border-b border-slate-100 pb-1 mb-2 pl-36">
-                            {Array.from({ length: totalDays }, (_, i) => {
-                                const d = new Date(ganttStart);
-                                d.setDate(d.getDate() + i);
-                                const isToday = d.toISOString().split("T")[0] === today.toISOString().split("T")[0];
-                                const isFirst = d.getDate() === 1;
-                                return (
-                                    <div key={i} style={{ width: `${dayWidth}%` }} className={`text-center shrink-0 ${isToday ? "font-black text-blue-600" : ""}`}>
-                                        {(isFirst || d.getDate() % 5 === 0 || isToday) && (
-                                            <span className={`text-[8px] ${isToday ? "bg-blue-600 text-white px-1 py-0.5 rounded" : "text-slate-300"}`}>
-                                                {isFirst ? `${d.getMonth() + 1}/${d.getDate()}` : `${d.getDate()}`}
-                                            </span>
-                                        )}
-                                    </div>
-                                );
-                            })}
+                        <div className="flex border-b border-slate-100 sticky top-0 bg-white z-10">
+                            <div className="w-[200px] shrink-0 px-4 py-2 text-[10px] font-bold text-slate-400 uppercase">ロット / 工程</div>
+                            <div className="flex">
+                                {ganttDates.days.map((d: string, i: number) => {
+                                    const dt = new Date(d);
+                                    const isToday = d === todayStr;
+                                    const isFirst = dt.getDate() === 1;
+                                    return (
+                                        <div key={d} style={{ width: dayWidth }} className={`text-center border-l ${isFirst ? "border-slate-200" : "border-slate-50"} ${isToday ? "bg-blue-50" : ""}`}>
+                                            {(i === 0 || isFirst) && <div className="text-[8px] font-bold text-slate-400">{dt.getMonth() + 1}月</div>}
+                                            <div className={`text-[8px] ${isToday ? "text-blue-600 font-black" : "text-slate-300"}`}>{dt.getDate()}</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
 
-                        {/* ロット行 */}
-                        {lots.filter(l => l.status !== "completed").map((lot, lotIdx) => (
-                            <div key={lot.id} className="flex items-center mb-1 group">
-                                <div className="w-36 shrink-0 pr-2 cursor-pointer hover:text-blue-600 transition" onClick={() => setSelectedLot(lot)}>
-                                    <p className="text-[10px] font-bold text-slate-800 truncate group-hover:text-blue-600">{lot.lotNumber}</p>
-                                    <p className="text-[8px] text-slate-400 truncate">{lot.product}</p>
-                                </div>
-                                <div className="flex-1 relative h-6 bg-slate-50 rounded">
-                                    {/* 今日線 */}
-                                    <div className="absolute top-0 bottom-0 w-px bg-blue-400 z-10" style={{ left: `${dayOffset(today.toISOString().split("T")[0]) * dayWidth}%` }} />
-                                    {lot.processes.map((proc, pi) => {
-                                        return proc.deliveries.map((del, di) => {
-                                            const start = dayOffset(del.deliveryDate);
-                                            const end = del.completionDate ? dayOffset(del.completionDate) : dayOffset(del.dueDate);
-                                            const width = Math.max(end - start, 1);
-                                            const isComplete = !!del.completionDate;
+                        {/* ロットグループ */}
+                        {ganttLots.map(({ lot, bars }) => (
+                            <div key={lot.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition">
+                                {/* ロットヘッダー */}
+                                <div className="flex items-center cursor-pointer" onClick={() => setSelectedLot(lot)}>
+                                    <div className="w-[200px] shrink-0 px-4 py-2">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="font-mono text-xs font-bold text-blue-600">{lot.lotNumber}</span>
+                                            <span className="text-[10px] text-slate-500">{lot.product}</span>
+                                            <ChevronRight className="w-3 h-3 text-slate-300 ml-auto" />
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 relative h-2">
+                                        {/* 全体スパン（薄いバー） */}
+                                        {(() => {
+                                            const starts = bars.map(b => b.start).sort();
+                                            const ends = bars.map(b => b.end).sort();
+                                            if (starts.length === 0) return null;
+                                            const s = starts[0] >= ganttDates.start ? starts[0] : ganttDates.start;
+                                            const e = ends[ends.length - 1] <= ganttDates.end ? ends[ends.length - 1] : ganttDates.end;
+                                            const si = ganttDates.days.indexOf(s);
+                                            const ei = ganttDates.days.indexOf(e);
+                                            if (si < 0 || ei < 0) return null;
                                             return (
-                                                <div key={`${proc.id}-${di}`}
-                                                    title={`${proc.name}: ${del.qty}個 (${del.deliveryDate}〜${del.dueDate})`}
-                                                    className={`absolute top-0.5 h-5 rounded-md text-[7px] font-bold text-white flex items-center justify-center overflow-hidden transition-all ${isComplete ? barColors[pi % barColors.length] : barColors[pi % barColors.length] + " opacity-60 border-2 border-dashed border-white/50"}`}
-                                                    style={{
-                                                        left: `${start * dayWidth}%`,
-                                                        width: `${width * dayWidth}%`,
-                                                        minWidth: "16px",
-                                                    }}>
-                                                    {width * dayWidth > 3 && <span className="truncate px-0.5">{proc.name}</span>}
-                                                </div>
+                                                <div className="absolute top-0 h-1 bg-slate-200 rounded-full"
+                                                    style={{ left: si * dayWidth, width: (ei - si + 1) * dayWidth }} />
                                             );
-                                        });
-                                    })}
+                                        })()}
+                                    </div>
                                 </div>
+                                {/* 工程バー */}
+                                {bars.map((bar, bi) => {
+                                    const startIdx = ganttDates.days.indexOf(bar.start >= ganttDates.start ? bar.start : ganttDates.start);
+                                    const endIdx = ganttDates.days.indexOf(bar.end <= ganttDates.end ? bar.end : ganttDates.end);
+                                    if (startIdx < 0 || endIdx < 0) return null;
+                                    const left = startIdx * dayWidth;
+                                    const width = Math.max((endIdx - startIdx + 1) * dayWidth, dayWidth);
+                                    const gradient = bar.color === "bg-emerald-400" ? "from-emerald-400 to-emerald-500" :
+                                        bar.color === "bg-blue-400" ? "from-blue-400 to-blue-500" :
+                                            "from-slate-300 to-slate-400";
+                                    return (
+                                        <div key={bi} className="flex items-center">
+                                            <div className="w-[200px] shrink-0 px-4 pl-8 border-r border-slate-50">
+                                                <span className="text-[10px] text-slate-400">{bar.name}</span>
+                                            </div>
+                                            <div className="relative h-7 flex-1 border-b border-slate-50/50">
+                                                <div className={`absolute top-1 rounded-full h-5 bg-gradient-to-r ${gradient} shadow-sm cursor-pointer hover:scale-[1.02] hover:brightness-110 transition-all z-10`}
+                                                    style={{ left: left + 2, width: width - 4 }}
+                                                    title={`${bar.name}: ${bar.start} ~ ${bar.end}`}>
+                                                    <span className="text-[9px] text-white font-black px-2 truncate block leading-5">{bar.sub}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         ))}
-                    </div>
-                </div>
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* ── ロット別仕掛一覧 ── */}
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-black text-sm text-slate-800 flex items-center gap-2">
-                            <Layers className="w-5 h-5 text-amber-500" /> ロット別仕掛一覧
-                        </h3>
-                        <Link href="/lots" className="text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-0.5">
-                            すべて <ArrowRight className="w-3 h-3" />
-                        </Link>
-                    </div>
-                    <div className="space-y-2">
-                        {lots.filter(l => l.status !== "completed").map(lot => {
-                            const wipQty = lot.processes.reduce((s, p) => s + p.currentQty, 0);
-                            const currentProc = lot.processes.find(p => p.status === "in_progress");
-                            return (
-                                <div key={lot.id}
-                                    onClick={() => setSelectedLot(lot)}
-                                    className="flex items-center justify-between p-3 rounded-2xl border border-slate-100 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 cursor-pointer transition group">
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-0.5">
-                                            <span className="font-mono text-xs font-bold text-blue-600">{lot.lotNumber}</span>
-                                            <span className="text-xs text-slate-500">{lot.product}</span>
-                                        </div>
-                                        <span className="text-[10px] text-slate-400 font-bold">
-                                            仕掛: {wipQty}個 {currentProc && `| ${currentProc.name}`}
-                                        </span>
-                                    </div>
-                                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition" />
-                                </div>
-                            );
-                        })}
-                        {lots.filter(l => l.status !== "completed").length === 0 && (
-                            <p className="text-sm text-slate-400 py-6 text-center">仕掛中のロットはありません</p>
+                        {/* 今日の線 */}
+                        {ganttDates.days.includes(todayStr) && (
+                            <div className="absolute top-0 bottom-0 border-l-2 border-red-400 z-20"
+                                style={{ left: 200 + ganttDates.days.indexOf(todayStr) * dayWidth }} />
                         )}
                     </div>
                 </div>
+            </section>
 
-                {/* ── 納期アラート ── */}
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
-                    <div className="flex items-center gap-2 mb-4">
-                        <AlertTriangle className="w-5 h-5 text-red-500" />
-                        <h3 className="font-black text-sm text-slate-800">納期アラート</h3>
-                    </div>
-                    {alerts.length === 0 ? (
-                        <p className="text-sm text-slate-400 py-6 text-center">アラートなし</p>
-                    ) : (
-                        <div className="space-y-2 max-h-72 overflow-y-auto">
-                            {alerts.map((a, i) => (
-                                <div key={i} className={`p-3 rounded-2xl border text-xs font-bold ${a.isOverdue ? "bg-red-50 border-red-200 text-red-700" : "bg-blue-50 border-blue-200 text-blue-700"}`}>
-                                    <div className="flex items-center justify-between">
-                                        <span>
-                                            {a.lot} {a.product} ({a.process}・{a.qty}本)
-                                        </span>
-                                        <span>
-                                            完了予定: {new Date(a.dueDate).getMonth() + 1}月{new Date(a.dueDate).getDate()}日
-                                            {a.isOverdue && <span className="ml-1.5 bg-red-600 text-white px-1.5 py-0.5 rounded text-[9px]">超過</span>}
-                                        </span>
+            {/* ロット別仕掛一覧 */}
+            <section>
+                <h3 className="text-sm font-black text-slate-800 mb-3 flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-blue-500" /> ロット別仕掛一覧
+                </h3>
+                <div className="space-y-2">
+                    {wipByLot.map(lot => {
+                        const currentProc = lot.processes.find(p => p.status === "in_progress");
+                        return (
+                            <div key={lot.id} onClick={() => setSelectedLot(lot)}
+                                className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md hover:border-blue-200 transition cursor-pointer group">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="font-mono text-sm font-bold text-blue-600">{lot.lotNumber}</span>
+                                            <span className="text-xs text-slate-500">{lot.product}</span>
+                                        </div>
+                                        <div className="flex gap-3 text-[10px] text-slate-400 font-bold">
+                                            <span>総数: {lot.totalQty}</span>
+                                            <span>仕掛: {lot.wipQty}</span>
+                                            {currentProc && <span className="text-blue-600">{currentProc.name}</span>}
+                                        </div>
                                     </div>
+                                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition" />
                                 </div>
-                            ))}
-                        </div>
-                    )}
+                                <div className="flex gap-0.5 h-2 rounded-full overflow-hidden bg-slate-100 mt-3">
+                                    {lot.processes.map(p => {
+                                        const pct = lot.totalQty > 0 ? (p.completedQty / lot.totalQty) * 100 : 0;
+                                        return <div key={p.id} style={{ width: `${Math.max(pct, 1)}%` }} className={`rounded-full ${p.status === "completed" ? "bg-emerald-400" : p.status === "in_progress" ? "bg-blue-400" : "bg-slate-200"}`} />;
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
-            </div>
+            </section>
 
-            {/* ── クイックアクション ── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <QuickAction href="/orders" label="新規受注入力" color="blue" />
-                <QuickAction href="/routing" label="進捗報告" color="slate" />
-                <QuickAction href="/master" label="マスタ管理" color="emerald" />
-                <QuickAction href="/payments" label="支払管理" color="purple" />
-            </div>
+            {/* 納期アラート */}
+            {alerts.length > 0 && (
+                <section>
+                    <h3 className="text-sm font-black text-slate-800 mb-3 flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-500" /> 納期アラート
+                    </h3>
+                    <div className="space-y-2">
+                        {alerts.map((a, i) => (
+                            <div key={i} className={`flex items-center justify-between rounded-2xl border p-3 ${a.isOverdue ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-200"}`}>
+                                <div className="flex items-center gap-3">
+                                    {a.isOverdue && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500 text-white">超過</span>}
+                                    <span className="font-mono text-xs font-bold text-blue-600">{a.lot}</span>
+                                    <span className="text-xs text-slate-600">{a.process} {a.qty}個</span>
+                                </div>
+                                <span className={`text-xs font-bold ${a.isOverdue ? "text-red-600" : "text-blue-600"}`}>{a.dueDate}</span>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
 
-            {/* ── ロット詳細カード(編集可能) ── */}
+            {/* ロット詳細（カード編集 — 納入日も編集可、数量同期） */}
             <LotDetailModal lot={selectedLot} onClose={() => setSelectedLot(null)} />
         </div>
     );
 }
 
-// ─── ロット詳細カード（編集可能） ───
+function SummaryCard({ icon, label, value, sub, color }: { icon: React.ReactNode; label: string; value: string; sub: string; color: string }) {
+    return (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex items-start gap-4">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${color}`}>{icon}</div>
+            <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
+                <p className="text-2xl font-black text-slate-800">{value}</p>
+                <p className="text-xs text-slate-400">{sub}</p>
+            </div>
+        </div>
+    );
+}
+
 function LotDetailModal({ lot, onClose }: { lot: MockLot | null; onClose: () => void }) {
-    const [editingDeliveryId, setEditingDeliveryId] = useState<string | null>(null);
+    const [editId, setEditId] = useState<string | null>(null);
     const [editQty, setEditQty] = useState("");
+    const [editDeliveryDate, setEditDeliveryDate] = useState("");
     const [editDue, setEditDue] = useState("");
+    const [, setTick] = useState(0);
 
     if (!lot) return null;
 
-    const handleSaveDelivery = (proc: ProcessEntry, delivery: Delivery) => {
-        if (editQty) delivery.qty = Number(editQty);
-        if (editDue) delivery.dueDate = editDue;
-        showToast("success", "更新しました");
-        setEditingDeliveryId(null);
-        setEditQty(""); setEditDue("");
+    const handleSave = (processIndex: number, deliveryId: string) => {
+        store.updateDelivery(lot.id, processIndex, deliveryId, Number(editQty), editDeliveryDate || undefined, editDue || undefined);
+        showToast("success", "更新しました（前工程に連動反映済み）");
+        setEditId(null);
+        setTick((t: number) => t + 1);
     };
 
     return (
-        <Modal open={!!lot} onClose={onClose} title={`${lot.lotNumber} — ${lot.product}`} subtitle={`総数量: ${lot.totalQty}個`} width="max-w-2xl">
+        <Modal open={!!lot} onClose={onClose} title={lot ? `${lot.lotNumber} — ${lot.product}` : ""} subtitle={lot ? `総数量: ${lot.totalQty}個` : ""} width="max-w-2xl">
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
                 {lot.processes.map((proc, pi) => (
                     <div key={proc.id} className={`rounded-2xl border p-4 ${proc.status === "in_progress" ? "border-blue-200 bg-blue-50/30" : "border-slate-100"}`}>
                         <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
                                 <span className={`w-2 h-2 rounded-full ${proc.status === "completed" ? "bg-emerald-500" : proc.status === "in_progress" ? "bg-blue-500" : "bg-slate-300"}`} />
-                                <span className="font-bold text-sm text-slate-800">{proc.name}</span>
+                                <span className="font-bold text-sm">{proc.name}</span>
                                 <span className="text-[10px] text-slate-400">({proc.subcontractor})</span>
                             </div>
-                            <div className="flex items-center gap-2 text-[10px]">
-                                <span className="font-bold text-slate-500">現在: {proc.currentQty}</span>
-                                <span className="font-bold text-emerald-600">完了: {proc.completedQty}</span>
-                                {proc.lossQty > 0 && <span className="font-bold text-red-500">ロス: {proc.lossQty}</span>}
+                            <div className="flex gap-2 text-[10px] font-bold">
+                                <span className="text-slate-500">現在:{proc.currentQty}</span>
+                                <span className="text-emerald-600">完了:{proc.completedQty}</span>
+                                {proc.lossQty > 0 && <span className="text-red-500">ロス:{proc.lossQty}</span>}
                             </div>
                         </div>
-
-                        {/* 納入実績一覧 */}
-                        {proc.deliveries.length > 0 ? (
-                            <div className="space-y-1.5">
-                                {proc.deliveries.map(del => {
-                                    const isEditing = editingDeliveryId === del.id;
-                                    return (
-                                        <div key={del.id} className="flex items-center justify-between bg-white rounded-xl p-2.5 border border-slate-100 text-xs">
-                                            {isEditing ? (
-                                                <div className="flex items-center gap-2 flex-1">
-                                                    <input type="number" value={editQty} onChange={e => setEditQty(e.target.value)} placeholder={String(del.qty)} className="w-16 px-1.5 py-1 border border-slate-200 rounded text-xs font-bold" />
-                                                    <span>個</span>
-                                                    <input type="date" value={editDue} onChange={e => setEditDue(e.target.value)} className="px-1.5 py-1 border border-slate-200 rounded text-xs" />
-                                                    <button onClick={() => handleSaveDelivery(proc, del)} className="p-1 bg-blue-600 text-white rounded"><Check size={12} /></button>
-                                                    <button onClick={() => setEditingDeliveryId(null)} className="p-1 bg-slate-200 rounded"><X size={12} /></button>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="font-bold text-slate-700">{del.qty}個</span>
-                                                        <span className="text-slate-400">納入: {del.deliveryDate}</span>
-                                                        <span className="text-slate-400">予定: {del.dueDate}</span>
-                                                        {del.completionDate && <span className="text-emerald-600 font-bold">完了: {del.completionDate}</span>}
-                                                    </div>
-                                                    {!del.completionDate && (
-                                                        <button onClick={() => { setEditingDeliveryId(del.id); setEditQty(String(del.qty)); setEditDue(del.dueDate); }}
-                                                            className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition">
-                                                            <Edit2 size={12} />
-                                                        </button>
-                                                    )}
-                                                </>
-                                            )}
+                        {proc.deliveries.length > 0 ? proc.deliveries.map(del => {
+                            const isEd = editId === del.id;
+                            return (
+                                <div key={del.id} className="flex items-center justify-between bg-white rounded-xl p-2.5 border border-slate-100 text-xs mb-1.5">
+                                    {isEd ? (
+                                        <div className="flex items-center gap-2 flex-1 flex-wrap">
+                                            <label className="text-[9px] text-slate-400">数量</label>
+                                            <input type="number" value={editQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditQty(e.target.value)} className="w-16 px-1.5 py-1 border border-slate-200 rounded text-xs font-bold" />
+                                            <label className="text-[9px] text-slate-400">納入日</label>
+                                            <input type="date" value={editDeliveryDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditDeliveryDate(e.target.value)} className="px-1.5 py-1 border border-slate-200 rounded text-xs" />
+                                            <label className="text-[9px] text-slate-400">予定日</label>
+                                            <input type="date" value={editDue} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditDue(e.target.value)} className="px-1.5 py-1 border border-slate-200 rounded text-xs" />
+                                            <button onClick={() => handleSave(pi, del.id)} className="p-1 bg-blue-600 text-white rounded"><Check size={12} /></button>
+                                            <button onClick={() => setEditId(null)} className="p-1 bg-slate-200 rounded"><X size={12} /></button>
                                         </div>
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                            <p className="text-[10px] text-slate-300 italic">納入実績なし</p>
-                        )}
+                                    ) : (
+                                        <>
+                                            <div className="flex items-center gap-3">
+                                                <span className="font-bold">{del.qty}個</span>
+                                                <span className="text-slate-400">納入:{del.deliveryDate}</span>
+                                                <span className="text-slate-400">予定:{del.dueDate}</span>
+                                                {del.completionDate && <span className="text-emerald-600 font-bold">完了:{del.completionDate}</span>}
+                                            </div>
+                                            {!del.completionDate && (
+                                                <button onClick={() => { setEditId(del.id); setEditQty(String(del.qty)); setEditDeliveryDate(del.deliveryDate); setEditDue(del.dueDate); }}
+                                                    className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-blue-600"><Edit2 size={12} /></button>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        }) : <p className="text-[10px] text-slate-300 italic">納入実績なし</p>}
                     </div>
                 ))}
             </div>
         </Modal>
-    );
-}
-
-function SummaryCard({ label, value, icon: Icon, color, href }: { label: string; value: string; icon: any; color: string; href: string }) {
-    const colorMap: Record<string, string> = {
-        blue: "bg-blue-50 text-blue-600 shadow-blue-100/50",
-        amber: "bg-amber-50 text-amber-600 shadow-amber-100/50",
-        emerald: "bg-emerald-50 text-emerald-600 shadow-emerald-100/50",
-        purple: "bg-purple-50 text-purple-600 shadow-purple-100/50",
-    };
-    return (
-        <Link href={href} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-200 transition-all group">
-            <div className="flex items-center gap-3 mb-3">
-                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg ${colorMap[color]}`}><Icon className="w-5 h-5" /></div>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{label}</p>
-            </div>
-            <p className="text-2xl font-black text-slate-800 tracking-tight">{value}</p>
-        </Link>
-    );
-}
-
-function QuickAction({ href, label, color }: { href: string; label: string; color: string }) {
-    const colorMap: Record<string, string> = { blue: "bg-blue-600 shadow-blue-600/20 hover:bg-blue-700", slate: "bg-slate-800 shadow-slate-800/20 hover:bg-slate-900", emerald: "bg-emerald-600 shadow-emerald-600/20 hover:bg-emerald-700", purple: "bg-purple-600 shadow-purple-600/20 hover:bg-purple-700" };
-    return (
-        <Link href={href} className={`${colorMap[color]} text-white font-bold py-4 px-4 rounded-2xl shadow-xl text-center text-sm hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2`}>
-            {label} <ArrowRight className="w-4 h-4" />
-        </Link>
     );
 }

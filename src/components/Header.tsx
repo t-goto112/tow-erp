@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, SlidersHorizontal, Bell, Menu } from "lucide-react";
+import { Bell, Menu } from "lucide-react";
 
 interface HeaderProps {
     title: string;
@@ -15,20 +15,6 @@ export default function Header({ title }: HeaderProps) {
                 </h2>
             </div>
 
-            {/* Search & Filter */}
-            <div className="hidden md:flex flex-1 max-w-md mx-6 items-center bg-slate-100 rounded-full px-4 py-1.5 border border-slate-200 focus-within:ring-2 focus-within:ring-blue-100 focus-within:bg-white transition shadow-sm">
-                <Search className="w-4 h-4 text-slate-400 mr-2" />
-                <input
-                    type="text"
-                    placeholder="ロット番号・製品名で検索..."
-                    className="bg-transparent text-sm w-full outline-none text-slate-700 placeholder:text-slate-400 font-medium"
-                />
-                <button className="ml-2 pl-3 border-l border-slate-300 text-slate-500 hover:text-blue-600 transition flex items-center gap-1.5 shrink-0">
-                    <SlidersHorizontal className="w-3.5 h-3.5" />
-                    <span className="text-[10px] font-bold">絞り込み</span>
-                </button>
-            </div>
-
             <div className="flex items-center gap-3">
                 <button className="relative p-2 text-slate-400 hover:bg-slate-100 rounded-full transition">
                     <Bell className="w-5 h-5" />
@@ -41,3 +27,4 @@ export default function Header({ title }: HeaderProps) {
         </header>
     );
 }
+
