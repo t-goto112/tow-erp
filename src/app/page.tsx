@@ -104,6 +104,20 @@ export default function Dashboard() {
                 )}
                 <div className="overflow-x-auto">
                     <div style={{ minWidth: ganttDates.days.length * dayWidth + 200 }} className="relative">
+                        {/* 背景の垂直グリッド線 */}
+                        <div className="absolute top-0 bottom-0 left-[200px] flex pointer-events-none z-0">
+                            {ganttDates.days.map((d: string) => {
+                                const dt = new Date(d);
+                                const isFirst = dt.getDate() === 1;
+                                const isToday = d === todayStr;
+                                return (
+                                    <div key={d} style={{ width: dayWidth }} className="relative h-full">
+                                        <div className={`absolute left-0 top-0 h-full border-l ${isFirst ? "border-slate-300 border-l-2" : "border-slate-100"} ${isToday ? "bg-blue-50/30" : ""}`} />
+                                    </div>
+                                );
+                            })}
+                        </div>
+
                         {/* 日付ヘッダー */}
                         <div className="flex border-b border-slate-100 sticky top-0 bg-white z-20">
                             <div className="w-[200px] shrink-0 px-4 py-2 text-[10px] font-bold text-slate-400 uppercase bg-white z-30 sticky left-0 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">ロット / 工程</div>
@@ -114,7 +128,6 @@ export default function Dashboard() {
                                     const isFirst = dt.getDate() === 1;
                                     return (
                                         <div key={d} style={{ width: dayWidth }} className={`text-center relative`}>
-                                            <div className={`h-full absolute left-0 border-l ${isFirst ? "border-slate-300 border-l-2" : "border-slate-100"} ${isToday ? "bg-blue-50/50" : ""} z-[-1] pointer-events-none`} style={{ height: "1000px" }} />
                                             <div className={`relative z-10 bg-white ${isToday ? "bg-blue-50" : ""}`}>
                                                 {(i === 0 || isFirst) && <div className="text-[8px] font-bold text-slate-400 whitespace-nowrap">{dt.getMonth() + 1}月</div>}
                                                 <div className={`text-[8px] ${isToday ? "text-blue-600 font-black" : "text-slate-300"}`}>{dt.getDate()}</div>
@@ -137,7 +150,7 @@ export default function Dashboard() {
                                             <ChevronRight className="w-3 h-3 text-slate-300 shrink-0 ml-auto" />
                                         </div>
                                     </div>
-                                    <div className="flex-1 relative h-2">
+                                    <div className="flex-1 relative h-2 z-10 pointer-events-none">
                                         {/* 全体スパン（薄いバー） */}
                                         {(() => {
                                             const starts = bars.map(b => b.start).sort();
@@ -170,7 +183,7 @@ export default function Dashboard() {
                                             <div className="w-[200px] shrink-0 px-4 pl-8 border-r border-slate-100 sticky left-0 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10">
                                                 <span className="text-[10px] text-slate-400 truncate block" title={bar.name}>{bar.name}</span>
                                             </div>
-                                            <div className="relative h-7 flex-1 border-b border-transparent">
+                                            <div className="relative h-7 flex-1 border-b border-transparent z-10">
                                                 <div className={`absolute top-1 rounded-full h-5 bg-gradient-to-r ${gradient} shadow-sm cursor-pointer hover:scale-[1.02] hover:brightness-110 transition-all z-10 flex items-center shadow-md`}
                                                     style={{ left: left + 2, width: width - 4 }}
                                                     title={`${bar.name} [${bar.sub}]: ${bar.start} ~ ${bar.end}`}>
@@ -219,7 +232,7 @@ export default function Dashboard() {
                                     </div>
                                     <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition" />
                                 </div>
-                                <div className="mt-3 bg-slate-50 rounded-lg p-2 overflow-x-auto flex gap-2 text-[10px] text-slate-400 font-bold border border-slate-100 no-scrollbar">
+                                <div className="mt-3 bg-slate-50 rounded-lg p-2 overflow-x-auto flex gap-2 text-[10px] text-slate-400 font-bold border border-slate-100">
                                     {lot.processes.map(p => (
                                         <div key={p.id} className={`flex items-center gap-1 py-0.5 px-2 rounded-md shrink-0 ${p.status === "completed" ? "bg-emerald-100 text-emerald-700" : p.status === "in_progress" ? "bg-blue-100 text-blue-700" : "bg-white border border-slate-200"}`}>
                                             <span className="font-black text-[9px] whitespace-nowrap">{p.name}</span>

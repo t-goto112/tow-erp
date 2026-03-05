@@ -54,10 +54,12 @@ export default function LoginPage() {
             <div className="w-full max-w-md bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden border border-white/20 relative z-10 animate-in">
                 <div className="p-10 md:p-12">
                     <div className="flex flex-col items-center mb-10 text-center">
-                        <div className="w-24 h-24 mb-6 hover:scale-105 transition-transform duration-500">
-                            <img src="/logo_sidebar.png" alt="TOWMEI" className="w-full h-full object-contain filter drop-shadow-xl" />
+                        <div className="w-16 h-16 flex items-center justify-center border-[3px] border-blue-600 rounded-bl-2xl rounded-tr-2xl transform rotate-3 hover:scale-105 transition duration-500 shadow-xl mb-6 bg-white">
+                            <span className="font-bold text-blue-600 text-4xl tracking-tighter leading-none italic pr-1">
+                                T
+                            </span>
                         </div>
-                        <h1 className="text-5xl font-black text-slate-900 tracking-tighter">TOWMEI</h1>
+                        <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase font-sans">TOWMEI</h1>
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-4 bg-slate-100 px-4 py-1.5 rounded-full">
                             Industrial OS V5.0
                         </p>
@@ -75,7 +77,7 @@ export default function LoginPage() {
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     placeholder="name@company.com"
-                                    className="w-full pl-12 pr-5 py-6 bg-slate-50 border border-slate-100 rounded-3xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white transition-all duration-300 text-base font-bold text-slate-700 shadow-inner"
+                                    className="w-full pl-12 pr-5 py-7 bg-slate-50 border border-slate-100 rounded-3xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white transition-all duration-300 text-base font-bold text-slate-700 shadow-inner"
                                     required
                                 />
                             </div>
@@ -92,7 +94,7 @@ export default function LoginPage() {
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="••••••••"
-                                    className="w-full pl-12 pr-5 py-6 bg-slate-50 border border-slate-100 rounded-3xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white transition-all duration-300 text-base font-bold text-slate-700 shadow-inner"
+                                    className="w-full pl-12 pr-5 py-7 bg-slate-50 border border-slate-100 rounded-3xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white transition-all duration-300 text-base font-bold text-slate-700 shadow-inner"
                                     required
                                 />
                             </div>
@@ -108,7 +110,7 @@ export default function LoginPage() {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-base shadow-2xl shadow-slate-900/20 hover:bg-black hover:scale-[1.01] active:scale-[0.99] transition-all duration-300 flex items-center justify-center gap-3 disabled:bg-slate-300 disabled:shadow-none"
+                            className="w-full bg-slate-900 text-white py-3 rounded-2xl font-black text-base shadow-2xl shadow-slate-900/20 hover:bg-black hover:scale-[1.01] active:scale-[0.99] transition-all duration-300 flex items-center justify-center gap-3 disabled:bg-slate-300 disabled:shadow-none"
                         >
                             {loading ? (
                                 <Loader2 size={24} className="animate-spin" />
