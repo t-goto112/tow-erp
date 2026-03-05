@@ -27,10 +27,10 @@ export default function Modal({ open, onClose, title, subtitle, children, width 
             onClick={onClose}
         >
             <div
-                className={`${width} w-full bg-white rounded-3xl shadow-2xl overflow-hidden my-auto animate-in zoom-in-95 duration-300`}
+                className={`${width} w-full bg-white rounded-3xl shadow-2xl overflow-hidden my-auto animate-in zoom-in-95 duration-300 flex flex-col max-h-[96vh]`}
                 onClick={e => e.stopPropagation()}
             >
-                <div className="flex items-center justify-between p-6 border-b border-slate-100">
+                <div className="flex items-center justify-between p-6 border-b border-slate-100 shrink-0">
                     <div>
                         <h3 className="text-lg font-black text-slate-800">{title}</h3>
                         {subtitle && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{subtitle}</p>}
@@ -39,7 +39,7 @@ export default function Modal({ open, onClose, title, subtitle, children, width 
                         <X className="w-5 h-5" />
                     </button>
                 </div>
-                <div className="p-6">{children}</div>
+                <div className="p-6 overflow-y-auto flex-1">{children}</div>
             </div>
         </div>
     );

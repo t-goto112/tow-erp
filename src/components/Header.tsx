@@ -9,7 +9,7 @@ interface HeaderProps {
 
 export default function Header({ title }: HeaderProps) {
     return (
-        <header className="h-16 flex items-center justify-between px-6 md:px-10 shrink-0 z-0">
+        <header className="h-16 flex items-center justify-between px-6 md:px-10 shrink-0 z-[50]">
             <div className="flex items-center gap-4">
                 <h2 className="text-xl font-bold text-slate-800 tracking-tight">
                     {title}
