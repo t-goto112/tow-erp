@@ -330,30 +330,49 @@ class MockStore {
             completionDate, status: "pre_payment",
         });
 
-        const next = lot.processes[processIndex + 1];
-        if (next) {
-            if (opts?.nextSubcontractor) next.subcontractor = opts.nextSubcontractor;
-            next.currentQty += qty;
-            if (next.status === "pending") next.status = "in_progress";
-            next.deliveries.push({ id: `d${uid()}`, qty, deliveryDate: nextDeliveryDate, completionDate: "", dueDate: nextDueDate });
+        // 次工程（stepOrder + 1）のテンプレート名を取得
+        const currentGroup = this.products.find(p => p.id === lot.productId)?.processGroups[proc.groupIndex];
+        const nextTpl = currentGroup?.templates.find(t => t.sortOrder === proc.stepOrder + 1);
 
-            // 組み付けポイントの場合、ここでパーツ在庫を消費する（シミュレーション）
-            const nextTpl = this.products.find(p => p.id === lot.productId)?.processGroups[next.groupIndex]?.templates.find(t => t.name === next.name);
-            if (nextTpl && nextTpl.isAssemblyPoint) {
-                // 同じ工程内の他パーツを消費する（簡易実装として、在庫から減らすか、マイナス在庫として記録）
+        if (nextTpl) {
+            const nextSubName = opts?.nextSubcontractor || nextTpl.subcontractors[0]?.name || "";
+            // 同じgroupIndex, stepOrder, かつ 外注先 が同じ既存工程があるか探す
+            let next = lot.processes.find(p => p.groupIndex === proc.groupIndex && p.stepOrder === proc.stepOrder + 1 && p.subcontractor === nextSubName);
+
+            if (!next) {
+                const nextStep = nextTpl.sortOrder;
+                const nextGroup = proc.groupIndex;
+                // なければ新規作成して適切な位置に挿入
+                const newProc: ProcessEntry = {
+                    id: `lp${uid()}`, name: nextTpl.name, subcontractor: nextSubName,
+                    currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false,
+                    unitPrice: nextTpl.subcontractors.find(s => s.name === nextSubName)?.unitPrice || 0,
+                    unitPriceOverride: null, status: "pending", deliveries: [],
+                    groupIndex: nextGroup, stepOrder: nextStep, isAssemblyPoint: nextTpl.isAssemblyPoint
+                };
+                // 挿入位置を決める (stepOrder順)
+                const insertIdx = lot.processes.findIndex(p => p.groupIndex === nextGroup && p.stepOrder > nextStep);
+                if (insertIdx === -1) lot.processes.push(newProc);
+                else lot.processes.splice(insertIdx, 0, newProc);
+                next = newProc;
+            }
+
+            next!.currentQty += qty;
+            if (next!.status === "pending") next!.status = "in_progress";
+            next!.deliveries.push({ id: `d${uid()}`, qty, deliveryDate: nextDeliveryDate, completionDate: "", dueDate: nextDueDate });
+
+            // 組み付けポイントの場合、ここでパーツ在庫を消費する
+            if (next!.isAssemblyPoint) {
                 const partsInv = this.inventory.find(i => i.product === `${lot.product} (パーツ)` && i.type === "parts");
                 if (partsInv) {
                     partsInv.quantity = Math.max(0, partsInv.quantity - qty);
                 } else {
-                    // なければマイナス在庫として記録（後からパーツ実績が上がる場合）
                     this.inventory.push({ id: `inv${uid()}`, product: `${lot.product} (パーツ)`, code: "", quantity: -qty, type: "parts", warehouse: "未定義" });
                 }
             }
-
         } else {
             // 最終工程の場合
             if (proc.groupIndex > 0) {
-                // 別グループ（別パーツ）の場合は「仕掛パーツ在庫」として登録
                 const existingPart = this.inventory.find(i => i.product === `${lot.product} (パーツ)` && i.type === "parts");
                 if (existingPart) existingPart.quantity += qty;
                 else this.inventory.push({ id: `inv${uid()}`, product: `${lot.product} (パーツ)`, code: "", quantity: qty, type: "parts", warehouse: "仕掛パーツ置場" });
@@ -565,7 +584,28 @@ class MockStore {
     // ─── 在庫・出荷処理 (V4追加) ───
     adjustInventory(id: string, newQty: number, reason: string) {
         const item = this.inventory.find(i => i.id === id);
-        if (item) { const old = item.quantity; item.quantity = newQty; this.addHistory("在庫修正", `${item.product}: ${old} → ${newQty} (${reason})`); this.notify(); }
+        if (item) {
+            const oldQty = item.quantity;
+            const diff = oldQty - newQty;
+            item.quantity = newQty;
+
+            // 「販売・発送」の場合は受注残を減らす (売上計上の代わり)
+            if (reason === "販売・発送" && diff > 0) {
+                let remaining = diff;
+                this.orders.filter(o => o.status !== "completed" && o.status !== "cancelled").forEach(order => {
+                    const oi = order.items.find(it => it.product === item.product);
+                    if (oi && remaining > 0) {
+                        const canShip = Math.min(remaining, Math.max(0, oi.qty - oi.shipped));
+                        oi.shipped += canShip;
+                        remaining -= canShip;
+                        if (order.items.every(xi => xi.shipped >= xi.qty)) order.status = "completed";
+                    }
+                });
+            }
+
+            this.addHistory("在庫修正", `${item.product}: ${oldQty} → ${newQty} (${reason})`);
+            this.notify();
+        }
     }
 
     updateWarehouse(id: string, warehouse: string) {
@@ -592,9 +632,12 @@ class MockStore {
         proc.completedQty += qty;
         this.checkLotCompletions(lot);
 
-        const existing = this.inventory.find(i => i.product === lot.product && i.type === "product" && i.warehouse === warehouse);
+        const invType = proc.groupIndex > 0 ? "parts" : "product";
+        const productName = proc.groupIndex > 0 ? `${lot.product} (パーツ)` : lot.product;
+
+        const existing = this.inventory.find(i => i.product === productName && i.type === invType && i.warehouse === warehouse);
         if (existing) existing.quantity += qty;
-        else this.inventory.push({ id: `inv${uid()}`, product: lot.product, code: "", quantity: qty, type: "product", warehouse });
+        else this.inventory.push({ id: `inv${uid()}`, product: productName, code: "", quantity: qty, type: invType, warehouse });
 
         const effectivePrice = proc.unitPriceOverride !== null ? proc.unitPriceOverride : proc.unitPrice;
         this.paymentLines.push({

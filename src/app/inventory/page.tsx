@@ -41,7 +41,7 @@ export default function InventoryPage() {
     // 完成品在庫（ロット記載なし、同製品を集約）
     const stockItems = useMemo(() => {
         const grouped: Record<string, MockInventory> = {};
-        inventory.filter(i => i.type === "product").forEach(i => {
+        inventory.filter(i => i.type === "product" || i.type === "parts").forEach(i => {
             if (grouped[i.product]) grouped[i.product].quantity += i.quantity;
             else grouped[i.product] = { ...i };
         });
