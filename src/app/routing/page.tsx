@@ -93,7 +93,14 @@ export default function RoutingPage() {
     const handleMoveToInventory = async () => {
         if (!selectedLot || !selectedProc) return;
         setLoading(true);
-        const result = store.moveToInventory(selectedLot.id, selectedProcessIdx, Number(fwdQty), warehouseName);
+        const result = store.moveToInventory(
+            selectedLot.id,
+            selectedProcessIdx,
+            Number(fwdQty),
+            warehouseName,
+            fwdCompletionDate,
+            { overridePrice: fwdOverride ? Number(fwdOverride) : undefined }
+        );
         if (result.ok) {
             showToast("success", `${fwdQty}個を${warehouseName}へ移動しました`);
             setFwdQty("");
@@ -107,7 +114,13 @@ export default function RoutingPage() {
     const handleShip = async () => {
         if (!selectedLot || !selectedProc) return;
         setLoading(true);
-        const result = store.shipAndInvoice(selectedLot.id, selectedProcessIdx, Number(fwdQty));
+        const result = store.shipAndInvoice(
+            selectedLot.id,
+            selectedProcessIdx,
+            Number(fwdQty),
+            fwdCompletionDate,
+            { overridePrice: fwdOverride ? Number(fwdOverride) : undefined }
+        );
         if (result.ok) {
             showToast("success", `${fwdQty}個を出荷し、売上を計上しました`);
             setFwdQty("");

@@ -31,6 +31,7 @@ export interface MockLot {
     totalQty: number;
     status: "created" | "in_progress" | "completed";
     orderDate: string;
+    orderId?: string;
     processes: ProcessEntry[];
 }
 
@@ -112,7 +113,6 @@ export interface HistoryEntry {
     lotNumber?: string;
 }
 
-const today = "2026-03-04";
 let _uid = Date.now();
 function uid() { return `${++_uid}`; }
 
@@ -282,6 +282,25 @@ class MockStore {
         this.history.unshift({ id: `h${uid()}`, timestamp: new Date().toISOString(), action, detail, lotNumber });
     }
 
+    private checkLotCompletions(lot: MockLot) {
+        let anyChanged = false;
+        for (let i = 0; i < lot.processes.length; i++) {
+            const p = lot.processes[i];
+            if (p.status !== "completed") {
+                const prevCompleted = i === 0 || lot.processes[i - 1].status === "completed";
+                if (p.currentQty === 0 && prevCompleted) {
+                    p.status = "completed";
+                    anyChanged = true;
+                }
+            }
+        }
+        if (lot.processes.every(p => p.status === "completed") && lot.status !== "completed") {
+            lot.status = "completed";
+            anyChanged = true;
+        }
+        return anyChanged;
+    }
+
     // ─── 次工程へ (外注先選択対応) ───
     moveForward(lotId: string, processIndex: number, qty: number, completionDate: string, nextDeliveryDate: string, nextDueDate: string, opts?: { overridePrice?: number; nextSubcontractor?: string }): { ok: boolean; error?: string } {
         const lot = this.lots.find(l => l.id === lotId);
@@ -292,16 +311,17 @@ class MockStore {
         if (qty <= 0) return { ok: false, error: "1以上の数量を入力してください" };
         if (!completionDate || !nextDeliveryDate || !nextDueDate) return { ok: false, error: "日付は必須です" };
 
-        if (opts?.overridePrice && opts.overridePrice > 0) proc.unitPriceOverride = opts.overridePrice;
+        if (opts?.overridePrice !== undefined && opts.overridePrice !== null && opts.overridePrice !== "") {
+            proc.unitPriceOverride = Number(opts.overridePrice);
+        }
 
         const existingDel = proc.deliveries.find(d => !d.completionDate);
         if (existingDel) existingDel.completionDate = completionDate;
 
         proc.currentQty -= qty;
         proc.completedQty += qty;
-        if (proc.currentQty === 0 && proc.lossConfirmed) proc.status = "completed";
 
-        const effectivePrice = proc.unitPriceOverride || proc.unitPrice;
+        const effectivePrice = proc.unitPriceOverride !== null ? proc.unitPriceOverride : proc.unitPrice;
         this.paymentLines.push({
             id: `pl${uid()}`, lotNumber: lot.lotNumber, processName: proc.name, subcontractor: proc.subcontractor,
             qty, unitPrice: proc.unitPrice, unitPriceOverride: proc.unitPriceOverride, amount: qty * effectivePrice,
@@ -341,7 +361,7 @@ class MockStore {
         }
 
         if (lot.status === "created") lot.status = "in_progress";
-        if (lot.processes.every(p => p.status === "completed")) lot.status = "completed";
+        this.checkLotCompletions(lot);
 
         this.addHistory("工程完了", `${lot.lotNumber} [${proc.name}] → ${qty}個`, lot.lotNumber);
         this.notify();
@@ -361,7 +381,9 @@ class MockStore {
         const prev = lot.processes[processIndex - 1];
         if (prevSubcontractor) prev.subcontractor = prevSubcontractor;
         prev.currentQty += qty;
+        prev.completedQty -= qty;
         if (prev.status === "completed") prev.status = "in_progress";
+        if (lot.status === "completed") lot.status = "in_progress";
         prev.deliveries.push({ id: `d${uid()}`, qty, deliveryDate: returnDate, completionDate: "", dueDate: prevDueDate });
 
         this.addHistory("差戻し", `${lot.lotNumber} [${proc.name}] → ${qty}個を[${prev.name}]へ`, lot.lotNumber);
@@ -381,8 +403,9 @@ class MockStore {
         proc.lossConfirmed = true;
         proc.status = "completed";
 
-        if (lot.processes.every(p => p.status === "completed")) {
-            lot.status = "completed";
+        this.checkLotCompletions(lot);
+
+        if (lot.status === "completed") {
             this.orders.forEach(o => {
                 if (o.items.some(i => i.product === lot.product) && o.status !== "cancelled") o.status = "completed";
             });
@@ -413,9 +436,17 @@ class MockStore {
             if (processIndex > 0) {
                 const prev = lot.processes[processIndex - 1];
                 prev.currentQty -= diff; // 減った分は前工程に戻す、増えた分は前工程から引く
-                if (prev.currentQty < 0) { prev.completedQty += prev.currentQty; prev.currentQty = 0; }
+                prev.completedQty += diff;
+                if (prev.currentQty < 0) {
+                    prev.currentQty = 0;
+                }
+                if (prev.currentQty > 0 && prev.status === "completed") {
+                    prev.status = "in_progress";
+                    if (lot.status === "completed") lot.status = "in_progress";
+                }
             }
         }
+        this.checkLotCompletions(lot);
 
         this.addHistory("納入編集", `${lot.lotNumber} [${proc.name}] 数量→${newQty}`, lot.lotNumber);
         this.notify();
@@ -425,6 +456,34 @@ class MockStore {
     createOrder(order: Omit<MockOrder, "id" | "createdAt">): MockOrder {
         const o: MockOrder = { ...order, id: `ord${uid()}`, createdAt: new Date().toISOString().split("T")[0] };
         this.orders.unshift(o);
+
+        // 新規注文が入ったらロットも自動生成
+        o.items.forEach((item, idx) => {
+            const product = this.products.find(p => p.name === item.product);
+            if (product && item.qty > 0) {
+                const processes: ProcessEntry[] = [];
+                let pIndex = 0;
+                product.processGroups.forEach((g, gIdx) => {
+                    g.templates.forEach(t => {
+                        processes.push({
+                            id: `lp${uid()}`, name: t.name, subcontractor: t.subcontractors[0]?.name || "",
+                            currentQty: t.sortOrder === 1 && gIdx === 0 ? item.qty : 0, completedQty: 0, lossQty: 0, lossConfirmed: false,
+                            unitPrice: t.subcontractors[0]?.unitPrice || 0, unitPriceOverride: null, status: t.sortOrder === 1 && gIdx === 0 ? "pending" : "pending",
+                            groupIndex: gIdx, deliveries: t.sortOrder === 1 && gIdx === 0 ? [{ id: `d${uid()}`, qty: item.qty, deliveryDate: o.createdAt, completionDate: "", dueDate: o.dueDate }] : []
+                        });
+                        pIndex++;
+                    });
+                });
+                if (processes.length > 0) {
+                    this.lots.push({
+                        id: `lot${uid()}`, lotNumber: `${o.orderNumber.split("-")[0]}-${String(this.lots.length + 1).padStart(3, "0")}`,
+                        product: product.name, productId: product.id,
+                        totalQty: item.qty, status: "created", orderDate: o.createdAt, orderId: o.id, processes
+                    });
+                }
+            }
+        });
+
         this.addHistory("受注作成", `${o.orderNumber} - ${o.customerName}`);
         this.notify();
         return o;
@@ -433,12 +492,8 @@ class MockStore {
     deleteOrder(orderId: string) {
         const order = this.orders.find(o => o.id === orderId);
         if (!order) return;
-        // 関連ロットも削除
-        order.items.forEach(item => {
-            this.lots = this.lots.filter(l => !(l.product === item.product && l.status !== "completed"));
-        });
-        // 関連支払行も削除
-        const relatedLots = this.lots.filter(l => order.items.some(i => i.product === l.product));
+        // 関連ロットも削除（このオーダーに紐づくもののみ）
+        this.lots = this.lots.filter(l => l.orderId !== orderId);
         // 受注自体を削除
         this.orders = this.orders.filter(o => o.id !== orderId);
         this.addHistory("受注削除", `${order.orderNumber} - ${order.customerName}`);
@@ -503,50 +558,96 @@ class MockStore {
         if (item) { item.warehouse = warehouse; this.addHistory("倉庫変更", `${item.product} → ${warehouse}`); this.notify(); }
     }
 
-    moveToInventory(lotId: string, processIndex: number, qty: number, warehouse: string): { ok: boolean; error?: string } {
+    moveToInventory(lotId: string, processIndex: number, qty: number, warehouse: string, completionDate: string, opts?: { overridePrice?: number }): { ok: boolean; error?: string } {
         const lot = this.lots.find(l => l.id === lotId);
         if (!lot) return { ok: false, error: "ロットが見つかりません" };
         const proc = lot.processes[processIndex];
         if (!proc) return { ok: false, error: "工程が見つかりません" };
         if (qty > proc.currentQty) return { ok: false, error: `移動数が現在数(${proc.currentQty})を超えています` };
+        if (!completionDate) return { ok: false, error: "完了日付は必須です" };
+
+        if (opts?.overridePrice !== undefined && opts.overridePrice !== null && opts.overridePrice !== "") {
+            proc.unitPriceOverride = Number(opts.overridePrice);
+        }
+
+        const existingDel = proc.deliveries.find(d => !d.completionDate);
+        if (existingDel) existingDel.completionDate = completionDate;
 
         proc.currentQty -= qty;
         proc.completedQty += qty;
-        if (proc.currentQty === 0 && proc.lossConfirmed) proc.status = "completed";
-        if (lot.processes.every(p => p.status === "completed")) lot.status = "completed";
+        this.checkLotCompletions(lot);
 
         const existing = this.inventory.find(i => i.product === lot.product && i.type === "product" && i.warehouse === warehouse);
         if (existing) existing.quantity += qty;
         else this.inventory.push({ id: `inv${uid()}`, product: lot.product, code: "", quantity: qty, type: "product", warehouse });
+
+        const effectivePrice = proc.unitPriceOverride !== null ? proc.unitPriceOverride : proc.unitPrice;
+        this.paymentLines.push({
+            id: `pl${uid()}`, lotNumber: lot.lotNumber, processName: proc.name, subcontractor: proc.subcontractor,
+            qty, unitPrice: proc.unitPrice, unitPriceOverride: proc.unitPriceOverride, amount: qty * effectivePrice,
+            completionDate, status: "pre_payment",
+        });
 
         this.addHistory("在庫移動", `${lot.lotNumber} → ${warehouse}へ${qty}個`);
         this.notify();
         return { ok: true };
     }
 
-    shipAndInvoice(lotId: string, processIndex: number, qty: number): { ok: boolean; error?: string } {
+    shipAndInvoice(lotId: string, processIndex: number, qty: number, completionDate: string, opts?: { overridePrice?: number }): { ok: boolean; error?: string } {
         const lot = this.lots.find(l => l.id === lotId);
         if (!lot) return { ok: false, error: "ロットが見つかりません" };
         const proc = lot.processes[processIndex];
         if (!proc) return { ok: false, error: "工程が見つかりません" };
         if (qty > proc.currentQty) return { ok: false, error: `出荷数が現在数(${proc.currentQty})を超えています` };
+        if (!completionDate) return { ok: false, error: "完了日付は必須です" };
+
+        if (opts?.overridePrice !== undefined && opts.overridePrice !== null && opts.overridePrice !== "") {
+            proc.unitPriceOverride = Number(opts.overridePrice);
+        }
+
+        const existingDel = proc.deliveries.find(d => !d.completionDate);
+        if (existingDel) existingDel.completionDate = completionDate;
 
         // 該当商品の未完了受注を探し、出荷数を割り当てる
         let remainingQty = qty;
-        this.orders.filter(o => o.status !== "completed" && o.status !== "cancelled").forEach(order => {
-            const item = order.items.find(i => i.product === lot.product);
-            if (item && remainingQty > 0) {
-                const diff = Math.min(remainingQty, item.qty - item.shipped);
-                item.shipped += diff;
-                remainingQty -= diff;
-                if (order.items.every(xi => xi.shipped >= xi.qty)) order.status = "completed";
+
+        // まず、このロットが紐づいていた受注を優先して埋める
+        if (lot.orderId) {
+            const targetOrder = this.orders.find(o => o.id === lot.orderId && o.status !== "completed" && o.status !== "cancelled");
+            if (targetOrder) {
+                const item = targetOrder.items.find(i => i.product === lot.product);
+                if (item && remainingQty > 0) {
+                    const diff = Math.min(remainingQty, Math.max(0, item.qty - item.shipped));
+                    item.shipped += diff;
+                    remainingQty -= diff;
+                    if (targetOrder.items.every(xi => xi.shipped >= xi.qty)) targetOrder.status = "completed";
+                }
             }
-        });
+        }
+
+        // 残りがあれば他の未完了受注に割り当てる
+        if (remainingQty > 0) {
+            this.orders.filter(o => o.status !== "completed" && o.status !== "cancelled").forEach(order => {
+                const item = order.items.find(i => i.product === lot.product);
+                if (item && remainingQty > 0) {
+                    const diff = Math.min(remainingQty, Math.max(0, item.qty - item.shipped));
+                    item.shipped += diff;
+                    remainingQty -= diff;
+                    if (order.items.every(xi => xi.shipped >= xi.qty)) order.status = "completed";
+                }
+            });
+        }
 
         proc.currentQty -= qty;
         proc.completedQty += qty;
-        if (proc.currentQty === 0 && proc.lossConfirmed) proc.status = "completed";
-        if (lot.processes.every(p => p.status === "completed")) lot.status = "completed";
+        this.checkLotCompletions(lot);
+
+        const effectivePrice = proc.unitPriceOverride !== null ? proc.unitPriceOverride : proc.unitPrice;
+        this.paymentLines.push({
+            id: `pl${uid()}`, lotNumber: lot.lotNumber, processName: proc.name, subcontractor: proc.subcontractor,
+            qty, unitPrice: proc.unitPrice, unitPriceOverride: proc.unitPriceOverride, amount: qty * effectivePrice,
+            completionDate, status: "pre_payment",
+        });
 
         this.addHistory("発送・納品", `${lot.lotNumber} → ${qty}個出荷、売上計上`);
         this.notify();
@@ -573,7 +674,7 @@ class MockStore {
     // ─── 集計 ───
     get totalOrderBacklog(): number {
         return this.orders.filter(o => o.status !== "completed" && o.status !== "cancelled")
-            .reduce((s, o) => s + o.items.reduce((ss, i) => ss + i.qty * i.unitPrice, 0), 0);
+            .reduce((s, o) => s + o.items.reduce((ss, i) => ss + Math.max(0, i.qty - i.shipped) * i.unitPrice, 0), 0);
     }
 
     get nextOrderNumber(): string {
@@ -584,13 +685,14 @@ class MockStore {
     }
 
     get deadlineAlerts() {
+        const todayStr = new Date().toISOString().split("T")[0];
         const alerts: { lot: string; product: string; process: string; qty: number; dueDate: string; isOverdue: boolean }[] = [];
         this.lots.forEach(lot => {
             if (lot.status === "completed") return;
             lot.processes.forEach(p => {
                 p.deliveries.forEach(d => {
                     if (d.completionDate) return;
-                    alerts.push({ lot: lot.lotNumber, product: lot.product, process: p.name, qty: d.qty, dueDate: d.dueDate, isOverdue: d.dueDate < today });
+                    alerts.push({ lot: lot.lotNumber, product: lot.product, process: p.name, qty: d.qty, dueDate: d.dueDate, isOverdue: d.dueDate < todayStr });
                 });
             });
         });

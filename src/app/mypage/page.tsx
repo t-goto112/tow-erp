@@ -73,29 +73,15 @@ export default function MyPage() {
                 </div>
             </section>
 
-            {/* Design & Notification */}
+            {/* Notification */}
             <section className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-slate-100">
                     <h5 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                        <Palette className="w-4 h-4 text-emerald-500" />
-                        デザイン・通知設定
+                        <BellRing className="w-4 h-4 text-emerald-500" />
+                        通知設定
                     </h5>
                 </div>
                 <div className="p-6 space-y-5">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-sm font-bold text-slate-700">
-                                ダークモード
-                            </p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">
-                                UIの配色を暗い背景に最適化します（ベータ版）
-                            </p>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" className="sr-only peer" />
-                            <div className="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all" />
-                        </label>
-                    </div>
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm font-bold text-slate-700 flex items-center gap-2">

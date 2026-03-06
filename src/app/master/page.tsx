@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Plus, Trash2, Edit2, Check, Loader2, ChevronRight, ArrowUp, ArrowDown, X, Package } from "lucide-react";
+import { Plus, Trash2, Edit2, Check, Loader2, ChevronRight, ArrowUp, ArrowDown, X, Package, Copy } from "lucide-react";
 import { store, type MockProduct, type ProcessTemplate, type ProcessGroup } from "@/lib/mockStore";
 import { showToast } from "@/components/Toast";
 import Modal from "@/components/Modal";
@@ -41,6 +41,23 @@ export default function MasterPage() {
         setEditProduct(p);
         setFormName(p.name); setFormCode(p.code);
         setFormGroups(JSON.parse(JSON.stringify(p.processGroups)));
+        setStep(1); setIsModalOpen(true);
+    };
+
+    const duplicateProduct = (p: MockProduct) => {
+        setEditProduct(null); // Because it is a new item
+        setFormName(p.name + " (コピー)");
+        setFormCode(p.code + "-COPY");
+        // Update IDs within processGroups to ensure uniqueness
+        const duplicatedGroups = JSON.parse(JSON.stringify(p.processGroups)).map((g: any) => ({
+            ...g,
+            id: formUid(),
+            templates: g.templates.map((t: any) => ({
+                ...t,
+                id: formUid()
+            }))
+        }));
+        setFormGroups(duplicatedGroups);
         setStep(1); setIsModalOpen(true);
     };
 
@@ -156,8 +173,9 @@ export default function MasterPage() {
                                 <p className="text-xs text-slate-400">{p.processGroups.length}グループ | {p.processGroups.reduce((s, g) => s + g.templates.length, 0)}工程</p>
                             </div>
                             <div className="flex items-center gap-1">
-                                <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition"><Edit2 size={14} /></button>
-                                <button onClick={() => setDeleteId(p.id)} className="p-1.5 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 transition"><Trash2 size={14} /></button>
+                                <button onClick={() => duplicateProduct(p)} className="p-1.5 rounded-md hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition" title="複製"><Copy size={14} /></button>
+                                <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition" title="編集"><Edit2 size={14} /></button>
+                                <button onClick={() => setDeleteId(p.id)} className="p-1.5 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 transition" title="削除"><Trash2 size={14} /></button>
                             </div>
                         </div>
                         {/* 工程グループ別フロー表示 */}

@@ -61,7 +61,7 @@ export default function Dashboard() {
             const ends = proc.deliveries.map(d => d.completionDate || d.dueDate).filter(Boolean).sort();
             const barStart = starts[0] || "";
             const barEnd = ends[ends.length - 1] || "";
-            const isOverdue = new Date(barEnd) < new Date(todayStr) && proc.status !== "completed";
+            const isOverdue = barEnd && barEnd < todayStr && proc.status !== "completed";
             const color = proc.status === "completed" ? "bg-emerald-400" : isOverdue ? "bg-red-400" : "bg-blue-400";
             bars.push({ name: proc.name, sub: proc.subcontractor, start: barStart, end: barEnd, color, isCurrent: proc.status === "in_progress", total: proc.currentQty + proc.completedQty, wip: proc.currentQty, comp: proc.completedQty });
         });
@@ -176,8 +176,9 @@ export default function Dashboard() {
                                     const left = startIdx * dayWidth;
                                     const width = Math.max((endIdx - startIdx + 1) * dayWidth, dayWidth);
                                     const gradient = bar.color === "bg-emerald-400" ? "from-emerald-400 to-emerald-500" :
-                                        bar.color === "bg-blue-400" ? "from-blue-400 to-blue-500" :
-                                            "from-slate-300 to-slate-400";
+                                        bar.color === "bg-red-400" ? "from-red-400 to-red-500" :
+                                            bar.color === "bg-blue-400" ? "from-blue-400 to-blue-500" :
+                                                "from-slate-300 to-slate-400";
                                     return (
                                         <div key={bi} className="flex items-center">
                                             <div className="w-[200px] shrink-0 px-4 pl-8 border-r border-slate-100 sticky left-0 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10">
