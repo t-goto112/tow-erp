@@ -13,6 +13,8 @@ export interface ProcessEntry {
     status: "pending" | "in_progress" | "completed";
     deliveries: Delivery[];
     groupIndex: number; // 工程グループ (0=メイン, 1=工程登録2, ...)
+    stepOrder: number;  // 工程順序番号
+    isAssemblyPoint?: boolean; // 合流ポイントか
 }
 
 export interface Delivery {
@@ -122,50 +124,50 @@ function createInitialLots(): MockLot[] {
             id: "lot1", lotNumber: "A23-045", product: "牛刀 210mm", productId: "prod1", totalQty: 500, status: "in_progress", orderDate: "2026-01-15",
             processes: [
                 {
-                    id: "lp1", name: "鍛造", subcontractor: "鍛造所 田中", currentQty: 0, completedQty: 490, lossQty: 10, lossConfirmed: true, unitPrice: 300, unitPriceOverride: null, status: "completed", groupIndex: 0,
+                    id: "lp1", name: "鍛造", subcontractor: "鍛造所 田中", currentQty: 0, completedQty: 490, lossQty: 10, lossConfirmed: true, unitPrice: 300, unitPriceOverride: null, status: "completed", groupIndex: 0, stepOrder: 1,
                     deliveries: [
                         { id: "d1", qty: 300, deliveryDate: "2026-01-20", completionDate: "2026-02-01", dueDate: "2026-02-05" },
                         { id: "d2", qty: 200, deliveryDate: "2026-02-01", completionDate: "2026-02-10", dueDate: "2026-02-10" },
                     ]
                 },
                 {
-                    id: "lp2", name: "荒研ぎ", subcontractor: "研ぎ工房 山本", currentQty: 190, completedQty: 300, lossQty: 0, lossConfirmed: false, unitPrice: 200, unitPriceOverride: null, status: "in_progress", groupIndex: 0,
+                    id: "lp2", name: "荒研ぎ", subcontractor: "研ぎ工房 山本", currentQty: 190, completedQty: 300, lossQty: 0, lossConfirmed: false, unitPrice: 200, unitPriceOverride: null, status: "in_progress", groupIndex: 0, stepOrder: 2,
                     deliveries: [
                         { id: "d3", qty: 300, deliveryDate: "2026-02-05", completionDate: "2026-02-18", dueDate: "2026-02-20" },
                         { id: "d4", qty: 190, deliveryDate: "2026-02-12", completionDate: "", dueDate: "2026-03-05" },
                     ]
                 },
                 {
-                    id: "lp3", name: "熱処理", subcontractor: "熱処理 鈴木", currentQty: 300, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 300, unitPriceOverride: null, status: "in_progress", groupIndex: 0,
+                    id: "lp3", name: "熱処理", subcontractor: "熱処理 鈴木", currentQty: 300, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 300, unitPriceOverride: null, status: "in_progress", groupIndex: 0, stepOrder: 3,
                     deliveries: [
                         { id: "d5", qty: 100, deliveryDate: "2026-02-20", completionDate: "", dueDate: "2026-03-05" },
                         { id: "d6", qty: 200, deliveryDate: "2026-02-25", completionDate: "", dueDate: "2026-03-08" },
                     ]
                 },
-                { id: "lp4", name: "仕上げ研ぎ", subcontractor: "研ぎ工房 佐藤", currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 250, unitPriceOverride: null, status: "pending", groupIndex: 0, deliveries: [] },
-                { id: "lp5", name: "柄付け", subcontractor: "自社", currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 0, unitPriceOverride: null, status: "pending", groupIndex: 0, deliveries: [] },
+                { id: "lp4", name: "仕上げ研ぎ", subcontractor: "研ぎ工房 佐藤", currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 250, unitPriceOverride: null, status: "pending", groupIndex: 0, stepOrder: 4, deliveries: [] },
+                { id: "lp5", name: "柄付け", subcontractor: "自社", currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 0, unitPriceOverride: null, status: "pending", groupIndex: 0, stepOrder: 5, isAssemblyPoint: true, deliveries: [] },
             ],
         },
         {
             id: "lot2", lotNumber: "B12-098", product: "三徳 165mm", productId: "prod2", totalQty: 300, status: "in_progress", orderDate: "2026-02-01",
             processes: [
                 {
-                    id: "lp6", name: "鍛造", subcontractor: "鍛造所 田中", currentQty: 0, completedQty: 295, lossQty: 5, lossConfirmed: true, unitPrice: 300, unitPriceOverride: null, status: "completed", groupIndex: 0,
+                    id: "lp6", name: "鍛造", subcontractor: "鍛造所 田中", currentQty: 0, completedQty: 295, lossQty: 5, lossConfirmed: true, unitPrice: 300, unitPriceOverride: null, status: "completed", groupIndex: 0, stepOrder: 1,
                     deliveries: [{ id: "d7", qty: 300, deliveryDate: "2026-02-05", completionDate: "2026-02-12", dueDate: "2026-02-12" }]
                 },
                 {
-                    id: "lp7", name: "荒研ぎ", subcontractor: "研ぎ工房 山本", currentQty: 0, completedQty: 290, lossQty: 5, lossConfirmed: true, unitPrice: 200, unitPriceOverride: null, status: "completed", groupIndex: 0,
+                    id: "lp7", name: "荒研ぎ", subcontractor: "研ぎ工房 山本", currentQty: 0, completedQty: 290, lossQty: 5, lossConfirmed: true, unitPrice: 200, unitPriceOverride: null, status: "completed", groupIndex: 0, stepOrder: 2,
                     deliveries: [{ id: "d8", qty: 295, deliveryDate: "2026-02-13", completionDate: "2026-02-20", dueDate: "2026-02-22" }]
                 },
                 {
-                    id: "lp8", name: "熱処理", subcontractor: "熱処理 鈴木", currentQty: 90, completedQty: 200, lossQty: 0, lossConfirmed: false, unitPrice: 300, unitPriceOverride: null, status: "in_progress", groupIndex: 0,
+                    id: "lp8", name: "熱処理", subcontractor: "熱処理 鈴木", currentQty: 90, completedQty: 200, lossQty: 0, lossConfirmed: false, unitPrice: 300, unitPriceOverride: null, status: "in_progress", groupIndex: 0, stepOrder: 3,
                     deliveries: [
                         { id: "d9", qty: 200, deliveryDate: "2026-02-22", completionDate: "2026-03-01", dueDate: "2026-03-01" },
                         { id: "d10", qty: 90, deliveryDate: "2026-02-28", completionDate: "", dueDate: "2026-03-06" },
                     ]
                 },
                 {
-                    id: "lp9", name: "仕上げ研ぎ", subcontractor: "研ぎ工房 佐藤", currentQty: 200, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 250, unitPriceOverride: null, status: "in_progress", groupIndex: 0,
+                    id: "lp9", name: "仕上げ研ぎ", subcontractor: "研ぎ工房 佐藤", currentQty: 200, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 250, unitPriceOverride: null, status: "in_progress", groupIndex: 0, stepOrder: 4,
                     deliveries: [{ id: "d11", qty: 200, deliveryDate: "2026-03-02", completionDate: "", dueDate: "2026-03-10" }]
                 },
             ],
@@ -174,10 +176,10 @@ function createInitialLots(): MockLot[] {
             id: "lot3", lotNumber: "C88-121", product: "ペティ 120mm", productId: "prod3", totalQty: 1000, status: "created", orderDate: "2026-02-10",
             processes: [
                 {
-                    id: "lp10", name: "鍛造", subcontractor: "鍛造所 田中", currentQty: 1000, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 250, unitPriceOverride: null, status: "pending", groupIndex: 0,
+                    id: "lp10", name: "鍛造", subcontractor: "鍛造所 田中", currentQty: 1000, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 250, unitPriceOverride: null, status: "pending", groupIndex: 0, stepOrder: 1,
                     deliveries: [{ id: "d12", qty: 1000, deliveryDate: "2026-03-01", completionDate: "", dueDate: "2026-03-15" }]
                 },
-                { id: "lp11", name: "荒研ぎ", subcontractor: "研ぎ工房 山本", currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 180, unitPriceOverride: null, status: "pending", groupIndex: 0, deliveries: [] },
+                { id: "lp11", name: "荒研ぎ", subcontractor: "研ぎ工房 山本", currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 180, unitPriceOverride: null, status: "pending", groupIndex: 0, stepOrder: 2, deliveries: [] },
             ],
         },
     ];
@@ -378,15 +380,26 @@ class MockStore {
         if (!returnDate || !prevDueDate) return { ok: false, error: "日付は必須です" };
 
         proc.currentQty -= qty;
-        const prev = lot.processes[processIndex - 1];
-        if (prevSubcontractor) prev.subcontractor = prevSubcontractor;
-        prev.currentQty += qty;
-        prev.completedQty -= qty;
-        if (prev.status === "completed") prev.status = "in_progress";
-        if (lot.status === "completed") lot.status = "in_progress";
-        prev.deliveries.push({ id: `d${uid()}`, qty, deliveryDate: returnDate, completionDate: "", dueDate: prevDueDate });
 
-        this.addHistory("差戻し", `${lot.lotNumber} [${proc.name}] → ${qty}個を[${prev.name}]へ`, lot.lotNumber);
+        // 前工程を探す
+        const prevSteps = lot.processes.filter(p => p.groupIndex === proc.groupIndex && p.stepOrder === proc.stepOrder - 1);
+        let prev = prevSteps[0];
+
+        if (prevSubcontractor) {
+            const exactPrev = prevSteps.find(p => p.subcontractor === prevSubcontractor);
+            if (exactPrev) prev = exactPrev;
+        }
+
+        if (prev) {
+            prev.currentQty += qty;
+            prev.completedQty -= qty;
+            if (prev.status === "completed") prev.status = "in_progress";
+            prev.deliveries.push({ id: `d${uid()}`, qty, deliveryDate: returnDate, completionDate: "", dueDate: prevDueDate });
+        }
+
+        if (lot.status === "completed") lot.status = "in_progress";
+
+        this.addHistory("差戻し", `${lot.lotNumber} [${proc.name}] → ${qty}個を前工程へ`, lot.lotNumber);
         this.notify();
         return { ok: true };
     }
@@ -433,8 +446,10 @@ class MockStore {
         // 数量が変わった場合、現工程のcurrentQtyを調整し、前工程に差分を反映
         if (diff !== 0) {
             proc.currentQty += diff;
-            if (processIndex > 0) {
-                const prev = lot.processes[processIndex - 1];
+            const prevSteps = lot.processes.filter(p => p.groupIndex === proc.groupIndex && p.stepOrder === proc.stepOrder - 1);
+            if (prevSteps.length > 0) {
+                // どの前工程から減らすかは特定が難しいため、一番最初のものを使う（実装簡略化）
+                const prev = prevSteps[0];
                 prev.currentQty -= diff; // 減った分は前工程に戻す、増えた分は前工程から引く
                 prev.completedQty += diff;
                 if (prev.currentQty < 0) {
@@ -462,16 +477,16 @@ class MockStore {
             const product = this.products.find(p => p.name === item.product);
             if (product && item.qty > 0) {
                 const processes: ProcessEntry[] = [];
-                let pIndex = 0;
                 product.processGroups.forEach((g, gIdx) => {
                     g.templates.forEach(t => {
+                        const isStart = t.sortOrder === 1; // どのグループでも最初の工程は受注数とともに開始
                         processes.push({
                             id: `lp${uid()}`, name: t.name, subcontractor: t.subcontractors[0]?.name || "",
-                            currentQty: t.sortOrder === 1 && gIdx === 0 ? item.qty : 0, completedQty: 0, lossQty: 0, lossConfirmed: false,
-                            unitPrice: t.subcontractors[0]?.unitPrice || 0, unitPriceOverride: null, status: t.sortOrder === 1 && gIdx === 0 ? "pending" : "pending",
-                            groupIndex: gIdx, deliveries: t.sortOrder === 1 && gIdx === 0 ? [{ id: `d${uid()}`, qty: item.qty, deliveryDate: o.createdAt, completionDate: "", dueDate: o.dueDate }] : []
+                            currentQty: isStart ? item.qty : 0, completedQty: 0, lossQty: 0, lossConfirmed: false,
+                            unitPrice: t.subcontractors[0]?.unitPrice || 0, unitPriceOverride: null, status: isStart ? "pending" : "pending",
+                            groupIndex: gIdx, stepOrder: t.sortOrder, isAssemblyPoint: t.isAssemblyPoint || false,
+                            deliveries: isStart ? [{ id: `d${uid()}`, qty: item.qty, deliveryDate: o.createdAt, completionDate: "", dueDate: o.dueDate }] : []
                         });
-                        pIndex++;
                     });
                 });
                 if (processes.length > 0) {

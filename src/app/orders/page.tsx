@@ -166,11 +166,11 @@ export default function OrdersPage() {
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">品目</label>
                         {formItems.map((item, i) => (
                             <div key={i} className="flex gap-2 mb-2">
-                                <select value={item.product} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { const arr = [...formItems]; arr[i].product = e.target.value; setFormItems(arr); }} className="select-base flex-1">
+                                <select value={item.product} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { const arr = [...formItems]; arr[i].product = e.target.value; setFormItems(arr); }} className="select-base flex-1 min-w-0 text-sm">
                                     <option value="">選択</option>{store.products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                                 </select>
-                                <input type="number" placeholder="数量" value={item.qty || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const arr = [...formItems]; arr[i].qty = Number(e.target.value); setFormItems(arr); }} className="input-base w-20" />
-                                <input type="number" placeholder="単価" value={item.unitPrice || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const arr = [...formItems]; arr[i].unitPrice = Number(e.target.value); setFormItems(arr); }} className="input-base w-24" disabled={isEcOrDirect} />
+                                <input type="number" placeholder="数量" value={item.qty || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const arr = [...formItems]; arr[i].qty = Number(e.target.value); setFormItems(arr); }} className="input-base w-24 shrink-0 px-2" />
+                                <input type="number" placeholder="単価" value={item.unitPrice || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const arr = [...formItems]; arr[i].unitPrice = Number(e.target.value); setFormItems(arr); }} className="input-base w-16 shrink-0 px-2 text-xs" disabled={isEcOrDirect} />
                             </div>
                         ))}
                         <button type="button" onClick={() => setFormItems(prev => [...prev, { product: "", qty: 0, unitPrice: 0, shipped: 0 }])} className="text-[10px] text-blue-600 font-bold hover:underline">+ 品目を追加</button>

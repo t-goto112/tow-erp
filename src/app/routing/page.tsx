@@ -137,7 +137,17 @@ export default function RoutingPage() {
         if (r.ok) showToast("success", `${r.lossQty}個をロスとして確定しました`);
     };
 
-    const isLastProcess = selectedLot ? selectedProcessIdx === selectedLot.processes.length - 1 : false;
+    // グループ内の最終工程か判定（自身の groupIndex と共通の工程を探し、自身より先の stepOrder が存在するかどうか）
+    const isLastProcess = useMemo(() => {
+        if (!selectedLot || !selectedProc) return false;
+        const hasNext = selectedLot.processes.some(p => p.groupIndex === selectedProc.groupIndex && p.stepOrder > selectedProc.stepOrder);
+        return !hasNext;
+    }, [selectedLot, selectedProc]);
+
+    // 次工程への移行が可能か（次工程候補が存在し、完了していないか）
+    // 次工程を一つに絞るか、すでに複製されている場合はUIにどう出すか。RoutingPageの現在のUIでは、
+    // moveForward の際に fwdNextSub で指定した外注情報に基づき、次工程を自動的に複製/合流するため、
+    // 次工程が存在するかは hasNext に依存する。
 
     return (
         <div className="space-y-5 animate-in fade-in duration-300">

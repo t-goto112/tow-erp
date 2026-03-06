@@ -82,7 +82,7 @@ export default function PaymentsPage() {
 
     const handleExportCSV = () => {
         const headers = "外注先,ロット,工程,数量,単価,特値,金額,完了日,ステータス\n";
-        const rows = filtered.map(pl => `${pl.subcontractor},${pl.lotNumber},${pl.processName},${pl.qty},${pl.unitPrice},${pl.unitPriceOverride || ""},${pl.amount},${pl.completionDate},${statusConfig[pl.status].label}`).join("\n");
+        const rows = filtered.map(pl => `${pl.subcontractor},${pl.lotNumber},${pl.processName},${pl.qty},${pl.unitPrice},${pl.unitPriceOverride !== null ? pl.unitPriceOverride : ""},${pl.amount},${pl.completionDate},${statusConfig[pl.status].label}`).join("\n");
         const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `payments_${new Date().toISOString().split("T")[0]}.csv`; a.click(); URL.revokeObjectURL(url);
         showToast("success", "CSVをダウンロードしました");
@@ -161,7 +161,7 @@ export default function PaymentsPage() {
                                                     {isEditing ? <input type="number" value={editQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditQty(e.target.value)} className="w-16 px-1 py-0.5 border border-slate-200 rounded text-xs text-right" /> : <span className="font-bold">{pl.qty}</span>}
                                                 </td>
                                                 <td className="px-4 py-2 text-right">
-                                                    {isEditing ? <input type="number" value={editPrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditPrice(e.target.value)} placeholder={String(pl.unitPrice)} className="w-16 px-1 py-0.5 border border-slate-200 rounded text-xs text-right" /> : <span className={pl.unitPriceOverride ? "text-amber-600 font-bold" : "text-slate-500"}>¥{(pl.unitPriceOverride || pl.unitPrice).toLocaleString()}</span>}
+                                                    {isEditing ? <input type="number" value={editPrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditPrice(e.target.value)} placeholder={String(pl.unitPrice)} className="w-16 px-1 py-0.5 border border-slate-200 rounded text-xs text-right" /> : <span className={pl.unitPriceOverride !== null ? "text-amber-600 font-bold" : "text-slate-500"}>¥{(pl.unitPriceOverride !== null ? pl.unitPriceOverride : pl.unitPrice).toLocaleString()}</span>}
                                                 </td>
                                                 <td className="px-4 py-2 text-right font-bold">¥{pl.amount.toLocaleString()}</td>
                                                 <td className="px-4 py-2 text-xs text-slate-400">{pl.completionDate}</td>
@@ -175,7 +175,7 @@ export default function PaymentsPage() {
                                                             </>
                                                         ) : (
                                                             <>
-                                                                {canEdit && <button onClick={() => { setEditId(pl.id); setEditQty(String(pl.qty)); setEditPrice(pl.unitPriceOverride ? String(pl.unitPriceOverride) : ""); }} title="編集" className="p-1 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition"><Edit2 size={14} /></button>}
+                                                                {canEdit && <button onClick={() => { setEditId(pl.id); setEditQty(String(pl.qty)); setEditPrice(pl.unitPriceOverride !== null ? String(pl.unitPriceOverride) : ""); }} title="編集" className="p-1 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition"><Edit2 size={14} /></button>}
                                                                 {pl.status === "pre_payment" && <button onClick={() => setConfirmAction({ id: pl.id, type: "advance" })} title="支払済へ" className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition"><CheckCircle2 size={14} /></button>}
                                                                 {pl.status === "paid" && <button onClick={() => setConfirmAction({ id: pl.id, type: "advance" })} title="確認済へ" className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition"><ShieldCheck size={14} /></button>}
                                                                 {(pl.status === "paid" || pl.status === "confirmed") && <button onClick={() => setConfirmAction({ id: pl.id, type: "revert" })} title="取消" className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition"><Undo2 size={14} /></button>}
