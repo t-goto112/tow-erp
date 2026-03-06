@@ -311,8 +311,8 @@ class MockStore {
         if (qty <= 0) return { ok: false, error: "1以上の数量を入力してください" };
         if (!completionDate || !nextDeliveryDate || !nextDueDate) return { ok: false, error: "日付は必須です" };
 
-        if (opts?.overridePrice !== undefined && opts.overridePrice !== null && opts.overridePrice !== "") {
-            proc.unitPriceOverride = Number(opts.overridePrice);
+        if (opts?.overridePrice !== undefined && opts.overridePrice !== null && typeof opts.overridePrice === "number") {
+            proc.unitPriceOverride = opts.overridePrice;
         }
 
         const existingDel = proc.deliveries.find(d => !d.completionDate);
@@ -566,8 +566,8 @@ class MockStore {
         if (qty > proc.currentQty) return { ok: false, error: `移動数が現在数(${proc.currentQty})を超えています` };
         if (!completionDate) return { ok: false, error: "完了日付は必須です" };
 
-        if (opts?.overridePrice !== undefined && opts.overridePrice !== null && opts.overridePrice !== "") {
-            proc.unitPriceOverride = Number(opts.overridePrice);
+        if (opts?.overridePrice !== undefined && opts.overridePrice !== null && typeof opts.overridePrice === "number") {
+            proc.unitPriceOverride = opts.overridePrice;
         }
 
         const existingDel = proc.deliveries.find(d => !d.completionDate);
@@ -601,8 +601,8 @@ class MockStore {
         if (qty > proc.currentQty) return { ok: false, error: `出荷数が現在数(${proc.currentQty})を超えています` };
         if (!completionDate) return { ok: false, error: "完了日付は必須です" };
 
-        if (opts?.overridePrice !== undefined && opts.overridePrice !== null && opts.overridePrice !== "") {
-            proc.unitPriceOverride = Number(opts.overridePrice);
+        if (opts?.overridePrice !== undefined && opts.overridePrice !== null && typeof opts.overridePrice === "number") {
+            proc.unitPriceOverride = opts.overridePrice;
         }
 
         const existingDel = proc.deliveries.find(d => !d.completionDate);

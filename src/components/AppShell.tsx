@@ -3,6 +3,7 @@
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 import { usePathname } from "next/navigation";
+import React from "react";
 
 const pageTitles: Record<string, string> = {
     "/": "ダッシュボード",
