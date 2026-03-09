@@ -19,6 +19,13 @@ export default function RoutingPage() {
     const [fwdOverride, setFwdOverride] = useState("");
     const [fwdNextSub, setFwdNextSub] = useState("");
 
+    // 仕掛登録 (V7)
+    const [wipQty, setWipQty] = useState("");
+    const [wipDeliveryDate, setWipDeliveryDate] = useState("");
+    const [wipDueDate, setWipDueDate] = useState("");
+    const [wipSub, setWipSub] = useState("");
+    const [wipOverride, setWipOverride] = useState("");
+
     // 差戻し
     const [backQty, setBackQty] = useState("");
     const [backDate, setBackDate] = useState("");
@@ -39,6 +46,14 @@ export default function RoutingPage() {
     const selectedLot = activeLots.find(l => l.id === selectedLotId) || null;
     const selectedProc = selectedLot?.processes[selectedProcessIdx] || null;
 
+    const needsWipRegistration = selectedProc?.status === "pending" || (selectedProc && selectedProc.currentQty === 0 && selectedProc.deliveries.length === 0);
+
+    // 選択中工程の外注先
+    const currentProcessSubs = useMemo(() => {
+        if (!selectedLot || !selectedProc) return [];
+        return store.getSubcontractorsForProcess(selectedLot.productId, selectedProc.name);
+    }, [selectedLot, selectedProc]);
+
     // 次工程の外注先候補
     const nextProcessSubs = useMemo(() => {
         if (!selectedLot || !selectedProc) return [];
@@ -57,34 +72,50 @@ export default function RoutingPage() {
 
     // ロット選択時に初期化
     useEffect(() => {
+        const today = new Date().toISOString().split("T")[0];
         if (selectedLot) {
-            setFwdQty(""); setFwdCompletionDate(""); setFwdDeliveryDate(""); setFwdDueDate(""); setFwdOverride(""); setFwdNextSub("");
+            setFwdQty(""); setFwdCompletionDate(today); setFwdDeliveryDate(""); setFwdDueDate(""); setFwdOverride(""); setFwdNextSub("");
             setBackQty(""); setBackDate(""); setBackDueDate(""); setBackPrevSub("");
+            setWipQty(selectedLot.totalQty.toString()); setWipDeliveryDate(today); setWipDueDate(""); setWipOverride("");
             setShipMode(null);
             // 外注先が1つしかない場合は固定
             if (nextProcessSubs.length === 1) setFwdNextSub(nextProcessSubs[0].name);
             if (prevProcessSubs.length === 1) setBackPrevSub(prevProcessSubs[0].name);
+            if (currentProcessSubs.length === 1) setWipSub(currentProcessSubs[0].name);
         }
-    }, [selectedLotId, selectedProcessIdx, nextProcessSubs, prevProcessSubs, selectedLot]);
+    }, [selectedLotId, selectedProcessIdx, nextProcessSubs, prevProcessSubs, currentProcessSubs, selectedLot]);
 
     const handleForward = async () => {
         if (!selectedLot || !selectedProc) return;
         setLoading(true);
         await new Promise(r => setTimeout(r, 200));
-        const result = store.moveForward(selectedLot.id, selectedProcessIdx, Number(fwdQty), fwdCompletionDate, fwdDeliveryDate, fwdDueDate, {
+        const result = store.moveForward(selectedLot.id, selectedProc.id, Number(fwdQty), fwdCompletionDate, fwdDeliveryDate, fwdDueDate, {
             overridePrice: fwdOverride ? Number(fwdOverride) : undefined,
             nextSubcontractor: fwdNextSub || undefined,
         });
-        if (result.ok) { showToast("success", `${fwdQty}個を次工程へ送りました`); setFwdQty(""); setFwdCompletionDate(""); setFwdDeliveryDate(""); setFwdDueDate(""); setFwdOverride(""); }
+        if (result.ok) { showToast("success", `${fwdQty}個を次工程へ送りました`); setFwdQty(""); }
         else { showToast("error", result.error || "エラー"); }
         setLoading(false);
     };
 
+    const handleRegisterWip = async () => {
+        if (!selectedLot || !selectedProc) return;
+        setLoading(true);
+        const result = store.registerWip(selectedLot.id, selectedProc.id, Number(wipQty), wipDeliveryDate, wipDueDate, wipSub, wipOverride ? Number(wipOverride) : undefined);
+        if (result.ok) {
+            showToast("success", "仕掛品として登録しました");
+            refresh();
+        } else {
+            showToast("error", result.error || "エラー");
+        }
+        setLoading(false);
+    };
+
     const handleBack = async () => {
-        if (!selectedLot) return;
+        if (!selectedLot || !selectedProc) return;
         setLoading(true);
         await new Promise(r => setTimeout(r, 200));
-        const result = store.moveBack(selectedLot.id, selectedProcessIdx, Number(backQty), backDate, backDueDate, backPrevSub || undefined);
+        const result = store.moveBack(selectedLot.id, selectedProc.id, Number(backQty), backDate, backDueDate, backPrevSub || undefined);
         if (result.ok) { showToast("warning", `${backQty}個を前工程へ差戻しました`); setBackQty(""); setBackDate(""); setBackDueDate(""); }
         else { showToast("error", result.error || "エラー"); }
         setLoading(false);
@@ -95,7 +126,7 @@ export default function RoutingPage() {
         setLoading(true);
         const result = store.moveToInventory(
             selectedLot.id,
-            selectedProcessIdx,
+            selectedProc.id,
             Number(fwdQty),
             warehouseName,
             fwdCompletionDate,
@@ -116,7 +147,7 @@ export default function RoutingPage() {
         setLoading(true);
         const result = store.shipAndInvoice(
             selectedLot.id,
-            selectedProcessIdx,
+            selectedProc.id,
             Number(fwdQty),
             fwdCompletionDate,
             { overridePrice: fwdOverride ? Number(fwdOverride) : undefined }
@@ -132,8 +163,8 @@ export default function RoutingPage() {
     };
 
     const handleConfirmLoss = () => {
-        if (!selectedLot) return;
-        const r = store.confirmLoss(selectedLot.id, selectedProcessIdx);
+        if (!selectedLot || !selectedProc) return;
+        const r = store.confirmLoss(selectedLot.id, selectedProc.id);
         if (r.ok) showToast("success", `${r.lossQty}個をロスとして確定しました`);
     };
 
@@ -172,7 +203,39 @@ export default function RoutingPage() {
                 )}
             </div>
 
-            {selectedProc && (
+            {selectedProc && needsWipRegistration && (
+                <div className="bg-white rounded-2xl border border-blue-100 shadow-sm p-6 space-y-4 animate-in slide-in-from-top-4 duration-500">
+                    <div className="flex items-center gap-3 border-b border-blue-50 pb-4">
+                        <div className="bg-blue-600 p-2 rounded-lg text-white"><Loader2 className="w-5 h-5" /></div>
+                        <div>
+                            <h3 className="font-black text-slate-800 tracking-tight">工程の仕掛登録</h3>
+                            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Register WIP - {selectedProc.name}</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div><label className="block text-[10px] font-black text-slate-400 mb-1">数量</label><input type="number" value={wipQty} onChange={e => setWipQty(e.target.value)} className="input-base" /></div>
+                        <div><label className="block text-[10px] font-black text-slate-400 mb-1">受注日 (参考)</label><input type="date" value={selectedLot?.orderDate} disabled className="input-base bg-slate-50 text-slate-400" /></div>
+                        <div><label className="block text-[10px] font-black text-slate-400 mb-1">着手日 *</label><input type="date" value={wipDeliveryDate} onChange={e => setWipDeliveryDate(e.target.value)} className="input-base" /></div>
+                        <div><label className="block text-[10px] font-black text-slate-400 mb-1">工程完了予定日 *</label><input type="date" value={wipDueDate} onChange={e => setWipDueDate(e.target.value)} className="input-base" /></div>
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 mb-1">外注先</label>
+                            <select value={wipSub} onChange={e => setWipSub(e.target.value)} className="select-base">
+                                <option value="">選択してください</option>
+                                {currentProcessSubs.map(s => <option key={s.name} value={s.name}>{s.name} (標準:¥{s.unitPrice})</option>)}
+                            </select>
+                        </div>
+                        <div><label className="block text-[10px] font-black text-slate-400 mb-1">特値 (任意)</label><input type="number" value={wipOverride} onChange={e => setWipOverride(e.target.value)} placeholder="空欄=標準単価" className="input-base" /></div>
+                    </div>
+
+                    <button onClick={handleRegisterWip} disabled={loading || !wipQty || !wipDeliveryDate || !wipDueDate || !wipSub}
+                        className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2">
+                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>仕掛登録を確定</>}
+                    </button>
+                </div>
+            )}
+
+            {selectedProc && !needsWipRegistration && (
                 <>
                     {/* 現工程ステータス */}
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">

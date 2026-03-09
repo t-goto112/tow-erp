@@ -116,59 +116,69 @@ export interface HistoryEntry {
 }
 
 let _uid = Date.now();
-function uid() { return `${++_uid}`; }
+function uid() {
+    // ミリ秒単位での衝突を避けるためのランダム値を付加
+    return `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+}
 
 function createInitialLots(): MockLot[] {
+    const lot1Id = `lot_${uid()}`;
+    const lot1Num = "A23-045";
+    const lot2Id = `lot_${uid()}`;
+    const lot2Num = "B12-098";
+    const lot3Id = `lot_${uid()}`;
+    const lot3Num = "C88-121";
+
     return [
         {
-            id: "lot1", lotNumber: "A23-045", product: "牛刀 210mm", productId: "prod1", totalQty: 500, status: "in_progress", orderDate: "2026-01-15",
+            id: lot1Id, lotNumber: lot1Num, product: "牛刀 210mm", productId: "prod1", totalQty: 500, status: "in_progress", orderDate: "2026-01-15",
             processes: [
                 {
-                    id: "lp1", name: "鍛造", subcontractor: "鍛造所 田中", currentQty: 0, completedQty: 490, lossQty: 10, lossConfirmed: true, unitPrice: 300, unitPriceOverride: null, status: "completed", groupIndex: 0, stepOrder: 1,
+                    id: `lp_${uid()}`, name: "鍛造", subcontractor: "鍛造所 田中", currentQty: 0, completedQty: 490, lossQty: 10, lossConfirmed: true, unitPrice: 300, unitPriceOverride: null, status: "completed", groupIndex: 0, stepOrder: 1,
                     deliveries: [
-                        { id: "d1", qty: 300, deliveryDate: "2026-01-20", completionDate: "2026-02-01", dueDate: "2026-02-05" },
-                        { id: "d2", qty: 200, deliveryDate: "2026-02-01", completionDate: "2026-02-10", dueDate: "2026-02-10" },
+                        { id: `d_${uid()}`, qty: 300, deliveryDate: "2026-01-20", completionDate: "2026-02-01", dueDate: "2026-02-05" },
+                        { id: `d_${uid()}`, qty: 200, deliveryDate: "2026-02-01", completionDate: "2026-02-10", dueDate: "2026-02-10" },
                     ]
                 },
                 {
-                    id: "lp2", name: "荒研ぎ", subcontractor: "研ぎ工房 山本", currentQty: 190, completedQty: 300, lossQty: 0, lossConfirmed: false, unitPrice: 200, unitPriceOverride: null, status: "in_progress", groupIndex: 0, stepOrder: 2,
+                    id: `lp_${uid()}`, name: "荒研ぎ", subcontractor: "研ぎ工房 山本", currentQty: 190, completedQty: 300, lossQty: 0, lossConfirmed: false, unitPrice: 200, unitPriceOverride: null, status: "in_progress", groupIndex: 0, stepOrder: 2,
                     deliveries: [
-                        { id: "d3", qty: 300, deliveryDate: "2026-02-05", completionDate: "2026-02-18", dueDate: "2026-02-20" },
-                        { id: "d4", qty: 190, deliveryDate: "2026-02-12", completionDate: "", dueDate: "2026-03-05" },
+                        { id: `d_${uid()}`, qty: 300, deliveryDate: "2026-02-05", completionDate: "2026-02-18", dueDate: "2026-02-20" },
+                        { id: `d_${uid()}`, qty: 190, deliveryDate: "2026-02-12", completionDate: "", dueDate: "2026-03-05" },
                     ]
                 },
                 {
-                    id: "lp3", name: "熱処理", subcontractor: "熱処理 鈴木", currentQty: 300, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 300, unitPriceOverride: null, status: "in_progress", groupIndex: 0, stepOrder: 3,
+                    id: `lp_${uid()}`, name: "熱処理", subcontractor: "熱処理 鈴木", currentQty: 300, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 300, unitPriceOverride: null, status: "in_progress", groupIndex: 0, stepOrder: 3,
                     deliveries: [
-                        { id: "d5", qty: 100, deliveryDate: "2026-02-20", completionDate: "", dueDate: "2026-03-05" },
-                        { id: "d6", qty: 200, deliveryDate: "2026-02-25", completionDate: "", dueDate: "2026-03-08" },
+                        { id: `d_${uid()}`, qty: 100, deliveryDate: "2026-02-20", completionDate: "", dueDate: "2026-03-05" },
+                        { id: `d_${uid()}`, qty: 200, deliveryDate: "2026-02-25", completionDate: "", dueDate: "2026-03-08" },
                     ]
                 },
-                { id: "lp4", name: "仕上げ研ぎ", subcontractor: "研ぎ工房 佐藤", currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 250, unitPriceOverride: null, status: "pending", groupIndex: 0, stepOrder: 4, deliveries: [] },
-                { id: "lp5", name: "柄付け", subcontractor: "自社", currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 0, unitPriceOverride: null, status: "pending", groupIndex: 0, stepOrder: 5, isAssemblyPoint: true, deliveries: [] },
+                { id: `lp_${uid()}`, name: "仕上げ研ぎ", subcontractor: "研ぎ工房 佐藤", currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 250, unitPriceOverride: null, status: "pending", groupIndex: 0, stepOrder: 4, deliveries: [] },
+                { id: `lp_${uid()}`, name: "柄付け", subcontractor: "自社", currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 0, unitPriceOverride: null, status: "pending", groupIndex: 0, stepOrder: 5, isAssemblyPoint: true, deliveries: [] },
             ],
         },
         {
-            id: "lot2", lotNumber: "B12-098", product: "三徳 165mm", productId: "prod2", totalQty: 300, status: "in_progress", orderDate: "2026-02-01",
+            id: lot2Id, lotNumber: lot2Num, product: "三徳 165mm", productId: "prod2", totalQty: 300, status: "in_progress", orderDate: "2026-02-01",
             processes: [
                 {
-                    id: "lp6", name: "鍛造", subcontractor: "鍛造所 田中", currentQty: 0, completedQty: 295, lossQty: 5, lossConfirmed: true, unitPrice: 300, unitPriceOverride: null, status: "completed", groupIndex: 0, stepOrder: 1,
-                    deliveries: [{ id: "d7", qty: 300, deliveryDate: "2026-02-05", completionDate: "2026-02-12", dueDate: "2026-02-12" }]
+                    id: `lp_${uid()}`, name: "鍛造", subcontractor: "鍛造所 田中", currentQty: 0, completedQty: 295, lossQty: 5, lossConfirmed: true, unitPrice: 300, unitPriceOverride: null, status: "completed", groupIndex: 0, stepOrder: 1,
+                    deliveries: [{ id: `d_${uid()}`, qty: 300, deliveryDate: "2026-02-05", completionDate: "2026-02-12", dueDate: "2026-02-12" }]
                 },
                 {
-                    id: "lp7", name: "荒研ぎ", subcontractor: "研ぎ工房 山本", currentQty: 0, completedQty: 290, lossQty: 5, lossConfirmed: true, unitPrice: 200, unitPriceOverride: null, status: "completed", groupIndex: 0, stepOrder: 2,
-                    deliveries: [{ id: "d8", qty: 295, deliveryDate: "2026-02-13", completionDate: "2026-02-20", dueDate: "2026-02-22" }]
+                    id: `lp_${uid()}`, name: "荒研ぎ", subcontractor: "研ぎ工房 山本", currentQty: 0, completedQty: 290, lossQty: 5, lossConfirmed: true, unitPrice: 200, unitPriceOverride: null, status: "completed", groupIndex: 0, stepOrder: 2,
+                    deliveries: [{ id: `d_${uid()}`, qty: 295, deliveryDate: "2026-02-13", completionDate: "2026-02-20", dueDate: "2026-02-22" }]
                 },
                 {
-                    id: "lp8", name: "熱処理", subcontractor: "熱処理 鈴木", currentQty: 90, completedQty: 200, lossQty: 0, lossConfirmed: false, unitPrice: 300, unitPriceOverride: null, status: "in_progress", groupIndex: 0, stepOrder: 3,
+                    id: `lp_${uid()}`, name: "熱処理", subcontractor: "熱処理 鈴木", currentQty: 90, completedQty: 200, lossQty: 0, lossConfirmed: false, unitPrice: 300, unitPriceOverride: null, status: "in_progress", groupIndex: 0, stepOrder: 3,
                     deliveries: [
-                        { id: "d9", qty: 200, deliveryDate: "2026-02-22", completionDate: "2026-03-01", dueDate: "2026-03-01" },
-                        { id: "d10", qty: 90, deliveryDate: "2026-02-28", completionDate: "", dueDate: "2026-03-06" },
+                        { id: `d_${uid()}`, qty: 200, deliveryDate: "2026-02-22", completionDate: "2026-03-01", dueDate: "2026-03-01" },
+                        { id: `d_${uid()}`, qty: 90, deliveryDate: "2026-02-28", completionDate: "", dueDate: "2026-03-06" },
                     ]
                 },
                 {
-                    id: "lp9", name: "仕上げ研ぎ", subcontractor: "研ぎ工房 佐藤", currentQty: 200, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 250, unitPriceOverride: null, status: "in_progress", groupIndex: 0, stepOrder: 4,
-                    deliveries: [{ id: "d11", qty: 200, deliveryDate: "2026-03-02", completionDate: "", dueDate: "2026-03-10" }]
+                    id: `lp_${uid()}`, name: "仕上げ研ぎ", subcontractor: "研ぎ工房 佐藤", currentQty: 200, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 250, unitPriceOverride: null, status: "in_progress", groupIndex: 0, stepOrder: 4,
+                    deliveries: [{ id: `d_${uid()}`, qty: 200, deliveryDate: "2026-03-02", completionDate: "", dueDate: "2026-03-10" }]
                 },
             ],
         },
@@ -235,11 +245,11 @@ function createInitialProducts(): MockProduct[] {
 
 function createInitialPaymentLines(): PaymentLine[] {
     return [
-        { id: "pl1", lotNumber: "A23-045", processName: "鍛造", subcontractor: "鍛造所 田中", qty: 490, unitPrice: 300, unitPriceOverride: null, amount: 147000, completionDate: "2026-02-10", status: "paid" },
-        { id: "pl2", lotNumber: "A23-045", processName: "荒研ぎ", subcontractor: "研ぎ工房 山本", qty: 300, unitPrice: 200, unitPriceOverride: null, amount: 60000, completionDate: "2026-02-18", status: "pre_payment" },
-        { id: "pl3", lotNumber: "B12-098", processName: "鍛造", subcontractor: "鍛造所 田中", qty: 295, unitPrice: 300, unitPriceOverride: null, amount: 88500, completionDate: "2026-02-12", status: "paid" },
-        { id: "pl4", lotNumber: "B12-098", processName: "荒研ぎ", subcontractor: "研ぎ工房 山本", qty: 290, unitPrice: 200, unitPriceOverride: null, amount: 58000, completionDate: "2026-02-20", status: "pre_payment" },
-        { id: "pl5", lotNumber: "B12-098", processName: "熱処理", subcontractor: "熱処理 鈴木", qty: 200, unitPrice: 300, unitPriceOverride: null, amount: 60000, completionDate: "2026-03-01", status: "wip" },
+        { id: `pl_${uid()}`, lotNumber: "A23-045", processName: "鍛造", subcontractor: "鍛造所 田中", qty: 490, unitPrice: 300, unitPriceOverride: null, amount: 147000, completionDate: "2026-02-10", status: "paid" },
+        { id: `pl_${uid()}`, lotNumber: "A23-045", processName: "荒研ぎ", subcontractor: "研ぎ工房 山本", qty: 300, unitPrice: 200, unitPriceOverride: null, amount: 60000, completionDate: "2026-02-18", status: "pre_payment" },
+        { id: `pl_${uid()}`, lotNumber: "B12-098", processName: "鍛造", subcontractor: "鍛造所 田中", qty: 295, unitPrice: 300, unitPriceOverride: null, amount: 88500, completionDate: "2026-02-12", status: "paid" },
+        { id: `pl_${uid()}`, lotNumber: "B12-098", processName: "荒研ぎ", subcontractor: "研ぎ工房 山本", qty: 290, unitPrice: 200, unitPriceOverride: null, amount: 58000, completionDate: "2026-02-20", status: "pre_payment" },
+        { id: `pl_${uid()}`, lotNumber: "B12-098", processName: "熱処理", subcontractor: "熱処理 鈴木", qty: 200, unitPrice: 300, unitPriceOverride: null, amount: 60000, completionDate: "2026-03-01", status: "wip" },
     ];
 }
 
@@ -269,17 +279,92 @@ class MockStore {
     private listeners: (() => void)[] = [];
 
     constructor() {
-        this.lots = createInitialLots();
-        this.orders = createInitialOrders();
-        this.products = createInitialProducts();
-        this.paymentLines = createInitialPaymentLines();
-        this.inventory = createInitialInventory();
-        this.users = createInitialUsers();
+        this.lots = [];
+        this.orders = [];
+        this.products = [];
+        this.paymentLines = [];
+        this.inventory = [];
+        this.users = [];
         this.history = [];
+        this.load();
+
+        // 初回起動時のみ初期データを投入
+        if (this.products.length === 0) {
+            this.lots = createInitialLots();
+            this.orders = createInitialOrders();
+            this.products = createInitialProducts();
+            this.paymentLines = createInitialPaymentLines();
+            this.inventory = createInitialInventory();
+            this.users = createInitialUsers();
+            this.save();
+        }
+    }
+
+    private load() {
+        if (typeof window === "undefined") return;
+        try {
+            const data = localStorage.getItem("tow_erp_storage");
+            if (data) {
+                const parsed = JSON.parse(data);
+                this.lots = parsed.lots || [];
+                this.orders = parsed.orders || [];
+                this.products = parsed.products || [];
+                this.paymentLines = parsed.paymentLines || [];
+                this.inventory = parsed.inventory || [];
+                this.users = parsed.users || [];
+                this.history = parsed.history || [];
+            }
+        } catch (e) {
+            console.error("Failed to load from storage", e);
+        }
+    }
+
+    save() {
+        if (typeof window === "undefined") return;
+        try {
+            const data = JSON.stringify({
+                lots: this.lots,
+                orders: this.orders,
+                products: this.products,
+                paymentLines: this.paymentLines,
+                inventory: this.inventory,
+                users: this.users,
+                history: this.history,
+                v: "7.1" // バージョン管理タグを追加
+            });
+            localStorage.setItem("tow_erp_storage", data);
+        } catch (e) {
+            console.error("Failed to save to storage", e);
+        }
+    }
+
+    // ─── ストレージクリア (強制リセット) ───
+    clearStorage() {
+        if (typeof window === "undefined") return;
+        localStorage.removeItem("tow_erp_storage");
+        location.reload(); // ページをリロードして再初期化
+    }
+
+    private consumePaymentWip(lotNumber: string, processName: string, subcontractor: string, qty: number) {
+        const wipIndex = this.paymentLines.findIndex(pl =>
+            pl.lotNumber === lotNumber &&
+            pl.processName === processName &&
+            pl.subcontractor === subcontractor &&
+            pl.status === "wip"
+        );
+        if (wipIndex !== -1) {
+            const pl = this.paymentLines[wipIndex];
+            if (pl.qty <= qty) {
+                this.paymentLines.splice(wipIndex, 1);
+            } else {
+                pl.qty -= qty;
+                pl.amount = pl.qty * (pl.unitPriceOverride || pl.unitPrice);
+            }
+        }
     }
 
     subscribe(fn: () => void) { this.listeners.push(fn); return () => { this.listeners = this.listeners.filter(l => l !== fn); }; }
-    private notify() { this.listeners.forEach(fn => fn()); }
+    private notify() { this.save(); this.listeners.forEach(fn => fn()); }
     private addHistory(action: string, detail: string, lotNumber?: string) {
         this.history.unshift({ id: `h${uid()}`, timestamp: new Date().toISOString(), action, detail, lotNumber });
     }
@@ -304,10 +389,10 @@ class MockStore {
     }
 
     // ─── 次工程へ (外注先選択対応) ───
-    moveForward(lotId: string, processIndex: number, qty: number, completionDate: string, nextDeliveryDate: string, nextDueDate: string, opts?: { overridePrice?: number; nextSubcontractor?: string }): { ok: boolean; error?: string } {
+    moveForward(lotId: string, processId: string, qty: number, completionDate: string, nextDeliveryDate: string, nextDueDate: string, opts?: { overridePrice?: number; nextSubcontractor?: string }): { ok: boolean; error?: string } {
         const lot = this.lots.find(l => l.id === lotId);
         if (!lot) return { ok: false, error: "ロットが見つかりません" };
-        const proc = lot.processes[processIndex];
+        const proc = lot.processes.find(p => p.id === processId);
         if (!proc) return { ok: false, error: "工程が見つかりません" };
         if (qty > proc.currentQty) return { ok: false, error: `移動数が現在数(${proc.currentQty})を超えています` };
         if (qty <= 0) return { ok: false, error: "1以上の数量を入力してください" };
@@ -323,6 +408,9 @@ class MockStore {
         proc.currentQty -= qty;
         proc.completedQty += qty;
 
+        // 現在の工程の WIP 支払を消費
+        this.consumePaymentWip(lot.lotNumber, proc.name, proc.subcontractor, qty);
+
         const effectivePrice = proc.unitPriceOverride !== null ? proc.unitPriceOverride : proc.unitPrice;
         this.paymentLines.push({
             id: `pl${uid()}`, lotNumber: lot.lotNumber, processName: proc.name, subcontractor: proc.subcontractor,
@@ -330,23 +418,28 @@ class MockStore {
             completionDate, status: "pre_payment",
         });
 
-        // 次工程（stepOrder + 1）のテンプレート名を取得
-        const currentGroup = this.products.find(p => p.id === lot.productId)?.processGroups[proc.groupIndex];
-        const nextTpl = currentGroup?.templates.find(t => t.sortOrder === proc.stepOrder + 1);
+        // 次工程 (本人より上の最小の sortOrder) のテンプレート名を取得
+        const product = this.products.find(p => p.id === lot.productId);
+        const currentGroup = product?.processGroups[proc.groupIndex];
+        const nextTpl = currentGroup?.templates
+            .filter(t => t.sortOrder > proc.stepOrder)
+            .sort((a, b) => a.sortOrder - b.sortOrder)[0];
 
         if (nextTpl) {
             const nextSubName = opts?.nextSubcontractor || nextTpl.subcontractors[0]?.name || "";
+            const nextStep = nextTpl.sortOrder;
+            const nextGroup = proc.groupIndex;
+
             // 同じgroupIndex, stepOrder, かつ 外注先 が同じ既存工程があるか探す
-            let next = lot.processes.find(p => p.groupIndex === proc.groupIndex && p.stepOrder === proc.stepOrder + 1 && p.subcontractor === nextSubName);
+            let next = lot.processes.find(p => p.groupIndex === nextGroup && p.stepOrder === nextStep && p.subcontractor === nextSubName);
 
             if (!next) {
-                const nextStep = nextTpl.sortOrder;
-                const nextGroup = proc.groupIndex;
                 // なければ新規作成して適切な位置に挿入
+                const nextSubInfo = nextTpl.subcontractors.find(s => s.name === nextSubName);
                 const newProc: ProcessEntry = {
                     id: `lp${uid()}`, name: nextTpl.name, subcontractor: nextSubName,
                     currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false,
-                    unitPrice: nextTpl.subcontractors.find(s => s.name === nextSubName)?.unitPrice || 0,
+                    unitPrice: nextSubInfo?.unitPrice || 0,
                     unitPriceOverride: null, status: "pending", deliveries: [],
                     groupIndex: nextGroup, stepOrder: nextStep, isAssemblyPoint: nextTpl.isAssemblyPoint
                 };
@@ -361,13 +454,22 @@ class MockStore {
             if (next!.status === "pending") next!.status = "in_progress";
             next!.deliveries.push({ id: `d${uid()}`, qty, deliveryDate: nextDeliveryDate, completionDate: "", dueDate: nextDueDate });
 
+            // 次工程の WIP 支払を作成
+            this.paymentLines.push({
+                id: `pl${uid()}`, lotNumber: lot.lotNumber, processName: next!.name, subcontractor: next!.subcontractor,
+                qty, unitPrice: next!.unitPrice, unitPriceOverride: null, amount: qty * next!.unitPrice,
+                completionDate: nextDeliveryDate, status: "wip",
+            });
+
             // 組み付けポイントの場合、ここでパーツ在庫を消費する
             if (next!.isAssemblyPoint) {
                 const partsInv = this.inventory.find(i => i.product === `${lot.product} (パーツ)` && i.type === "parts");
                 if (partsInv) {
-                    partsInv.quantity = Math.max(0, partsInv.quantity - qty);
+                    if (partsInv.quantity < qty) return { ok: false, error: `パーツ在庫が不足しています (在庫: ${partsInv.quantity}, 必要: ${qty})` };
+                    partsInv.quantity -= qty;
+                    this.addHistory("パーツ消費", `${lot.lotNumber}: ${qty}個消費 (在庫残: ${partsInv.quantity})`, lot.lotNumber);
                 } else {
-                    this.inventory.push({ id: `inv${uid()}`, product: `${lot.product} (パーツ)`, code: "", quantity: -qty, type: "parts", warehouse: "未定義" });
+                    return { ok: false, error: "組み付け用のパーツ在庫が見つかりません" };
                 }
             }
         } else {
@@ -377,8 +479,6 @@ class MockStore {
                 if (existingPart) existingPart.quantity += qty;
                 else this.inventory.push({ id: `inv${uid()}`, product: `${lot.product} (パーツ)`, code: "", quantity: qty, type: "parts", warehouse: "仕掛パーツ置場" });
             }
-            // ※メイングループの最終工程の場合は、明示的に「在庫へ移動」か「出荷設定」で処理するためここでは何もしない（未分類バッファとして保持するか、何もしない）
-            // 旧来の在庫自動追加ロジックは削除し、UI側で Move To Inventory / Ship ボタンで制御する
         }
 
         if (lot.status === "created") lot.status = "in_progress";
@@ -389,16 +489,18 @@ class MockStore {
         return { ok: true };
     }
 
+
     // ─── 差戻し (外注先選択対応) ───
-    moveBack(lotId: string, processIndex: number, qty: number, returnDate: string, prevDueDate: string, prevSubcontractor?: string): { ok: boolean; error?: string } {
+    moveBack(lotId: string, processId: string, qty: number, returnDate: string, prevDueDate: string, prevSubcontractor?: string): { ok: boolean; error?: string } {
         const lot = this.lots.find(l => l.id === lotId);
         if (!lot) return { ok: false, error: "ロットが見つかりません" };
-        if (processIndex <= 0) return { ok: false, error: "最初の工程から差戻しはできません" };
-        const proc = lot.processes[processIndex];
-        if (!proc || qty > proc.currentQty) return { ok: false, error: "差戻し数が現在数を超えています" };
+        const proc = lot.processes.find(p => p.id === processId);
+        if (!proc) return { ok: false, error: "工程が見つかりません" };
+        if (qty > proc.currentQty) return { ok: false, error: "差戻し数が現在数を超えています" };
         if (!returnDate || !prevDueDate) return { ok: false, error: "日付は必須です" };
 
         proc.currentQty -= qty;
+        this.consumePaymentWip(lot.lotNumber, proc.name, proc.subcontractor, qty);
 
         // 前工程を探す
         const prevSteps = lot.processes.filter(p => p.groupIndex === proc.groupIndex && p.stepOrder === proc.stepOrder - 1);
@@ -414,6 +516,13 @@ class MockStore {
             prev.completedQty -= qty;
             if (prev.status === "completed") prev.status = "in_progress";
             prev.deliveries.push({ id: `d${uid()}`, qty, deliveryDate: returnDate, completionDate: "", dueDate: prevDueDate });
+
+            // 前工程の WIP 支払を (再) 作成
+            this.paymentLines.push({
+                id: `pl${uid()}`, lotNumber: lot.lotNumber, processName: prev.name, subcontractor: prev.subcontractor,
+                qty, unitPrice: prev.unitPrice, unitPriceOverride: null, amount: qty * prev.unitPrice,
+                completionDate: returnDate, status: "wip",
+            });
         }
 
         if (lot.status === "completed") lot.status = "in_progress";
@@ -424,16 +533,18 @@ class MockStore {
     }
 
     // ─── ロス確定 ───
-    confirmLoss(lotId: string, processIndex: number): { ok: boolean; lossQty: number; error?: string } {
+    confirmLoss(lotId: string, processId: string): { ok: boolean; lossQty: number; error?: string } {
         const lot = this.lots.find(l => l.id === lotId);
         if (!lot) return { ok: false, lossQty: 0, error: "ロットが見つかりません" };
-        const proc = lot.processes[processIndex];
+        const proc = lot.processes.find(p => p.id === processId);
         if (!proc) return { ok: false, lossQty: 0, error: "工程が見つかりません" };
         const loss = proc.currentQty;
         proc.lossQty += loss;
         proc.currentQty = 0;
         proc.lossConfirmed = true;
         proc.status = "completed";
+
+        this.consumePaymentWip(lot.lotNumber, proc.name, proc.subcontractor, loss);
 
         this.checkLotCompletions(lot);
 
@@ -449,10 +560,10 @@ class MockStore {
     }
 
     // ─── カード編集: 納入実績の数量変更 → 前工程連動 ───
-    updateDelivery(lotId: string, processIndex: number, deliveryId: string, newQty: number, newDeliveryDate?: string, newDueDate?: string) {
+    updateDelivery(lotId: string, processId: string, deliveryId: string, newQty: number, newDeliveryDate?: string, newDueDate?: string) {
         const lot = this.lots.find(l => l.id === lotId);
         if (!lot) return;
-        const proc = lot.processes[processIndex];
+        const proc = lot.processes.find(p => p.id === processId);
         if (!proc) return;
         const del = proc.deliveries.find(d => d.id === deliveryId);
         if (!del) return;
@@ -462,18 +573,27 @@ class MockStore {
         if (newDeliveryDate) del.deliveryDate = newDeliveryDate;
         if (newDueDate) del.dueDate = newDueDate;
 
-        // 数量が変わった場合、現工程のcurrentQtyを調整し、前工程に差分を反映
+        // 数量が変わった場合、現工程のcurrentQtyを調整し、且つ WIP 支払も調整
         if (diff !== 0) {
             proc.currentQty += diff;
+            const wip = this.paymentLines.find(pl => pl.lotNumber === lot.lotNumber && pl.processName === proc.name && pl.subcontractor === proc.subcontractor && pl.status === "wip");
+            if (wip) {
+                wip.qty += diff;
+                if (wip.qty <= 0) {
+                    this.paymentLines = this.paymentLines.filter(p => p.id !== wip.id);
+                } else {
+                    wip.amount = wip.qty * (wip.unitPriceOverride || wip.unitPrice);
+                }
+            }
+
             const prevSteps = lot.processes.filter(p => p.groupIndex === proc.groupIndex && p.stepOrder === proc.stepOrder - 1);
             if (prevSteps.length > 0) {
-                // どの前工程から減らすかは特定が難しいため、一番最初のものを使う（実装簡略化）
                 const prev = prevSteps[0];
-                prev.currentQty -= diff; // 減った分は前工程に戻す、増えた分は前工程から引く
+                prev.currentQty -= diff; // 減った分は前工程に戻す
                 prev.completedQty += diff;
-                if (prev.currentQty < 0) {
-                    prev.currentQty = 0;
-                }
+                if (prev.currentQty < 0) prev.currentQty = 0;
+                if (prev.completedQty < 0) prev.completedQty = 0;
+
                 if (prev.currentQty > 0 && prev.status === "completed") {
                     prev.status = "in_progress";
                     if (lot.status === "completed") lot.status = "in_progress";
@@ -484,6 +604,42 @@ class MockStore {
 
         this.addHistory("納入編集", `${lot.lotNumber} [${proc.name}] 数量→${newQty}`, lot.lotNumber);
         this.notify();
+    }
+
+    // ─── 仕掛登録 (V7) ───
+    registerWip(lotId: string, processId: string, qty: number, deliveryDate: string, dueDate: string, subcontractor: string, overridePrice?: number): { ok: boolean; error?: string } {
+        const lot = this.lots.find(l => l.id === lotId);
+        if (!lot) return { ok: false, error: "ロットが見つかりません" };
+
+        const proc = lot.processes.find(p => p.id === processId);
+        if (!proc) return { ok: false, error: "工程が見つかりません" };
+
+        proc.currentQty = qty;
+        proc.subcontractor = subcontractor;
+        proc.unitPriceOverride = overridePrice !== undefined ? overridePrice : null;
+        if (proc.unitPriceOverride === null) {
+            // マスタから最新単価を引く
+            const product = this.products.find(p => p.id === lot.productId);
+            const processGroup = product?.processGroups[proc.groupIndex];
+            const processTemplate = processGroup?.templates.find(t => t.name === proc.name && t.sortOrder === proc.stepOrder);
+            proc.unitPrice = processTemplate?.subcontractors.find(s => s.name === subcontractor)?.unitPrice || proc.unitPrice;
+        }
+
+        proc.status = "in_progress";
+        proc.deliveries.push({ id: `d${uid()}`, qty, deliveryDate, completionDate: "", dueDate });
+
+        // WIP 支払を作成
+        this.paymentLines.push({
+            id: `pl${uid()}`, lotNumber: lot.lotNumber, processName: proc.name, subcontractor: proc.subcontractor,
+            qty, unitPrice: proc.unitPrice, unitPriceOverride: proc.unitPriceOverride, amount: qty * (proc.unitPriceOverride || proc.unitPrice),
+            completionDate: deliveryDate, status: "wip",
+        });
+
+        if (lot.status === "created") lot.status = "in_progress";
+
+        this.addHistory("仕掛登録", `${lot.lotNumber} [${proc.name}] ${qty}個投入`, lot.lotNumber);
+        this.notify();
+        return { ok: true };
     }
 
     // ─── 受注 ───
@@ -497,16 +653,16 @@ class MockStore {
             if (product && item.qty > 0) {
                 const processes: ProcessEntry[] = [];
                 product.processGroups.forEach((g, gIdx) => {
-                    g.templates.forEach(t => {
-                        const isStart = t.sortOrder === 1; // どのグループでも最初の工程は受注数とともに開始
+                    const firstTpl = g.templates.sort((a, b) => a.sortOrder - b.sortOrder)[0];
+                    if (firstTpl) {
                         processes.push({
-                            id: `lp${uid()}`, name: t.name, subcontractor: t.subcontractors[0]?.name || "",
-                            currentQty: isStart ? item.qty : 0, completedQty: 0, lossQty: 0, lossConfirmed: false,
-                            unitPrice: t.subcontractors[0]?.unitPrice || 0, unitPriceOverride: null, status: isStart ? "pending" : "pending",
-                            groupIndex: gIdx, stepOrder: t.sortOrder, isAssemblyPoint: t.isAssemblyPoint || false,
-                            deliveries: isStart ? [{ id: `d${uid()}`, qty: item.qty, deliveryDate: o.createdAt, completionDate: "", dueDate: o.dueDate }] : []
+                            id: `lp${uid()}`, name: firstTpl.name, subcontractor: firstTpl.subcontractors[0]?.name || "",
+                            currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false,
+                            unitPrice: firstTpl.subcontractors[0]?.unitPrice || 0, unitPriceOverride: null, status: "pending",
+                            groupIndex: gIdx, stepOrder: firstTpl.sortOrder, isAssemblyPoint: firstTpl.isAssemblyPoint || false,
+                            deliveries: []
                         });
-                    });
+                    }
                 });
                 if (processes.length > 0) {
                     this.lots.push({
@@ -526,8 +682,14 @@ class MockStore {
     deleteOrder(orderId: string) {
         const order = this.orders.find(o => o.id === orderId);
         if (!order) return;
-        // 関連ロットも削除（このオーダーに紐づくもののみ）
+        const relatedLots = this.lots.filter(l => l.orderId === orderId);
+        const relatedLotNumbers = relatedLots.map(l => l.lotNumber);
+
+        // 関連ロットも削除
         this.lots = this.lots.filter(l => l.orderId !== orderId);
+        // 関連する未確定支払データも削除
+        this.paymentLines = this.paymentLines.filter(pl => !relatedLotNumbers.includes(pl.lotNumber) || pl.status === "paid" || pl.status === "confirmed");
+
         // 受注自体を削除
         this.orders = this.orders.filter(o => o.id !== orderId);
         this.addHistory("受注削除", `${order.orderNumber} - ${order.customerName}`);
@@ -558,7 +720,8 @@ class MockStore {
     advancePayment(id: string) {
         const pl = this.paymentLines.find(p => p.id === id);
         if (!pl) return;
-        if (pl.status === "pre_payment") pl.status = "paid";
+        if (pl.status === "wip") pl.status = "pre_payment";
+        else if (pl.status === "pre_payment") pl.status = "paid";
         else if (pl.status === "paid") pl.status = "confirmed";
         this.addHistory("支払進行", `${pl.lotNumber} ${pl.processName} → ${pl.status}`);
         this.notify();
@@ -569,6 +732,7 @@ class MockStore {
         if (!pl) return;
         if (pl.status === "confirmed") pl.status = "paid";
         else if (pl.status === "paid") pl.status = "pre_payment";
+        else if (pl.status === "pre_payment") pl.status = "wip";
         this.addHistory("支払取消", `${pl.lotNumber} ${pl.processName} → ${pl.status}`);
         this.notify();
     }
@@ -576,8 +740,20 @@ class MockStore {
     updatePaymentLine(id: string, qty: number, overridePrice: number | null) {
         const pl = this.paymentLines.find(p => p.id === id);
         if (!pl) return;
+        const diff = qty - pl.qty;
         pl.qty = qty; pl.unitPriceOverride = overridePrice;
         pl.amount = qty * (overridePrice || pl.unitPrice);
+
+        // ロット数量との同期 (wip の場合のみ連動させるのが安全)
+        if (pl.status === "wip" && diff !== 0) {
+            const lot = this.lots.find(l => l.lotNumber === pl.lotNumber);
+            const proc = lot?.processes.find(p => p.name === pl.processName && p.subcontractor === pl.subcontractor && p.status === "in_progress");
+            if (proc) {
+                proc.currentQty += diff;
+                const del = proc.deliveries.find(d => !d.completionDate);
+                if (del) del.qty += diff;
+            }
+        }
         this.notify();
     }
 
@@ -613,10 +789,10 @@ class MockStore {
         if (item) { item.warehouse = warehouse; this.addHistory("倉庫変更", `${item.product} → ${warehouse}`); this.notify(); }
     }
 
-    moveToInventory(lotId: string, processIndex: number, qty: number, warehouse: string, completionDate: string, opts?: { overridePrice?: number }): { ok: boolean; error?: string } {
+    moveToInventory(lotId: string, processId: string, qty: number, warehouse: string, completionDate: string, opts?: { overridePrice?: number }): { ok: boolean; error?: string } {
         const lot = this.lots.find(l => l.id === lotId);
         if (!lot) return { ok: false, error: "ロットが見つかりません" };
-        const proc = lot.processes[processIndex];
+        const proc = lot.processes.find(p => p.id === processId);
         if (!proc) return { ok: false, error: "工程が見つかりません" };
         if (qty > proc.currentQty) return { ok: false, error: `移動数が現在数(${proc.currentQty})を超えています` };
         if (!completionDate) return { ok: false, error: "完了日付は必須です" };
@@ -630,6 +806,10 @@ class MockStore {
 
         proc.currentQty -= qty;
         proc.completedQty += qty;
+
+        // 現在の工程の WIP 支払を消費
+        this.consumePaymentWip(lot.lotNumber, proc.name, proc.subcontractor, qty);
+
         this.checkLotCompletions(lot);
 
         const invType = proc.groupIndex > 0 ? "parts" : "product";
@@ -651,10 +831,10 @@ class MockStore {
         return { ok: true };
     }
 
-    shipAndInvoice(lotId: string, processIndex: number, qty: number, completionDate: string, opts?: { overridePrice?: number }): { ok: boolean; error?: string } {
+    shipAndInvoice(lotId: string, processId: string, qty: number, completionDate: string, opts?: { overridePrice?: number }): { ok: boolean; error?: string } {
         const lot = this.lots.find(l => l.id === lotId);
         if (!lot) return { ok: false, error: "ロットが見つかりません" };
-        const proc = lot.processes[processIndex];
+        const proc = lot.processes.find(p => p.id === processId);
         if (!proc) return { ok: false, error: "工程が見つかりません" };
         if (qty > proc.currentQty) return { ok: false, error: `出荷数が現在数(${proc.currentQty})を超えています` };
         if (!completionDate) return { ok: false, error: "完了日付は必須です" };
@@ -665,6 +845,9 @@ class MockStore {
 
         const existingDel = proc.deliveries.find(d => !d.completionDate);
         if (existingDel) existingDel.completionDate = completionDate;
+
+        // 現在の工程の WIP 支払を消費
+        this.consumePaymentWip(lot.lotNumber, proc.name, proc.subcontractor, qty);
 
         // 該当商品の未完了受注を探し、出荷数を割り当てる
         let remainingQty = qty;

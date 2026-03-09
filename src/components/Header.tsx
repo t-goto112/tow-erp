@@ -1,7 +1,8 @@
 "use client";
 
-import { Menu } from "lucide-react";
+import { Menu, RefreshCw } from "lucide-react";
 import NotificationCenter from "./NotificationCenter";
+import { store } from "@/lib/mockStore";
 
 interface HeaderProps {
     title: string;
@@ -17,6 +18,13 @@ export default function Header({ title }: HeaderProps) {
             </div>
 
             <div className="flex items-center gap-3">
+                <button
+                    onClick={() => { if (confirm("初期状態にリセットしますか？")) store.clearStorage(); }}
+                    className="p-2 text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 rounded-full transition-colors"
+                    title="データをリセット"
+                >
+                    <RefreshCw className="w-4 h-4" />
+                </button>
                 <NotificationCenter />
                 <button className="md:hidden p-2 text-slate-500 bg-slate-50 rounded-full">
                     <Menu className="w-5 h-5" />

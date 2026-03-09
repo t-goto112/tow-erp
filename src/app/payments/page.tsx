@@ -176,9 +176,9 @@ export default function PaymentsPage() {
                                                         ) : (
                                                             <>
                                                                 {canEdit && <button onClick={() => { setEditId(pl.id); setEditQty(String(pl.qty)); setEditPrice(pl.unitPriceOverride !== null ? String(pl.unitPriceOverride) : ""); }} title="編集" className="p-1 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition"><Edit2 size={14} /></button>}
-                                                                {pl.status === "pre_payment" && <button onClick={() => setConfirmAction({ id: pl.id, type: "advance" })} title="支払済へ" className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition"><CheckCircle2 size={14} /></button>}
+                                                                {(pl.status === "wip" || pl.status === "pre_payment") && <button onClick={() => setConfirmAction({ id: pl.id, type: "advance" })} title={pl.status === "wip" ? "完了(支払前)へ" : "支払済へ"} className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition"><CheckCircle2 size={14} /></button>}
                                                                 {pl.status === "paid" && <button onClick={() => setConfirmAction({ id: pl.id, type: "advance" })} title="確認済へ" className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition"><ShieldCheck size={14} /></button>}
-                                                                {(pl.status === "paid" || pl.status === "confirmed") && <button onClick={() => setConfirmAction({ id: pl.id, type: "revert" })} title="取消" className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition"><Undo2 size={14} /></button>}
+                                                                {(pl.status === "pre_payment" || pl.status === "paid" || pl.status === "confirmed") && <button onClick={() => setConfirmAction({ id: pl.id, type: "revert" })} title="取消" className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition"><Undo2 size={14} /></button>}
                                                             </>
                                                         )}
                                                     </div>
