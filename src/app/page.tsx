@@ -296,8 +296,8 @@ function LotDetailModal({ lot, onClose }: { lot: MockLot | null; onClose: () => 
 
     if (!lot) return null;
 
-    const handleSave = (processIndex: number, deliveryId: string) => {
-        store.updateDelivery(lot.id, processIndex, deliveryId, Number(editQty), editDeliveryDate || undefined, editDue || undefined);
+    const handleSave = (processId: string, deliveryId: string) => {
+        store.updateDelivery(lot.id, processId, deliveryId, Number(editQty), editDeliveryDate || undefined, editDue || undefined);
         showToast("success", "更新しました（前工程に連動反映済み）");
         setEditId(null);
         setTick((t: number) => t + 1);
@@ -332,7 +332,7 @@ function LotDetailModal({ lot, onClose }: { lot: MockLot | null; onClose: () => 
                                             <input type="date" value={editDeliveryDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditDeliveryDate(e.target.value)} className="px-1.5 py-1 border border-slate-200 rounded text-xs" />
                                             <label className="text-[9px] text-slate-400">予定日</label>
                                             <input type="date" value={editDue} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditDue(e.target.value)} className="px-1.5 py-1 border border-slate-200 rounded text-xs" />
-                                            <button onClick={() => handleSave(pi, del.id)} className="p-1 bg-blue-600 text-white rounded"><Check size={12} /></button>
+                                            <button onClick={() => handleSave(proc.id, del.id)} className="p-1 bg-blue-600 text-white rounded"><Check size={12} /></button>
                                             <button onClick={() => setEditId(null)} className="p-1 bg-slate-200 rounded"><X size={12} /></button>
                                         </div>
                                     ) : (
