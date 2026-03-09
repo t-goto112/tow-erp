@@ -1,4 +1,4 @@
-/* ─── MockStore V3 ─── */
+/* ─── MockStore V7.2 Final ─── */
 
 export interface ProcessEntry {
     id: string;
@@ -115,9 +115,7 @@ export interface HistoryEntry {
     lotNumber?: string;
 }
 
-let _uid = Date.now();
 function uid() {
-    // ミリ秒単位での衝突を避けるためのランダム値を付加
     return `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 }
 
@@ -319,7 +317,7 @@ class MockStore {
         }
     }
 
-    save() {
+    private save() {
         if (typeof window === "undefined") return;
         try {
             const data = JSON.stringify({
@@ -330,7 +328,6 @@ class MockStore {
                 inventory: this.inventory,
                 users: this.users,
                 history: this.history,
-                v: "7.1" // バージョン管理タグを追加
             });
             localStorage.setItem("tow_erp_storage", data);
         } catch (e) {
@@ -338,27 +335,25 @@ class MockStore {
         }
     }
 
-    // ─── ストレージクリア (強制リセット) ───
-    clearStorage() {
-        if (typeof window === "undefined") return;
-        localStorage.removeItem("tow_erp_storage");
-        location.reload(); // ページをリロードして再初期化
-    }
-
     private consumePaymentWip(lotNumber: string, processName: string, subcontractor: string, qty: number) {
-        const wipIndex = this.paymentLines.findIndex(pl =>
-            pl.lotNumber === lotNumber &&
-            pl.processName === processName &&
-            pl.subcontractor === subcontractor &&
-            pl.status === "wip"
-        );
-        if (wipIndex !== -1) {
+        let remaining = qty;
+        while (remaining > 0) {
+            const wipIndex = this.paymentLines.findIndex(pl =>
+                pl.lotNumber === lotNumber &&
+                pl.processName === processName &&
+                pl.subcontractor === subcontractor &&
+                pl.status === "wip"
+            );
+            if (wipIndex === -1) break;
+
             const pl = this.paymentLines[wipIndex];
-            if (pl.qty <= qty) {
+            if (pl.qty <= remaining) {
+                remaining -= pl.qty;
                 this.paymentLines.splice(wipIndex, 1);
             } else {
-                pl.qty -= qty;
+                pl.qty -= remaining;
                 pl.amount = pl.qty * (pl.unitPriceOverride || pl.unitPrice);
+                remaining = 0;
             }
         }
     }
@@ -437,16 +432,29 @@ class MockStore {
                 // なければ新規作成して適切な位置に挿入
                 const nextSubInfo = nextTpl.subcontractors.find(s => s.name === nextSubName);
                 const newProc: ProcessEntry = {
-                    id: `lp${uid()}`, name: nextTpl.name, subcontractor: nextSubName,
-                    currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false,
+                    id: `lp${uid()}`,
+                    name: nextTpl.name,
+                    subcontractor: nextSubName,
+                    currentQty: 0,
+                    completedQty: 0,
+                    lossQty: 0,
+                    lossConfirmed: false,
                     unitPrice: nextSubInfo?.unitPrice || 0,
-                    unitPriceOverride: null, status: "pending", deliveries: [],
-                    groupIndex: nextGroup, stepOrder: nextStep, isAssemblyPoint: nextTpl.isAssemblyPoint
+                    unitPriceOverride: null,
+                    status: "pending",
+                    deliveries: [],
+                    groupIndex: nextGroup,
+                    stepOrder: nextStep,
+                    isAssemblyPoint: nextTpl.isAssemblyPoint
                 };
-                // 挿入位置を決める (stepOrder順)
-                const insertIdx = lot.processes.findIndex(p => p.groupIndex === nextGroup && p.stepOrder > nextStep);
-                if (insertIdx === -1) lot.processes.push(newProc);
-                else lot.processes.splice(insertIdx, 0, newProc);
+                // 挿入位置を決める (stepOrder順、同じstepOrderなら末尾へ)
+                const lastIdxWithSameStep = [...lot.processes].reverse().findIndex(p => p.groupIndex === nextGroup && p.stepOrder <= nextStep);
+                if (lastIdxWithSameStep === -1) {
+                    lot.processes.unshift(newProc);
+                } else {
+                    const insertIdx = lot.processes.length - lastIdxWithSameStep;
+                    lot.processes.splice(insertIdx, 0, newProc);
+                }
                 next = newProc;
             }
 
@@ -502,8 +510,10 @@ class MockStore {
         proc.currentQty -= qty;
         this.consumePaymentWip(lot.lotNumber, proc.name, proc.subcontractor, qty);
 
-        // 前工程を探す
-        const prevSteps = lot.processes.filter(p => p.groupIndex === proc.groupIndex && p.stepOrder === proc.stepOrder - 1);
+        // 前工程を探す (現在の stepOrder より小さい中で最大のものを探す)
+        const prevSteps = lot.processes
+            .filter(p => p.groupIndex === proc.groupIndex && p.stepOrder < proc.stepOrder)
+            .sort((a, b) => b.stepOrder - a.stepOrder);
         let prev = prevSteps[0];
 
         if (prevSubcontractor) {
@@ -586,7 +596,9 @@ class MockStore {
                 }
             }
 
-            const prevSteps = lot.processes.filter(p => p.groupIndex === proc.groupIndex && p.stepOrder === proc.stepOrder - 1);
+            const prevSteps = lot.processes
+                .filter(p => p.groupIndex === proc.groupIndex && p.stepOrder < proc.stepOrder)
+                .sort((a, b) => b.stepOrder - a.stepOrder);
             if (prevSteps.length > 0) {
                 const prev = prevSteps[0];
                 prev.currentQty -= diff; // 減った分は前工程に戻す

@@ -9,13 +9,13 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 export default function RoutingPage() {
     const [lots, setLots] = useState<MockLot[]>([]);
     const [selectedLotId, setSelectedLotId] = useState("");
-    const [selectedProcessIdx, setSelectedProcessIdx] = useState(0);
+    const [selectedProcessId, setSelectedProcessId] = useState("");
 
     // 次工程
     const [fwdQty, setFwdQty] = useState("");
-    const [fwdCompletionDate, setFwdCompletionDate] = useState("");
     const [fwdDeliveryDate, setFwdDeliveryDate] = useState("");
     const [fwdDueDate, setFwdDueDate] = useState("");
+    const [fwdCompletionDate, setFwdCompletionDate] = useState("");
     const [fwdOverride, setFwdOverride] = useState("");
     const [fwdNextSub, setFwdNextSub] = useState("");
 
@@ -42,9 +42,9 @@ export default function RoutingPage() {
     const refresh = useCallback(() => setLots([...store.lots]), []);
     useEffect(() => { refresh(); return store.subscribe(refresh); }, [refresh]);
 
-    const activeLots = lots.filter(l => l.status !== "completed");
-    const selectedLot = activeLots.find(l => l.id === selectedLotId) || null;
-    const selectedProc = selectedLot?.processes[selectedProcessIdx] || null;
+    const activeLots = lots.filter((l: MockLot) => l.status !== "completed");
+    const selectedLot = activeLots.find((l: MockLot) => l.id === selectedLotId) || null;
+    const selectedProc = selectedLot?.processes.find((p: ProcessEntry) => p.id === selectedProcessId) || null;
 
     const needsWipRegistration = selectedProc?.status === "pending" || (selectedProc && selectedProc.currentQty === 0 && selectedProc.deliveries.length === 0);
 
@@ -57,33 +57,41 @@ export default function RoutingPage() {
     // 次工程の外注先候補
     const nextProcessSubs = useMemo(() => {
         if (!selectedLot || !selectedProc) return [];
-        const nextIdx = selectedProcessIdx + 1;
-        if (nextIdx >= selectedLot.processes.length) return [];
-        const nextProcName = selectedLot.processes[nextIdx].name;
-        return store.getSubcontractorsForProcess(selectedLot.productId, nextProcName);
-    }, [selectedLot, selectedProc, selectedProcessIdx]);
+        const product = store.products.find(p => p.id === selectedLot.productId);
+        const group = product?.processGroups[selectedProc.groupIndex];
+        const nextTpl = group?.templates
+            .filter(t => t.sortOrder > selectedProc.stepOrder)
+            .sort((a, b) => a.sortOrder - b.sortOrder)[0];
+        if (!nextTpl) return [];
+        return nextTpl.subcontractors;
+    }, [selectedLot, selectedProc]);
 
     // 前工程の外注先候補
     const prevProcessSubs = useMemo(() => {
-        if (!selectedLot || selectedProcessIdx <= 0) return [];
-        const prevProcName = selectedLot.processes[selectedProcessIdx - 1].name;
-        return store.getSubcontractorsForProcess(selectedLot.productId, prevProcName);
-    }, [selectedLot, selectedProcessIdx]);
+        if (!selectedLot || !selectedProc) return [];
+        const product = store.products.find(p => p.id === selectedLot.productId);
+        const group = product?.processGroups[selectedProc.groupIndex];
+        const prevTpl = group?.templates
+            .filter(t => t.sortOrder < selectedProc.stepOrder)
+            .sort((a, b) => b.sortOrder - a.sortOrder)[0];
+        if (!prevTpl) return [];
+        return prevTpl.subcontractors;
+    }, [selectedLot, selectedProc]);
 
     // ロット選択時に初期化
     useEffect(() => {
         const today = new Date().toISOString().split("T")[0];
         if (selectedLot) {
-            setFwdQty(""); setFwdCompletionDate(today); setFwdDeliveryDate(""); setFwdDueDate(""); setFwdOverride(""); setFwdNextSub("");
-            setBackQty(""); setBackDate(""); setBackDueDate(""); setBackPrevSub("");
-            setWipQty(selectedLot.totalQty.toString()); setWipDeliveryDate(today); setWipDueDate(""); setWipOverride("");
+            setFwdQty(""); setFwdCompletionDate(today); setFwdDeliveryDate(today); setFwdDueDate(today); setFwdOverride(""); setFwdNextSub("");
+            setBackQty(""); setBackDate(today); setBackDueDate(today); setBackPrevSub("");
+            setWipQty(selectedLot.totalQty.toString()); setWipDeliveryDate(today); setWipDueDate(today); setWipSub(""); setWipOverride("");
             setShipMode(null);
             // 外注先が1つしかない場合は固定
             if (nextProcessSubs.length === 1) setFwdNextSub(nextProcessSubs[0].name);
             if (prevProcessSubs.length === 1) setBackPrevSub(prevProcessSubs[0].name);
             if (currentProcessSubs.length === 1) setWipSub(currentProcessSubs[0].name);
         }
-    }, [selectedLotId, selectedProcessIdx, nextProcessSubs, prevProcessSubs, currentProcessSubs, selectedLot]);
+    }, [selectedLotId, selectedProcessId, nextProcessSubs, prevProcessSubs, currentProcessSubs, selectedLot]);
 
     const handleForward = async () => {
         if (!selectedLot || !selectedProc) return;
@@ -186,7 +194,7 @@ export default function RoutingPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">ロット</label>
-                    <select value={selectedLotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setSelectedLotId(e.target.value); setSelectedProcessIdx(0); }}
+                    <select value={selectedLotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setSelectedLotId(e.target.value); setSelectedProcessId(""); }}
                         className="select-base">
                         <option value="">選択してください</option>
                         {activeLots.map(l => <option key={l.id} value={l.id}>{l.lotNumber} — {l.product} ({l.totalQty}個)</option>)}
@@ -195,9 +203,10 @@ export default function RoutingPage() {
                 {selectedLot && (
                     <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">工程</label>
-                        <select value={selectedProcessIdx} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedProcessIdx(Number(e.target.value))}
+                        <select value={selectedProcessId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedProcessId(e.target.value)}
                             className="select-base">
-                            {selectedLot.processes.map((p, i) => <option key={p.id} value={i}>{p.name} — {p.subcontractor} (現在:{p.currentQty})</option>)}
+                            <option value="">選択してください</option>
+                            {selectedLot.processes.map((p) => <option key={p.id} value={p.id}>{p.name} — {p.subcontractor} (現在:{p.currentQty})</option>)}
                         </select>
                     </div>
                 )}
@@ -220,9 +229,9 @@ export default function RoutingPage() {
                         <div><label className="block text-[10px] font-black text-slate-400 mb-1">工程完了予定日 *</label><input type="date" value={wipDueDate} onChange={e => setWipDueDate(e.target.value)} className="input-base" /></div>
                         <div>
                             <label className="block text-[10px] font-black text-slate-400 mb-1">外注先</label>
-                            <select value={wipSub} onChange={e => setWipSub(e.target.value)} className="select-base">
+                            <select value={wipSub} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setWipSub(e.target.value)} className="select-base">
                                 <option value="">選択してください</option>
-                                {currentProcessSubs.map(s => <option key={s.name} value={s.name}>{s.name} (標準:¥{s.unitPrice})</option>)}
+                                {currentProcessSubs.map((s: any) => <option key={s.name} value={s.name}>{s.name} (標準:¥{s.unitPrice})</option>)}
                             </select>
                         </div>
                         <div><label className="block text-[10px] font-black text-slate-400 mb-1">特値 (任意)</label><input type="number" value={wipOverride} onChange={e => setWipOverride(e.target.value)} placeholder="空欄=標準単価" className="input-base" /></div>
@@ -315,7 +324,7 @@ export default function RoutingPage() {
 
                         {/* 差戻し + ロス */}
                         <div className="space-y-4">
-                            {selectedProcessIdx > 0 && (
+                            {selectedLot.processes.findIndex((p: any) => p.id === selectedProcessId) > 0 && (
                                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
                                     <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2"><ArrowLeft className="w-4 h-4 text-amber-500" /> 差戻し</h4>
                                     <div><label className="block text-[10px] font-black text-slate-400 mb-1">数量</label><input type="number" value={backQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackQty(e.target.value)} max={selectedProc.currentQty} className="input-base" /></div>
