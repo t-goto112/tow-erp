@@ -421,6 +421,18 @@ class MockStore {
             .sort((a, b) => a.sortOrder - b.sortOrder)[0];
 
         if (nextTpl) {
+            // 組み付けポイントの場合、ここでパーツ在庫を消費する (先行チェック)
+            if (nextTpl.isAssemblyPoint) {
+                const partsInv = this.inventory.find(i => i.product === `${lot.product} (パーツ)` && i.type === "parts");
+                if (partsInv) {
+                    if (partsInv.quantity < qty) return { ok: false, error: `パーツ在庫が不足しています (在庫: ${partsInv.quantity}, 必要: ${qty})` };
+                    partsInv.quantity -= qty;
+                    this.addHistory("パーツ消費", `${lot.lotNumber}: ${qty}個消費 (在庫残: ${partsInv.quantity})`, lot.lotNumber);
+                } else {
+                    return { ok: false, error: "組み付け用のパーツ在庫が見つかりません" };
+                }
+            }
+
             const nextSubName = opts?.nextSubcontractor || nextTpl.subcontractors[0]?.name || "";
             const nextStep = nextTpl.sortOrder;
             const nextGroup = proc.groupIndex;
@@ -468,18 +480,6 @@ class MockStore {
                 qty, unitPrice: next!.unitPrice, unitPriceOverride: null, amount: qty * next!.unitPrice,
                 completionDate: nextDeliveryDate, status: "wip",
             });
-
-            // 組み付けポイントの場合、ここでパーツ在庫を消費する
-            if (next!.isAssemblyPoint) {
-                const partsInv = this.inventory.find(i => i.product === `${lot.product} (パーツ)` && i.type === "parts");
-                if (partsInv) {
-                    if (partsInv.quantity < qty) return { ok: false, error: `パーツ在庫が不足しています (在庫: ${partsInv.quantity}, 必要: ${qty})` };
-                    partsInv.quantity -= qty;
-                    this.addHistory("パーツ消費", `${lot.lotNumber}: ${qty}個消費 (在庫残: ${partsInv.quantity})`, lot.lotNumber);
-                } else {
-                    return { ok: false, error: "組み付け用のパーツ在庫が見つかりません" };
-                }
-            }
         } else {
             // 最終工程の場合
             if (proc.groupIndex > 0) {
@@ -625,6 +625,18 @@ class MockStore {
 
         const proc = lot.processes.find(p => p.id === processId);
         if (!proc) return { ok: false, error: "工程が見つかりません" };
+
+        // 組み付けポイントの場合、パーツ在庫をチェック・消費 (V7.4追加)
+        if (proc.isAssemblyPoint) {
+            const partsInv = this.inventory.find(i => i.product === `${lot.product} (パーツ)` && i.type === "parts");
+            if (partsInv) {
+                if (partsInv.quantity < qty) return { ok: false, error: `パーツ在庫が不足しています (在庫: ${partsInv.quantity}, 必要: ${qty})` };
+                partsInv.quantity -= qty;
+                this.addHistory("パーツ消費", `${lot.lotNumber}: ${qty}個消費 (在庫残: ${partsInv.quantity})`, lot.lotNumber);
+            } else {
+                return { ok: false, error: "組み付け用のパーツ在庫が見つかりません" };
+            }
+        }
 
         proc.currentQty = qty;
         proc.subcontractor = subcontractor;

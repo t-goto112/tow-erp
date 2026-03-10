@@ -356,7 +356,7 @@ export default function RoutingPage() {
                                 </div>
                             )}
 
-                            {selectedProc.currentQty > 0 && !selectedProc.lossConfirmed && (
+                            {selectedProc.currentQty > 0 && (
                                 <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-5 space-y-3">
                                     <h4 className="font-bold text-sm text-red-600 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> ロス確定</h4>
                                     <p className="text-xs text-slate-500">現在数 {selectedProc.currentQty}個 を廃棄(ロス)として確定します。</p>
