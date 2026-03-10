@@ -46,7 +46,7 @@ export default function RoutingPage() {
     const selectedLot = activeLots.find((l: MockLot) => l.id === selectedLotId) || null;
     const selectedProc = selectedLot?.processes.find((p: ProcessEntry) => p.id === selectedProcessId) || null;
 
-    const needsWipRegistration = selectedProc?.status === "pending" || (selectedProc && selectedProc.currentQty === 0 && selectedProc.deliveries.length === 0);
+    const needsWipRegistration = selectedProc?.status === "pending" || (selectedProc?.groupIndex === 0 && selectedProc?.stepOrder === 1 && selectedProc?.status !== "completed");
 
     // 選択中工程の外注先
     const currentProcessSubs = useMemo(() => {

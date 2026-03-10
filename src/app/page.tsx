@@ -297,8 +297,9 @@ function LotDetailModal({ lot, onClose }: { lot: MockLot | null; onClose: () => 
     if (!lot) return null;
 
     const handleSave = (processId: string, deliveryId: string) => {
-        store.updateDelivery(lot.id, processId, deliveryId, Number(editQty), editDeliveryDate || undefined, editDue || undefined);
-        showToast("success", "更新しました（前工程に連動反映済み）");
+        if (!window.confirm("数量を変更します。この操作では追加費用は発生しません。よろしいですか？")) return;
+        store.updateDelivery(lot.id, processId, deliveryId, Number(editQty), editDeliveryDate || undefined, editDue || undefined, true);
+        showToast("success", "更新しました（前後工程に連動反映済み）");
         setEditId(null);
         setTick((t: number) => t + 1);
     };

@@ -389,9 +389,26 @@ class MockStore {
         if (!lot) return { ok: false, error: "ロットが見つかりません" };
         const proc = lot.processes.find(p => p.id === processId);
         if (!proc) return { ok: false, error: "工程が見つかりません" };
-        if (qty > proc.currentQty) return { ok: false, error: `移動数が現在数(${proc.currentQty})を超えています` };
-        if (qty <= 0) return { ok: false, error: "1以上の数量を入力してください" };
-        if (!completionDate || !nextDeliveryDate || !nextDueDate) return { ok: false, error: "日付は必須です" };
+        // 次工程 (本人より上の最小の sortOrder) のテンプレート名を取得
+        const product = this.products.find(p => p.id === lot.productId);
+        const currentGroup = product?.processGroups[proc.groupIndex];
+        const nextTpl = currentGroup?.templates
+            .filter(t => t.sortOrder > proc.stepOrder)
+            .sort((a, b) => a.sortOrder - b.sortOrder)[0];
+
+        if (nextTpl) {
+            // 組み付けポイントの場合、ここでパーツ在庫を消費する (先行チェック)
+            if (nextTpl.isAssemblyPoint) {
+                const partsInv = this.inventory.find(i => i.product === `${lot.product} (パーツ)` && i.type === "parts");
+                if (partsInv) {
+                    if (partsInv.quantity < qty) return { ok: false, error: `パーツ在庫が不足しています (在庫: ${partsInv.quantity}, 必要: ${qty})` };
+                    partsInv.quantity -= qty;
+                    this.addHistory("パーツ消費", `${lot.lotNumber}: ${qty}個消費 (在庫残: ${partsInv.quantity})`, lot.lotNumber);
+                } else {
+                    return { ok: false, error: "組み付け用のパーツ在庫が見つかりません" };
+                }
+            }
+        }
 
         if (opts?.overridePrice !== undefined && opts.overridePrice !== null && typeof opts.overridePrice === "number") {
             proc.unitPriceOverride = opts.overridePrice;
@@ -413,26 +430,7 @@ class MockStore {
             completionDate, status: "pre_payment",
         });
 
-        // 次工程 (本人より上の最小の sortOrder) のテンプレート名を取得
-        const product = this.products.find(p => p.id === lot.productId);
-        const currentGroup = product?.processGroups[proc.groupIndex];
-        const nextTpl = currentGroup?.templates
-            .filter(t => t.sortOrder > proc.stepOrder)
-            .sort((a, b) => a.sortOrder - b.sortOrder)[0];
-
         if (nextTpl) {
-            // 組み付けポイントの場合、ここでパーツ在庫を消費する (先行チェック)
-            if (nextTpl.isAssemblyPoint) {
-                const partsInv = this.inventory.find(i => i.product === `${lot.product} (パーツ)` && i.type === "parts");
-                if (partsInv) {
-                    if (partsInv.quantity < qty) return { ok: false, error: `パーツ在庫が不足しています (在庫: ${partsInv.quantity}, 必要: ${qty})` };
-                    partsInv.quantity -= qty;
-                    this.addHistory("パーツ消費", `${lot.lotNumber}: ${qty}個消費 (在庫残: ${partsInv.quantity})`, lot.lotNumber);
-                } else {
-                    return { ok: false, error: "組み付け用のパーツ在庫が見つかりません" };
-                }
-            }
-
             const nextSubName = opts?.nextSubcontractor || nextTpl.subcontractors[0]?.name || "";
             const nextStep = nextTpl.sortOrder;
             const nextGroup = proc.groupIndex;
@@ -570,7 +568,7 @@ class MockStore {
     }
 
     // ─── カード編集: 納入実績の数量変更 → 前工程連動 ───
-    updateDelivery(lotId: string, processId: string, deliveryId: string, newQty: number, newDeliveryDate?: string, newDueDate?: string) {
+    updateDelivery(lotId: string, processId: string, deliveryId: string, newQty: number, newDeliveryDate?: string, newDueDate?: string, isManualAdjust: boolean = false) {
         const lot = this.lots.find(l => l.id === lotId);
         if (!lot) return;
         const proc = lot.processes.find(p => p.id === processId);
@@ -586,13 +584,17 @@ class MockStore {
         // 数量が変わった場合、現工程のcurrentQtyを調整し、且つ WIP 支払も調整
         if (diff !== 0) {
             proc.currentQty += diff;
-            const wip = this.paymentLines.find(pl => pl.lotNumber === lot.lotNumber && pl.processName === proc.name && pl.subcontractor === proc.subcontractor && pl.status === "wip");
-            if (wip) {
-                wip.qty += diff;
-                if (wip.qty <= 0) {
-                    this.paymentLines = this.paymentLines.filter(p => p.id !== wip.id);
-                } else {
-                    wip.amount = wip.qty * (wip.unitPriceOverride || wip.unitPrice);
+
+            // 手動調整（ダッシュボード）の場合は支払を更新しない (V7.5)
+            if (!isManualAdjust) {
+                const wip = this.paymentLines.find(pl => pl.lotNumber === lot.lotNumber && pl.processName === proc.name && pl.subcontractor === proc.subcontractor && pl.status === "wip");
+                if (wip) {
+                    wip.qty += diff;
+                    if (wip.qty <= 0) {
+                        this.paymentLines = this.paymentLines.filter(p => p.id !== wip.id);
+                    } else {
+                        wip.amount = wip.qty * (wip.unitPriceOverride || wip.unitPrice);
+                    }
                 }
             }
 
@@ -638,7 +640,8 @@ class MockStore {
             }
         }
 
-        proc.currentQty = qty;
+        proc.currentQty += qty;
+        lot.totalQty += qty;
         proc.subcontractor = subcontractor;
         proc.unitPriceOverride = overridePrice !== undefined ? overridePrice : null;
         if (proc.unitPriceOverride === null) {
