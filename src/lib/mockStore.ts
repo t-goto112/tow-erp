@@ -649,6 +649,14 @@ class MockStore {
 
         if (lot.status === "created") lot.status = "in_progress";
 
+        // 受注ステータスを連動 (V7.3)
+        if (lot.orderId) {
+            const order = this.orders.find(o => o.id === lot.orderId);
+            if (order && order.status === "pending") {
+                order.status = "in_progress";
+            }
+        }
+
         this.addHistory("仕掛登録", `${lot.lotNumber} [${proc.name}] ${qty}個投入`, lot.lotNumber);
         this.notify();
         return { ok: true };

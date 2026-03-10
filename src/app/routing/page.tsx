@@ -179,8 +179,13 @@ export default function RoutingPage() {
     // グループ内の最終工程か判定（自身の groupIndex と共通の工程を探し、自身より先の stepOrder が存在するかどうか）
     const isLastProcess = useMemo(() => {
         if (!selectedLot || !selectedProc) return false;
-        const hasNext = selectedLot.processes.some(p => p.groupIndex === selectedProc.groupIndex && p.stepOrder > selectedProc.stepOrder);
-        return !hasNext;
+        const product = store.products.find(p => p.id === selectedLot.productId);
+        const group = product?.processGroups[selectedProc.groupIndex];
+        if (!group) return false;
+
+        // マスタテンプレートにおいて、自分より大きい sortOrder が存在するか
+        const hasNextInTemplate = group.templates.some(t => t.sortOrder > selectedProc.stepOrder);
+        return !hasNextInTemplate;
     }, [selectedLot, selectedProc]);
 
     // 次工程への移行が可能か（次工程候補が存在し、完了していないか）
