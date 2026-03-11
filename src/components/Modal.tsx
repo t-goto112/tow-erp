@@ -20,24 +20,34 @@ export default function Modal({ open, onClose, title, subtitle, children, width 
     if (!open) return null;
 
     return (
-        <div
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[990] flex items-center justify-center p-2 md:p-4 overflow-y-auto animate-in fade-in duration-200"
-            onClick={onClose}
-        >
+        <div className="fixed inset-0 z-[990]">
+            {/* Backdrop */}
             <div
-                className={`${width} w-full bg-white rounded-2xl md:rounded-3xl shadow-2xl overflow-hidden my-auto animate-in zoom-in-95 duration-300 flex flex-col max-h-[98vh] md:max-h-[96vh]`}
-                onClick={e => e.stopPropagation()}
-            >
-                <div className="flex items-center justify-between p-6 border-b border-slate-100 shrink-0">
-                    <div>
-                        <h3 className="text-lg font-black text-slate-800">{title}</h3>
-                        {subtitle && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{subtitle}</p>}
+                className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
+                onClick={onClose}
+            />
+
+            {/* Modal Container */}
+            <div className="fixed inset-0 overflow-y-auto" onClick={onClose}>
+                <div className="flex min-h-full items-center justify-center p-2 md:p-4 text-left">
+                    <div
+                        className={`${width} w-full bg-white rounded-2xl md:rounded-3xl shadow-2xl flex flex-col max-h-[95vh] relative z-10 animate-in zoom-in-95 duration-300`}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between p-5 md:p-6 border-b border-slate-100 shrink-0">
+                            <div>
+                                <h3 className="text-lg font-black text-slate-800">{title}</h3>
+                                {subtitle && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{subtitle}</p>}
+                            </div>
+                            <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition shrink-0 ml-4">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-5 md:p-6 overflow-y-auto">
+                            {children}
+                        </div>
                     </div>
-                    <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition">
-                        <X className="w-5 h-5" />
-                    </button>
                 </div>
-                <div className="p-6 overflow-y-auto flex-1">{children}</div>
             </div>
         </div>
     );
