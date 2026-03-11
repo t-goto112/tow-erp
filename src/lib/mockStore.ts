@@ -620,6 +620,69 @@ class MockStore {
         this.notify();
     }
 
+    // ─── ダッシュボード手動調整 (V7.6) ───
+    manualAdjustQty(lotId: string, processId: string, mode: "correct" | "move_prev" | "move_next", newValue: number): { ok: boolean; error?: string } {
+        const lot = this.lots.find(l => l.id === lotId);
+        if (!lot) return { ok: false, error: "ロットが見つかりません" };
+        const proc = lot.processes.find(p => p.id === processId);
+        if (!proc) return { ok: false, error: "工程が見つかりません" };
+
+        const diff = newValue - proc.currentQty;
+        if (diff === 0) return { ok: true };
+
+        if (mode === "correct") {
+            // 数値修正のみ（総数にも波及）
+            proc.currentQty = newValue;
+            lot.totalQty += diff;
+            this.addHistory("仕掛数修正(直接)", `${lot.lotNumber} [${proc.name}] ${newValue}個に修正(総数差分:${diff})`, lot.lotNumber);
+        } else if (mode === "move_prev") {
+            // 前の工程に戻す
+            const prevProc = lot.processes
+                .filter(p => p.groupIndex === proc.groupIndex && p.stepOrder < proc.stepOrder)
+                .sort((a, b) => b.stepOrder - a.stepOrder)[0];
+            if (!prevProc) return { ok: false, error: "前の工程が見つかりません" };
+
+            const moveQty = Math.abs(diff);
+            if (diff < 0) {
+                // 自分を減らして前に戻す
+                proc.currentQty -= moveQty;
+                prevProc.currentQty += moveQty;
+                prevProc.completedQty -= moveQty;
+            } else {
+                // 前を減らして自分に戻す
+                if (prevProc.currentQty < moveQty) return { ok: false, error: "前工程の仕掛数が不足しています" };
+                proc.currentQty += moveQty;
+                prevProc.currentQty -= moveQty;
+                prevProc.completedQty += moveQty;
+            }
+            this.addHistory("工程間移動(前へ)", `${lot.lotNumber} [${proc.name}] <-> [${prevProc.name}] 差分:${diff}`, lot.lotNumber);
+        } else if (mode === "move_next") {
+            // 次の工程へ送る
+            const nextProc = lot.processes
+                .filter(p => p.groupIndex === proc.groupIndex && p.stepOrder > proc.stepOrder)
+                .sort((a, b) => a.stepOrder - b.stepOrder)[0];
+            if (!nextProc) return { ok: false, error: "次の工程が見つかりません" };
+
+            const moveQty = Math.abs(diff);
+            if (diff < 0) {
+                // 自分を減らして次へ（送り漏れ修正）
+                proc.currentQty -= moveQty;
+                proc.completedQty += moveQty;
+                nextProc.currentQty += moveQty;
+            } else {
+                // 次を減らして自分へ戻す
+                if (nextProc.currentQty < moveQty) return { ok: false, error: "次工程の仕掛数が不足しています" };
+                proc.currentQty += moveQty;
+                proc.completedQty -= moveQty;
+                nextProc.currentQty -= moveQty;
+            }
+            this.addHistory("工程間移動(次へ)", `${lot.lotNumber} [${proc.name}] <-> [${nextProc.name}] 差分:${diff}`, lot.lotNumber);
+        }
+
+        this.notify();
+        return { ok: true };
+    }
+
     // ─── 仕掛登録 (V7) ───
     registerWip(lotId: string, processId: string, qty: number, deliveryDate: string, dueDate: string, subcontractor: string, overridePrice?: number): { ok: boolean; error?: string } {
         const lot = this.lots.find(l => l.id === lotId);

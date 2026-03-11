@@ -292,16 +292,28 @@ function LotDetailModal({ lot, onClose }: { lot: MockLot | null; onClose: () => 
     const [editQty, setEditQty] = useState("");
     const [editDeliveryDate, setEditDeliveryDate] = useState("");
     const [editDue, setEditDue] = useState("");
+    const [adjustMode, setAdjustMode] = useState<"correct" | "move_prev" | "move_next">("correct");
     const [, setTick] = useState(0);
 
     if (!lot) return null;
 
     const handleSave = (processId: string, deliveryId: string) => {
-        if (!window.confirm("数量を変更します。この操作では追加費用は発生しません。よろしいですか？")) return;
+        if (!window.confirm("実績を修正します。この操作では追加費用は発生しません。よろしいですか？")) return;
         store.updateDelivery(lot.id, processId, deliveryId, Number(editQty), editDeliveryDate || undefined, editDue || undefined, true);
-        showToast("success", "更新しました（前後工程に連動反映済み）");
+        showToast("success", "実績を更新しました");
         setEditId(null);
         setTick((t: number) => t + 1);
+    };
+
+    const handleProcAdjust = (processId: string) => {
+        const result = store.manualAdjustQty(lot.id, processId, adjustMode, Number(editQty));
+        if (result.ok) {
+            showToast("success", "数量を調整しました");
+            setEditId(null);
+            setTick((t: number) => t + 1);
+        } else {
+            showToast("error", result.error || "エラー");
+        }
     };
 
     return (
@@ -315,12 +327,45 @@ function LotDetailModal({ lot, onClose }: { lot: MockLot | null; onClose: () => 
                                 <span className="font-bold text-sm">{proc.name}</span>
                                 <span className="text-[10px] text-slate-400">({proc.subcontractor})</span>
                             </div>
-                            <div className="flex gap-2 text-[10px] font-bold">
+                            <div className="flex gap-2 text-[10px] font-bold items-center">
                                 <span className="text-slate-500">現在:{proc.currentQty}</span>
+                                <button onClick={() => { setEditId(`proc-${proc.id}`); setEditQty(String(proc.currentQty)); setAdjustMode("correct"); }}
+                                    className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-blue-600 transition-colors">
+                                    <Edit2 size={10} />
+                                </button>
                                 <span className="text-emerald-600">完了:{proc.completedQty}</span>
                                 {proc.lossQty > 0 && <span className="text-red-500">ロス:{proc.lossQty}</span>}
                             </div>
                         </div>
+
+                        {/* 工程単位の手動調整フォーム (V7.6) */}
+                        {editId === `proc-${proc.id}` && (
+                            <div className="bg-white p-3 rounded-xl border border-blue-200 mb-3 space-y-3 animate-in slide-in-from-top-1 duration-200">
+                                <div className="flex items-center justify-between">
+                                    <h5 className="text-[10px] font-black text-blue-600 uppercase tracking-tighter">工程間 数量調整</h5>
+                                    <span className="text-[9px] text-slate-400">※費用(支払)には影響しません</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="flex-1">
+                                        <label className="block text-[9px] text-slate-400 mb-0.5">調整後 数量</label>
+                                        <input type="number" value={editQty} onChange={(e) => setEditQty(e.target.value)} className="w-full input-base !py-1 text-sm font-bold" />
+                                    </div>
+                                    <div className="flex-[2]">
+                                        <label className="block text-[9px] text-slate-400 mb-0.5">調整モード</label>
+                                        <select value={adjustMode} onChange={(e) => setAdjustMode(e.target.value as any)} className="w-full select-base !py-1 text-xs">
+                                            <option value="correct">数値のみ修正 (ロット総数連動)</option>
+                                            <option value="move_prev">前の工程に戻す (完了取消)</option>
+                                            <option value="move_next">後の工程に送る (送り漏れ)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end gap-2">
+                                    <button onClick={() => setEditId(null)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-[10px] font-bold transition-colors">キャンセル</button>
+                                    <button onClick={() => handleProcAdjust(proc.id)} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-bold shadow-sm transition-all active:scale-95">調整を実行</button>
+                                </div>
+                            </div>
+                        )}
+
                         {proc.deliveries.length > 0 ? proc.deliveries.map(del => {
                             const isEd = editId === del.id;
                             return (

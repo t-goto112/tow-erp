@@ -217,18 +217,18 @@ export default function RoutingPage() {
                 )}
             </div>
 
-            {selectedProc && needsWipRegistration && (
+            {selectedProc && (needsWipRegistration || (selectedProc.groupIndex === 0 && selectedProc.stepOrder === 1 && selectedProc.status !== "completed")) && (
                 <div className="bg-white rounded-2xl border border-blue-100 shadow-sm p-6 space-y-4 animate-in slide-in-from-top-4 duration-500">
                     <div className="flex items-center gap-3 border-b border-blue-50 pb-4">
                         <div className="bg-blue-600 p-2 rounded-lg text-white"><Loader2 className="w-5 h-5" /></div>
                         <div>
-                            <h3 className="font-black text-slate-800 tracking-tight">工程の仕掛登録</h3>
+                            <h3 className="font-black text-slate-800 tracking-tight">工程の仕掛登録 (投入)</h3>
                             <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Register WIP - {selectedProc.name}</p>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div><label className="block text-[10px] font-black text-slate-400 mb-1">数量</label><input type="number" value={wipQty} onChange={e => setWipQty(e.target.value)} className="input-base" /></div>
+                        <div><label className="block text-[10px] font-black text-slate-400 mb-1">追加投入数量</label><input type="number" value={wipQty} onChange={e => setWipQty(e.target.value)} className="input-base" /></div>
                         <div><label className="block text-[10px] font-black text-slate-400 mb-1">受注日 (参考)</label><input type="date" value={selectedLot?.orderDate} disabled className="input-base bg-slate-50 text-slate-400" /></div>
                         <div><label className="block text-[10px] font-black text-slate-400 mb-1">着手日 *</label><input type="date" value={wipDeliveryDate} onChange={e => setWipDeliveryDate(e.target.value)} className="input-base" /></div>
                         <div><label className="block text-[10px] font-black text-slate-400 mb-1">工程完了予定日 *</label><input type="date" value={wipDueDate} onChange={e => setWipDueDate(e.target.value)} className="input-base" /></div>
@@ -249,7 +249,7 @@ export default function RoutingPage() {
                 </div>
             )}
 
-            {selectedProc && !needsWipRegistration && (
+            {selectedProc && (selectedProc.status !== "pending" || (selectedProc.groupIndex === 0 && selectedProc.stepOrder === 1 && selectedProc.currentQty > 0)) && (
                 <>
                     {/* 現工程ステータス */}
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
