@@ -505,24 +505,62 @@ class MockStore {
         if (qty > proc.currentQty) return { ok: false, error: "差戻し数が現在数を超えています" };
         if (!returnDate || !prevDueDate) return { ok: false, error: "日付は必須です" };
 
+        // 前工程のテンプレートを探す
+        const product = this.products.find(p => p.id === lot.productId);
+        const currentGroup = product?.processGroups[proc.groupIndex];
+        const prevTpl = currentGroup?.templates
+            .filter(t => t.sortOrder < proc.stepOrder)
+            .sort((a, b) => b.sortOrder - a.sortOrder)[0];
+
+        if (!prevTpl) return { ok: false, error: "前工程のテンプレートが見つかりません" };
+
         proc.currentQty -= qty;
         this.consumePaymentWip(lot.lotNumber, proc.name, proc.subcontractor, qty);
 
         // 前工程を探す (現在の stepOrder より小さい中で最大のものを探す)
         const prevSteps = lot.processes
-            .filter(p => p.groupIndex === proc.groupIndex && p.stepOrder < proc.stepOrder)
-            .sort((a, b) => b.stepOrder - a.stepOrder);
-        let prev = prevSteps[0];
+            .filter(p => p.groupIndex === proc.groupIndex && p.stepOrder === prevTpl.sortOrder);
 
+        let prev = prevSteps[0];
         if (prevSubcontractor) {
             const exactPrev = prevSteps.find(p => p.subcontractor === prevSubcontractor);
-            if (exactPrev) prev = exactPrev;
+            if (exactPrev) {
+                prev = exactPrev;
+            } else {
+                // 指定された外注先が未登録の場合、新規作成して挿入 (V7.7)
+                const subInfo = prevTpl.subcontractors.find(s => s.name === prevSubcontractor);
+                const newProc: ProcessEntry = {
+                    id: `lp${uid()}`,
+                    name: prevTpl.name,
+                    subcontractor: prevSubcontractor,
+                    currentQty: 0,
+                    completedQty: 0,
+                    lossQty: 0,
+                    lossConfirmed: false,
+                    unitPrice: subInfo?.unitPrice || 0,
+                    unitPriceOverride: null,
+                    status: "in_progress",
+                    deliveries: [],
+                    groupIndex: proc.groupIndex,
+                    stepOrder: prevTpl.sortOrder,
+                    isAssemblyPoint: prevTpl.isAssemblyPoint
+                };
+                // 挿入位置を決める (stepOrder順)
+                const lastIdxWithSameOrLesserStep = [...lot.processes].reverse().findIndex(p => p.groupIndex === proc.groupIndex && p.stepOrder <= prevTpl.sortOrder);
+                if (lastIdxWithSameOrLesserStep === -1) {
+                    lot.processes.unshift(newProc);
+                } else {
+                    const insertIdx = lot.processes.length - lastIdxWithSameOrLesserStep;
+                    lot.processes.splice(insertIdx, 0, newProc);
+                }
+                prev = newProc;
+            }
         }
 
         if (prev) {
             prev.currentQty += qty;
             prev.completedQty -= qty;
-            if (prev.status === "completed") prev.status = "in_progress";
+            if (prev.status === "completed" || prev.status === "pending") prev.status = "in_progress";
             prev.deliveries.push({ id: `d${uid()}`, qty, deliveryDate: returnDate, completionDate: "", dueDate: prevDueDate });
 
             // 前工程の WIP 支払を (再) 作成
@@ -535,7 +573,7 @@ class MockStore {
 
         if (lot.status === "completed") lot.status = "in_progress";
 
-        this.addHistory("差戻し", `${lot.lotNumber} [${proc.name}] → ${qty}個を前工程へ`, lot.lotNumber);
+        this.addHistory("差戻し", `${lot.lotNumber} [${proc.name}] → ${qty}個を [${prev?.subcontractor || "前工程"}] へ`, lot.lotNumber);
         this.notify();
         return { ok: true };
     }
@@ -620,63 +658,76 @@ class MockStore {
         this.notify();
     }
 
-    // ─── ダッシュボード手動調整 (V7.6) ───
+    // ─── ダッシュボード手動調整 (V7.6/V7.7) ───
     manualAdjustQty(lotId: string, processId: string, mode: "correct" | "move_prev" | "move_next", newValue: number): { ok: boolean; error?: string } {
         const lot = this.lots.find(l => l.id === lotId);
         if (!lot) return { ok: false, error: "ロットが見つかりません" };
         const proc = lot.processes.find(p => p.id === processId);
         if (!proc) return { ok: false, error: "工程が見つかりません" };
 
-        const diff = newValue - proc.currentQty;
-        if (diff === 0) return { ok: true };
-
         if (mode === "correct") {
-            // 数値修正のみ（総数にも波及）
+            const diff = newValue - proc.currentQty;
             proc.currentQty = newValue;
             lot.totalQty += diff;
-            this.addHistory("仕掛数修正(直接)", `${lot.lotNumber} [${proc.name}] ${newValue}個に修正(総数差分:${diff})`, lot.lotNumber);
+            this.addHistory("数量修正", `${lot.lotNumber} [${proc.name}] 現在数を ${newValue}個に修正 (差分: ${diff})`, lot.lotNumber);
         } else if (mode === "move_prev") {
-            // 前の工程に戻す
-            const prevProc = lot.processes
-                .filter(p => p.groupIndex === proc.groupIndex && p.stepOrder < proc.stepOrder)
-                .sort((a, b) => b.stepOrder - a.stepOrder)[0];
-            if (!prevProc) return { ok: false, error: "前の工程が見つかりません" };
-
-            const moveQty = Math.abs(diff);
-            if (diff < 0) {
-                // 自分を減らして前に戻す
-                proc.currentQty -= moveQty;
-                prevProc.currentQty += moveQty;
-                prevProc.completedQty -= moveQty;
-            } else {
-                // 前を減らして自分に戻す
-                if (prevProc.currentQty < moveQty) return { ok: false, error: "前工程の仕掛数が不足しています" };
-                proc.currentQty += moveQty;
-                prevProc.currentQty -= moveQty;
-                prevProc.completedQty += moveQty;
-            }
-            this.addHistory("工程間移動(前へ)", `${lot.lotNumber} [${proc.name}] <-> [${prevProc.name}] 差分:${diff}`, lot.lotNumber);
+            return this.moveBack(lotId, processId, newValue, new Date().toISOString().split("T")[0], new Date().toISOString().split("T")[0]);
         } else if (mode === "move_next") {
-            // 次の工程へ送る
-            const nextProc = lot.processes
-                .filter(p => p.groupIndex === proc.groupIndex && p.stepOrder > proc.stepOrder)
-                .sort((a, b) => a.stepOrder - b.stepOrder)[0];
-            if (!nextProc) return { ok: false, error: "次の工程が見つかりません" };
+            return this.moveForward(lotId, processId, newValue, new Date().toISOString().split("T")[0], new Date().toISOString().split("T")[0], new Date().toISOString().split("T")[0]);
+        }
+        this.notify();
+        return { ok: true };
+    }
 
-            const moveQty = Math.abs(diff);
-            if (diff < 0) {
-                // 自分を減らして次へ（送り漏れ修正）
-                proc.currentQty -= moveQty;
-                proc.completedQty += moveQty;
-                nextProc.currentQty += moveQty;
-            } else {
-                // 次を減らして自分へ戻す
-                if (nextProc.currentQty < moveQty) return { ok: false, error: "次工程の仕掛数が不足しています" };
-                proc.currentQty += moveQty;
-                proc.completedQty -= moveQty;
-                nextProc.currentQty -= moveQty;
+    /** 納入明細単位の手動調整 (V7.7) */
+    manualAdjustDeliveryQty(lotId: string, processId: string, deliveryId: string, mode: "correct" | "move_prev" | "move_next", newQty: number, targetSub?: string): { ok: boolean; error?: string } {
+        const lot = this.lots.find(l => l.id === lotId);
+        if (!lot) return { ok: false, error: "ロットが見つかりません" };
+        const proc = lot.processes.find(p => p.id === processId);
+        if (!proc) return { ok: false, error: "工程が見つかりません" };
+        const del = proc.deliveries.find(d => d.id === deliveryId);
+        if (!del) return { ok: false, error: "明細が見つかりません" };
+
+        const actualQty = Math.min(newQty, del.qty);
+
+        if (mode === "correct") {
+            const diff = newQty - del.qty;
+            del.qty = newQty;
+            if (del.completionDate) proc.completedQty += diff;
+            else proc.currentQty += diff;
+
+            lot.totalQty += diff;
+            if (proc.currentQty < 0) proc.currentQty = 0;
+            if (proc.completedQty < 0) proc.completedQty = 0;
+
+            this.addHistory("明細修正", `${lot.lotNumber} [${proc.name}] 明細数量を ${newQty}個に修正 (差分: ${diff})`, lot.lotNumber);
+            this.notify();
+            return { ok: true };
+        }
+
+        // 移動モード (前または後へ)
+        if (mode === "move_prev") {
+            if (del.completionDate) {
+                proc.completedQty -= actualQty;
+                proc.currentQty += actualQty;
+                del.completionDate = ""; // 一旦仕掛に戻してから差戻す
             }
-            this.addHistory("工程間移動(次へ)", `${lot.lotNumber} [${proc.name}] <-> [${nextProc.name}] 差分:${diff}`, lot.lotNumber);
+            const res = this.moveBack(lotId, processId, actualQty, new Date().toISOString().split("T")[0], del.dueDate, targetSub);
+            if (!res.ok) return res;
+            del.qty -= actualQty;
+        } else if (mode === "move_next") {
+            if (del.completionDate) {
+                // 既に完了済みの明細を次に送る場合、moveForward は内部で completions を計算するため調整のみ
+                // (通常、完了済みのものをさらに「次へ送る」のは記録の付け替えを想定)
+                return { ok: false, error: "既に完了報告済みの明細を移動することはできません。数量調整を行ってください。" };
+            }
+            const res = this.moveForward(lotId, processId, actualQty, new Date().toISOString().split("T")[0], new Date().toISOString().split("T")[0], new Date().toISOString().split("T")[0], { nextSubcontractor: targetSub });
+            if (!res.ok) return res;
+            del.qty -= actualQty;
+        }
+
+        if (del.qty <= 0) {
+            proc.deliveries = proc.deliveries.filter(d => d.id !== del.id);
         }
 
         this.notify();

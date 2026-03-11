@@ -290,25 +290,16 @@ function SummaryCard({ icon, label, value, sub, color }: { icon: React.ReactNode
 function LotDetailModal({ lot, onClose }: { lot: MockLot | null; onClose: () => void }) {
     const [editId, setEditId] = useState<string | null>(null);
     const [editQty, setEditQty] = useState("");
-    const [editDeliveryDate, setEditDeliveryDate] = useState("");
-    const [editDue, setEditDue] = useState("");
     const [adjustMode, setAdjustMode] = useState<"correct" | "move_prev" | "move_next">("correct");
+    const [targetSub, setTargetSub] = useState("");
     const [, setTick] = useState(0);
 
     if (!lot) return null;
 
-    const handleSave = (processId: string, deliveryId: string) => {
-        if (!window.confirm("実績を修正します。この操作では追加費用は発生しません。よろしいですか？")) return;
-        store.updateDelivery(lot.id, processId, deliveryId, Number(editQty), editDeliveryDate || undefined, editDue || undefined, true);
-        showToast("success", "実績を更新しました");
-        setEditId(null);
-        setTick((t: number) => t + 1);
-    };
-
-    const handleProcAdjust = (processId: string) => {
-        const result = store.manualAdjustQty(lot.id, processId, adjustMode, Number(editQty));
+    const handleDeliveryAdjust = (processId: string, deliveryId: string) => {
+        const result = store.manualAdjustDeliveryQty(lot.id, processId, deliveryId, adjustMode, Number(editQty), targetSub || undefined);
         if (result.ok) {
-            showToast("success", "数量を調整しました");
+            showToast("success", "調整を実行しました");
             setEditId(null);
             setTick((t: number) => t + 1);
         } else {
@@ -318,86 +309,92 @@ function LotDetailModal({ lot, onClose }: { lot: MockLot | null; onClose: () => 
 
     return (
         <Modal open={!!lot} onClose={onClose} title={lot ? `${lot.lotNumber} — ${lot.product}` : ""} subtitle={lot ? `総数量: ${lot.totalQty}個` : ""} width="max-w-2xl">
-            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-                {lot.processes.map((proc, pi) => (
-                    <div key={proc.id} className={`rounded-2xl border p-4 ${proc.status === "in_progress" ? "border-blue-200 bg-blue-50/30" : "border-slate-100"}`}>
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto px-1">
+                {lot.processes.sort((a, b) => a.stepOrder - b.stepOrder).map(proc => (
+                    <div key={proc.id} className="bg-slate-50/50 rounded-2xl p-4 border border-slate-100 mb-4">
                         <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                                <span className={`w-2 h-2 rounded-full ${proc.status === "completed" ? "bg-emerald-500" : proc.status === "in_progress" ? "bg-blue-500" : "bg-slate-300"}`} />
-                                <span className="font-bold text-sm">{proc.name}</span>
-                                <span className="text-[10px] text-slate-400">({proc.subcontractor})</span>
+                            <div className="flex items-center gap-3">
+                                <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center shadow-sm border border-slate-100">
+                                    <span className="text-[10px] font-black text-slate-400">#{proc.stepOrder}</span>
+                                </div>
+                                <div className="flex-1">
+                                    <h4 className="text-sm font-black text-slate-800 tracking-tight">{proc.name}</h4>
+                                    <p className="text-[10px] text-slate-400 font-bold">{proc.subcontractor || "未割当"} ・ 単価: ¥{proc.unitPrice}</p>
+                                </div>
                             </div>
                             <div className="flex gap-2 text-[10px] font-bold items-center">
                                 <span className="text-slate-500">現在:{proc.currentQty}</span>
-                                <button onClick={() => { setEditId(`proc-${proc.id}`); setEditQty(String(proc.currentQty)); setAdjustMode("correct"); }}
-                                    className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-blue-600 transition-colors">
-                                    <Edit2 size={10} />
-                                </button>
                                 <span className="text-emerald-600">完了:{proc.completedQty}</span>
-                                {proc.lossQty > 0 && <span className="text-red-500">ロス:{proc.lossQty}</span>}
                             </div>
                         </div>
 
-                        {/* 工程単位の手動調整フォーム (V7.6) */}
-                        {editId === `proc-${proc.id}` && (
-                            <div className="bg-white p-3 rounded-xl border border-blue-200 mb-3 space-y-3 animate-in slide-in-from-top-1 duration-200">
-                                <div className="flex items-center justify-between">
-                                    <h5 className="text-[10px] font-black text-blue-600 uppercase tracking-tighter">工程間 数量調整</h5>
-                                    <span className="text-[9px] text-slate-400">※費用(支払)には影響しません</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="flex-1">
-                                        <label className="block text-[9px] text-slate-400 mb-0.5">調整後 数量</label>
-                                        <input type="number" value={editQty} onChange={(e) => setEditQty(e.target.value)} className="w-full input-base !py-1 text-sm font-bold" />
-                                    </div>
-                                    <div className="flex-[2]">
-                                        <label className="block text-[9px] text-slate-400 mb-0.5">調整モード</label>
-                                        <select value={adjustMode} onChange={(e) => setAdjustMode(e.target.value as any)} className="w-full select-base !py-1 text-xs">
-                                            <option value="correct">数値のみ修正 (ロット総数連動)</option>
-                                            <option value="move_prev">前の工程に戻す (完了取消)</option>
-                                            <option value="move_next">後の工程に送る (送り漏れ)</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div className="flex justify-end gap-2">
-                                    <button onClick={() => setEditId(null)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-[10px] font-bold transition-colors">キャンセル</button>
-                                    <button onClick={() => handleProcAdjust(proc.id)} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-bold shadow-sm transition-all active:scale-95">調整を実行</button>
-                                </div>
-                            </div>
-                        )}
+                        <div className="space-y-1.5">
+                            {proc.deliveries.length > 0 ? proc.deliveries.map(del => {
+                                const isEd = editId === del.id;
+                                const product = store.products.find(p => p.id === lot.productId);
+                                const group = product?.processGroups[proc.groupIndex];
+                                const targetTpl = adjustMode === "move_prev"
+                                    ? group?.templates.filter(t => t.sortOrder < proc.stepOrder).sort((a, b) => b.sortOrder - a.sortOrder)[0]
+                                    : group?.templates.filter(t => t.sortOrder > proc.stepOrder).sort((a, b) => a.sortOrder - b.sortOrder)[0];
+                                const subOptions = targetTpl?.subcontractors || [];
 
-                        {proc.deliveries.length > 0 ? proc.deliveries.map(del => {
-                            const isEd = editId === del.id;
-                            return (
-                                <div key={del.id} className="flex items-center justify-between bg-white rounded-xl p-2.5 border border-slate-100 text-xs mb-1.5">
-                                    {isEd ? (
-                                        <div className="flex items-center gap-2 flex-1 flex-wrap">
-                                            <label className="text-[9px] text-slate-400">数量</label>
-                                            <input type="number" value={editQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditQty(e.target.value)} className="w-16 px-1.5 py-1 border border-slate-200 rounded text-xs font-bold" />
-                                            <label className="text-[9px] text-slate-400">納入日</label>
-                                            <input type="date" value={editDeliveryDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditDeliveryDate(e.target.value)} className="px-1.5 py-1 border border-slate-200 rounded text-xs" />
-                                            <label className="text-[9px] text-slate-400">予定日</label>
-                                            <input type="date" value={editDue} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditDue(e.target.value)} className="px-1.5 py-1 border border-slate-200 rounded text-xs" />
-                                            <button onClick={() => handleSave(proc.id, del.id)} className="p-1 bg-blue-600 text-white rounded"><Check size={12} /></button>
-                                            <button onClick={() => setEditId(null)} className="p-1 bg-slate-200 rounded"><X size={12} /></button>
-                                        </div>
-                                    ) : (
-                                        <>
+                                return (
+                                    <div key={del.id} className="bg-white rounded-xl border border-slate-100 overflow-hidden shadow-sm">
+                                        <div className="flex items-center justify-between p-2.5 text-xs">
                                             <div className="flex items-center gap-3">
-                                                <span className="font-bold">{del.qty}個</span>
+                                                <span className="font-bold text-slate-700">{del.qty}個</span>
                                                 <span className="text-slate-400">納入:{del.deliveryDate}</span>
-                                                <span className="text-slate-400">予定:{del.dueDate}</span>
-                                                {del.completionDate && <span className="text-emerald-600 font-bold">完了:{del.completionDate}</span>}
+                                                {del.completionDate && <span className="text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">完了:{del.completionDate}</span>}
                                             </div>
-                                            {!del.completionDate && (
-                                                <button onClick={() => { setEditId(del.id); setEditQty(String(del.qty)); setEditDeliveryDate(del.deliveryDate); setEditDue(del.dueDate); }}
-                                                    className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-blue-600"><Edit2 size={12} /></button>
+                                            {!isEd && (
+                                                <button onClick={() => { setEditId(del.id); setEditQty(String(del.qty)); setAdjustMode("correct"); setTargetSub(""); }}
+                                                    className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-blue-600">
+                                                    <Edit2 size={12} />
+                                                </button>
                                             )}
-                                        </>
-                                    )}
-                                </div>
-                            );
-                        }) : <p className="text-[10px] text-slate-300 italic">納入実績なし</p>}
+                                        </div>
+
+                                        {isEd && (
+                                            <div className="p-3 border-t border-blue-50 bg-blue-50/20 space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <h5 className="text-[10px] font-black text-blue-600 uppercase">明細調整 - {del.id}</h5>
+                                                    <span className="text-[9px] text-slate-400">※支払非連動</span>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label className="block text-[9px] text-slate-400 mb-0.5">数量</label>
+                                                        <input type="number" value={editQty} onChange={(e) => setEditQty(e.target.value)} className="w-full input-base !py-1 text-sm font-bold" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[9px] text-slate-400 mb-0.5">モード</label>
+                                                        <select value={adjustMode} onChange={(e) => setAdjustMode(e.target.value as any)} className="w-full select-base !py-1 text-xs">
+                                                            <option value="correct">修正</option>
+                                                            <option value="move_prev">差戻し</option>
+                                                            <option value="move_next">送り</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+
+                                                {(adjustMode === "move_prev" || adjustMode === "move_next") && (
+                                                    <div>
+                                                        <label className="block text-[9px] text-slate-400 mb-0.5">外注先選択</label>
+                                                        <select value={targetSub} onChange={(e) => setTargetSub(e.target.value)} className="w-full select-base !py-1 text-xs">
+                                                            <option value="">(デフォルト)</option>
+                                                            {subOptions.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                                                        </select>
+                                                    </div>
+                                                )}
+
+                                                <div className="flex justify-end gap-2 pt-1">
+                                                    <button onClick={() => setEditId(null)} className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold">キャンセル</button>
+                                                    <button onClick={() => handleDeliveryAdjust(proc.id, del.id)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-bold shadow-sm">実行</button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            }) : <p className="text-[10px] text-slate-300 italic">実績なし</p>}
+                        </div>
                     </div>
                 ))}
             </div>
