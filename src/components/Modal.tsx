@@ -1,4 +1,5 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 interface ModalProps {
@@ -11,16 +12,19 @@ interface ModalProps {
 }
 
 export default function Modal({ open, onClose, title, subtitle, children, width = "max-w-lg" }: ModalProps) {
+    const [mounted, setMounted] = useState(false);
+
     useEffect(() => {
+        setMounted(true);
         const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
         if (open) document.addEventListener("keydown", handler);
         return () => document.removeEventListener("keydown", handler);
     }, [open, onClose]);
 
-    if (!open) return null;
+    if (!open || !mounted) return null;
 
-    return (
-        <div className="fixed inset-0 z-[990]">
+    const modalContent = (
+        <div className="fixed inset-0 z-[9999]">
             {/* Backdrop */}
             <div
                 className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
@@ -43,7 +47,7 @@ export default function Modal({ open, onClose, title, subtitle, children, width 
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
-                        <div className="p-5 md:p-6 overflow-y-auto">
+                        <div className="p-5 md:p-6 overflow-y-auto w-full">
                             {children}
                         </div>
                     </div>
@@ -51,4 +55,9 @@ export default function Modal({ open, onClose, title, subtitle, children, width 
             </div>
         </div>
     );
+
+    const modalRoot = document.getElementById("modal-root");
+    if (!modalRoot) return null;
+
+    return createPortal(modalContent, modalRoot);
 }

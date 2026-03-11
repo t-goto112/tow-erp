@@ -28,6 +28,7 @@ export default function RootLayout({
             >
                 <AppShell>{children}</AppShell>
                 <ToastContainer />
+                <div id="modal-root" />
             </body>
         </html>
     );
