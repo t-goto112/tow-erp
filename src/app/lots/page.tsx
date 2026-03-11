@@ -58,6 +58,14 @@ export default function LotsPage() {
             </div>
 
             <LotDetailModal lot={selectedLot} onClose={() => setSelectedLot(null)} />
+
+            {/* 新規ロット登録モーダル */}
+            <Modal open={isNewOpen} onClose={() => { setIsNewOpen(false); resetForm(); }} title="新規ロット登録" subtitle="受注品目から製造ロットを作成します" width="max-w-2xl">
+                <div className="space-y-4">
+                    {/* Content for new lot registration modal */}
+                    <p className="text-sm text-slate-500">This is a placeholder for the new lot registration form.</p>
+                </div>
+            </Modal>
         </div>
     );
 }

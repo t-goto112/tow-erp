@@ -204,7 +204,7 @@ export default function MasterPage() {
             <Modal open={isModalOpen} onClose={() => { setIsModalOpen(false); resetForm(); }}
                 title={editProduct ? "商品を編集" : "商品を新規登録"}
                 subtitle={step === 1 ? "Step 1: 商品情報" : "Step 2: 工程登録"}
-                width="max-w-2xl">
+                width="max-w-4xl">
                 <div className="space-y-5">
                     <div className="flex items-center gap-2 mb-2">
                         <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${step === 1 ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>
@@ -269,10 +269,12 @@ export default function MasterPage() {
                                                 <div>
                                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">外注先・単価</label>
                                                     {proc.subcontractors.map((sub, si) => (
-                                                        <div key={si} className="flex items-center gap-2 mb-2">
-                                                            <input type="text" value={sub.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateSubcontractor(gi, pi, si, "name", e.target.value)} placeholder="鍛造所 田中" className="input-base text-xs flex-1" />
-                                                            <input type="number" value={sub.unitPrice || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateSubcontractor(gi, pi, si, "unitPrice", Number(e.target.value))} placeholder="¥単価" className="input-base text-xs w-24" />
-                                                            {proc.subcontractors.length > 1 && <button onClick={() => removeSubcontractor(gi, pi, si)} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 shrink-0"><X size={14} /></button>}
+                                                        <div key={si} className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-2">
+                                                            <input type="text" value={sub.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateSubcontractor(gi, pi, si, "name", e.target.value)} placeholder="外注先名" className="input-base text-xs flex-1 w-full" />
+                                                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                                                <input type="number" value={sub.unitPrice || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateSubcontractor(gi, pi, si, "unitPrice", Number(e.target.value))} placeholder="¥単価" className="input-base text-xs w-full sm:w-24" />
+                                                                {proc.subcontractors.length > 1 && <button onClick={() => removeSubcontractor(gi, pi, si)} className="p-2 border border-red-100 rounded-xl hover:bg-red-50 text-red-500 shrink-0"><X size={14} /></button>}
+                                                            </div>
                                                         </div>
                                                     ))}
                                                     <button type="button" onClick={() => addSubcontractor(gi, pi)} className="text-[10px] text-blue-600 font-bold hover:underline">+ 外注先を追加</button>

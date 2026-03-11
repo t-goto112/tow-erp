@@ -141,7 +141,7 @@ export default function InventoryPage() {
             )}
 
             {/* 在庫修正モーダル */}
-            <Modal open={!!adjustItem} onClose={() => setAdjustItem(null)} title="在庫数量を修正" subtitle={adjustItem?.product}>
+            <Modal open={!!adjustItem} onClose={() => setAdjustItem(null)} title="在庫数量を修正" subtitle={adjustItem?.product} width="max-w-xl">
                 {adjustItem && (
                     <div className="space-y-5">
                         <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 flex items-center justify-between">
@@ -172,7 +172,7 @@ export default function InventoryPage() {
             </Modal>
 
             {/* 倉庫編集モーダル */}
-            <Modal open={!!warehouseEditItem} onClose={() => setWarehouseEditItem(null)} title="保管場所の変更" subtitle={warehouseEditItem?.product}>
+            <Modal open={!!warehouseEditItem} onClose={() => setWarehouseEditItem(null)} title="保管場所の変更" subtitle={warehouseEditItem?.product} width="max-w-xl">
                 {warehouseEditItem && (
                     <div className="space-y-5">
                         <div>

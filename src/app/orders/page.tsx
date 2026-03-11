@@ -128,7 +128,7 @@ export default function OrdersPage() {
             </div>
 
             {/* 詳細モーダル — 削除ボタン追加 */}
-            <Modal open={!!detailOrder} onClose={() => setDetailOrder(null)} title={detailOrder?.orderNumber || ""} subtitle={detailOrder?.customerName} width="max-w-lg">
+            <Modal open={!!detailOrder} onClose={() => setDetailOrder(null)} title={detailOrder?.orderNumber || ""} subtitle={detailOrder?.customerName} width="max-w-2xl">
                 {detailOrder && (
                     <div className="space-y-4">
                         <div className="flex gap-2 flex-wrap text-xs">
@@ -154,7 +154,7 @@ export default function OrdersPage() {
             </Modal>
 
             {/* 新規受注モーダル */}
-            <Modal open={isNewOpen} onClose={() => setIsNewOpen(false)} title="新規受注" subtitle={formNumber} width="max-w-lg">
+            <Modal open={isNewOpen} onClose={() => setIsNewOpen(false)} title="新規受注" subtitle={formNumber} width="max-w-3xl">
                 <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-3">
                         <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">受注番号</label><input type="text" value={formNumber} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormNumber(e.target.value)} className="input-base text-sm" /></div>
@@ -165,12 +165,12 @@ export default function OrdersPage() {
                     <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">品目</label>
                         {formItems.map((item, i) => (
-                            <div key={i} className="flex gap-2 mb-2">
-                                <select value={item.product} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { const arr = [...formItems]; arr[i].product = e.target.value; setFormItems(arr); }} className="select-base flex-1 min-w-0 text-sm">
+                            <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-2">
+                                <select value={item.product} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { const arr = [...formItems]; arr[i].product = e.target.value; setFormItems(arr); }} className="select-base flex-1 w-full text-sm">
                                     <option value="">選択</option>{store.products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                                 </select>
-                                <input type="number" placeholder="数量" value={item.qty || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const arr = [...formItems]; arr[i].qty = Number(e.target.value); setFormItems(arr); }} className="input-base w-24 shrink-0 px-2" />
-                                <input type="number" placeholder="単価" value={item.unitPrice || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const arr = [...formItems]; arr[i].unitPrice = Number(e.target.value); setFormItems(arr); }} className="input-base w-16 shrink-0 px-2 text-xs" disabled={isEcOrDirect} />
+                                <input type="number" placeholder="数量" value={item.qty || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const arr = [...formItems]; arr[i].qty = Number(e.target.value); setFormItems(arr); }} className="input-base w-full sm:w-24 shrink-0 px-2" />
+                                <input type="number" placeholder="単価" value={item.unitPrice || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const arr = [...formItems]; arr[i].unitPrice = Number(e.target.value); setFormItems(arr); }} className="input-base w-full sm:w-16 shrink-0 px-2 text-xs" disabled={isEcOrDirect} />
                             </div>
                         ))}
                         <button type="button" onClick={() => setFormItems(prev => [...prev, { product: "", qty: 0, unitPrice: 0, shipped: 0 }])} className="text-[10px] text-blue-600 font-bold hover:underline">+ 品目を追加</button>
