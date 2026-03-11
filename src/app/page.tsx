@@ -1,5 +1,7 @@
 "use client";
 
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+
 import { Search, Plus, Filter, LayoutGrid, List, ChevronRight, Edit2, History, ArrowRightLeft, User, Package, Calendar, MapPin, Subtitles, Clock, CheckCircle2, AlertCircle, X, ChevronDown, Trash2, ArrowLeftRight, MoreHorizontal, ShieldCheck, FileText, Settings, LogOut, LayoutDashboard, Truck, Wallet, Database, MoreVertical, Layers, Boxes, BadgeCheck, AlertTriangle } from 'lucide-react';
 import { store, type MockLot, type ProcessEntry, type Delivery } from "@/lib/mockStore";
 import { showToast } from "@/components/Toast";
