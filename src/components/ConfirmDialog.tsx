@@ -26,7 +26,7 @@ export default function ConfirmDialog({ open, onClose, onConfirm, title, message
     };
 
     return (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[1000] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
             <div className="max-w-sm w-full bg-white rounded-3xl shadow-2xl p-8 animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
                 <div className="flex flex-col items-center text-center gap-4">
                     <div className={`w-16 h-16 rounded-3xl flex items-center justify-center ${danger ? "bg-red-50 text-red-500" : "bg-amber-50 text-amber-500"}`}>

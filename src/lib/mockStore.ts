@@ -120,143 +120,23 @@ function uid() {
 }
 
 function createInitialLots(): MockLot[] {
-    const lot1Id = `lot_${uid()}`;
-    const lot1Num = "A23-045";
-    const lot2Id = `lot_${uid()}`;
-    const lot2Num = "B12-098";
-    const lot3Id = `lot_${uid()}`;
-    const lot3Num = "C88-121";
-
-    return [
-        {
-            id: lot1Id, lotNumber: lot1Num, product: "牛刀 210mm", productId: "prod1", totalQty: 500, status: "in_progress", orderDate: "2026-01-15",
-            processes: [
-                {
-                    id: `lp_${uid()}`, name: "鍛造", subcontractor: "鍛造所 田中", currentQty: 0, completedQty: 490, lossQty: 10, lossConfirmed: true, unitPrice: 300, unitPriceOverride: null, status: "completed", groupIndex: 0, stepOrder: 1,
-                    deliveries: [
-                        { id: `d_${uid()}`, qty: 300, deliveryDate: "2026-01-20", completionDate: "2026-02-01", dueDate: "2026-02-05" },
-                        { id: `d_${uid()}`, qty: 200, deliveryDate: "2026-02-01", completionDate: "2026-02-10", dueDate: "2026-02-10" },
-                    ]
-                },
-                {
-                    id: `lp_${uid()}`, name: "荒研ぎ", subcontractor: "研ぎ工房 山本", currentQty: 190, completedQty: 300, lossQty: 0, lossConfirmed: false, unitPrice: 200, unitPriceOverride: null, status: "in_progress", groupIndex: 0, stepOrder: 2,
-                    deliveries: [
-                        { id: `d_${uid()}`, qty: 300, deliveryDate: "2026-02-05", completionDate: "2026-02-18", dueDate: "2026-02-20" },
-                        { id: `d_${uid()}`, qty: 190, deliveryDate: "2026-02-12", completionDate: "", dueDate: "2026-03-05" },
-                    ]
-                },
-                {
-                    id: `lp_${uid()}`, name: "熱処理", subcontractor: "熱処理 鈴木", currentQty: 300, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 300, unitPriceOverride: null, status: "in_progress", groupIndex: 0, stepOrder: 3,
-                    deliveries: [
-                        { id: `d_${uid()}`, qty: 100, deliveryDate: "2026-02-20", completionDate: "", dueDate: "2026-03-05" },
-                        { id: `d_${uid()}`, qty: 200, deliveryDate: "2026-02-25", completionDate: "", dueDate: "2026-03-08" },
-                    ]
-                },
-                { id: `lp_${uid()}`, name: "仕上げ研ぎ", subcontractor: "研ぎ工房 佐藤", currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 250, unitPriceOverride: null, status: "pending", groupIndex: 0, stepOrder: 4, deliveries: [] },
-                { id: `lp_${uid()}`, name: "柄付け", subcontractor: "自社", currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 0, unitPriceOverride: null, status: "pending", groupIndex: 0, stepOrder: 5, isAssemblyPoint: true, deliveries: [] },
-            ],
-        },
-        {
-            id: lot2Id, lotNumber: lot2Num, product: "三徳 165mm", productId: "prod2", totalQty: 300, status: "in_progress", orderDate: "2026-02-01",
-            processes: [
-                {
-                    id: `lp_${uid()}`, name: "鍛造", subcontractor: "鍛造所 田中", currentQty: 0, completedQty: 295, lossQty: 5, lossConfirmed: true, unitPrice: 300, unitPriceOverride: null, status: "completed", groupIndex: 0, stepOrder: 1,
-                    deliveries: [{ id: `d_${uid()}`, qty: 300, deliveryDate: "2026-02-05", completionDate: "2026-02-12", dueDate: "2026-02-12" }]
-                },
-                {
-                    id: `lp_${uid()}`, name: "荒研ぎ", subcontractor: "研ぎ工房 山本", currentQty: 0, completedQty: 290, lossQty: 5, lossConfirmed: true, unitPrice: 200, unitPriceOverride: null, status: "completed", groupIndex: 0, stepOrder: 2,
-                    deliveries: [{ id: `d_${uid()}`, qty: 295, deliveryDate: "2026-02-13", completionDate: "2026-02-20", dueDate: "2026-02-22" }]
-                },
-                {
-                    id: `lp_${uid()}`, name: "熱処理", subcontractor: "熱処理 鈴木", currentQty: 90, completedQty: 200, lossQty: 0, lossConfirmed: false, unitPrice: 300, unitPriceOverride: null, status: "in_progress", groupIndex: 0, stepOrder: 3,
-                    deliveries: [
-                        { id: `d_${uid()}`, qty: 200, deliveryDate: "2026-02-22", completionDate: "2026-03-01", dueDate: "2026-03-01" },
-                        { id: `d_${uid()}`, qty: 90, deliveryDate: "2026-02-28", completionDate: "", dueDate: "2026-03-06" },
-                    ]
-                },
-                {
-                    id: `lp_${uid()}`, name: "仕上げ研ぎ", subcontractor: "研ぎ工房 佐藤", currentQty: 200, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 250, unitPriceOverride: null, status: "in_progress", groupIndex: 0, stepOrder: 4,
-                    deliveries: [{ id: `d_${uid()}`, qty: 200, deliveryDate: "2026-03-02", completionDate: "", dueDate: "2026-03-10" }]
-                },
-            ],
-        },
-        {
-            id: "lot3", lotNumber: "C88-121", product: "ペティ 120mm", productId: "prod3", totalQty: 1000, status: "created", orderDate: "2026-02-10",
-            processes: [
-                {
-                    id: "lp10", name: "鍛造", subcontractor: "鍛造所 田中", currentQty: 1000, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 250, unitPriceOverride: null, status: "pending", groupIndex: 0, stepOrder: 1,
-                    deliveries: [{ id: "d12", qty: 1000, deliveryDate: "2026-03-01", completionDate: "", dueDate: "2026-03-15" }]
-                },
-                { id: "lp11", name: "荒研ぎ", subcontractor: "研ぎ工房 山本", currentQty: 0, completedQty: 0, lossQty: 0, lossConfirmed: false, unitPrice: 180, unitPriceOverride: null, status: "pending", groupIndex: 0, stepOrder: 2, deliveries: [] },
-            ],
-        },
-    ];
+    return [];
 }
 
 function createInitialOrders(): MockOrder[] {
-    return [
-        { id: "ord1", orderNumber: "202601-1", customerName: "東京刃物店", channel: "wholesale", dueDate: "2026-03-15", status: "in_progress", notes: "", items: [{ product: "牛刀 210mm", qty: 100, unitPrice: 12000, shipped: 0 }], createdAt: "2026-01-15" },
-        { id: "ord2", orderNumber: "202602-1", customerName: "Amazon Japan", channel: "ec", dueDate: "2026-03-20", status: "pending", notes: "急ぎ", items: [{ product: "三徳 165mm", qty: 50, unitPrice: 0, shipped: 0 }, { product: "ペティ 120mm", qty: 30, unitPrice: 0, shipped: 0 }], createdAt: "2026-02-01" },
-        { id: "ord3", orderNumber: "202602-2", customerName: "関市ナイフショップ", channel: "direct", dueDate: "2026-04-01", status: "pending", notes: "", items: [{ product: "牛刀 210mm", qty: 200, unitPrice: 0, shipped: 0 }], createdAt: "2026-02-10" },
-    ];
+    return [];
 }
 
 function createInitialProducts(): MockProduct[] {
-    return [
-        {
-            id: "prod1", name: "牛刀 210mm", code: "GYU-210", processGroups: [
-                {
-                    id: "pg1", label: "工程登録1", templates: [
-                        { id: "pt1", name: "鍛造", subcontractors: [{ name: "鍛造所 田中", unitPrice: 300 }], sortOrder: 1 },
-                        { id: "pt2", name: "荒研ぎ", subcontractors: [{ name: "研ぎ工房 山本", unitPrice: 200 }, { name: "研ぎ工房 佐藤", unitPrice: 220 }], sortOrder: 2 },
-                        { id: "pt3", name: "熱処理", subcontractors: [{ name: "熱処理 鈴木", unitPrice: 300 }], sortOrder: 3 },
-                        { id: "pt4", name: "仕上げ研ぎ", subcontractors: [{ name: "研ぎ工房 佐藤", unitPrice: 250 }], sortOrder: 4 },
-                        { id: "pt5", name: "柄付け", subcontractors: [{ name: "自社", unitPrice: 0 }], sortOrder: 5, isAssemblyPoint: true },
-                    ]
-                },
-            ]
-        },
-        {
-            id: "prod2", name: "三徳 165mm", code: "SAN-165", processGroups: [
-                {
-                    id: "pg2", label: "工程登録1", templates: [
-                        { id: "pt6", name: "鍛造", subcontractors: [{ name: "鍛造所 田中", unitPrice: 300 }], sortOrder: 1 },
-                        { id: "pt7", name: "荒研ぎ", subcontractors: [{ name: "研ぎ工房 山本", unitPrice: 200 }], sortOrder: 2 },
-                        { id: "pt8", name: "熱処理", subcontractors: [{ name: "熱処理 鈴木", unitPrice: 300 }], sortOrder: 3 },
-                        { id: "pt9", name: "仕上げ研ぎ", subcontractors: [{ name: "研ぎ工房 佐藤", unitPrice: 250 }], sortOrder: 4 },
-                    ]
-                },
-            ]
-        },
-        {
-            id: "prod3", name: "ペティ 120mm", code: "PET-120", processGroups: [
-                {
-                    id: "pg3", label: "工程登録1", templates: [
-                        { id: "pt10", name: "鍛造", subcontractors: [{ name: "鍛造所 田中", unitPrice: 250 }], sortOrder: 1 },
-                        { id: "pt11", name: "荒研ぎ", subcontractors: [{ name: "研ぎ工房 山本", unitPrice: 180 }], sortOrder: 2 },
-                    ]
-                },
-            ]
-        },
-    ];
+    return [];
 }
 
 function createInitialPaymentLines(): PaymentLine[] {
-    return [
-        { id: `pl_${uid()}`, lotNumber: "A23-045", processName: "鍛造", subcontractor: "鍛造所 田中", qty: 490, unitPrice: 300, unitPriceOverride: null, amount: 147000, completionDate: "2026-02-10", status: "paid" },
-        { id: `pl_${uid()}`, lotNumber: "A23-045", processName: "荒研ぎ", subcontractor: "研ぎ工房 山本", qty: 300, unitPrice: 200, unitPriceOverride: null, amount: 60000, completionDate: "2026-02-18", status: "pre_payment" },
-        { id: `pl_${uid()}`, lotNumber: "B12-098", processName: "鍛造", subcontractor: "鍛造所 田中", qty: 295, unitPrice: 300, unitPriceOverride: null, amount: 88500, completionDate: "2026-02-12", status: "paid" },
-        { id: `pl_${uid()}`, lotNumber: "B12-098", processName: "荒研ぎ", subcontractor: "研ぎ工房 山本", qty: 290, unitPrice: 200, unitPriceOverride: null, amount: 58000, completionDate: "2026-02-20", status: "pre_payment" },
-        { id: `pl_${uid()}`, lotNumber: "B12-098", processName: "熱処理", subcontractor: "熱処理 鈴木", qty: 200, unitPrice: 300, unitPriceOverride: null, amount: 60000, completionDate: "2026-03-01", status: "wip" },
-    ];
+    return [];
 }
 
 function createInitialInventory(): MockInventory[] {
-    return [
-        { id: "inv1", product: "牛刀 210mm", code: "GYU-210", quantity: 45, type: "product", warehouse: "本社倉庫" },
-        { id: "inv2", product: "三徳 165mm", code: "SAN-165", quantity: 120, type: "product", warehouse: "本社倉庫" },
-        { id: "inv3", product: "VG10鋼材", code: "MAT-VG10", quantity: 500, type: "material", warehouse: "資材倉庫" },
-    ];
+    return [];
 }
 
 function createInitialUsers(): UserPermission[] {
