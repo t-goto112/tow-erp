@@ -15,9 +15,27 @@ const statusConfig: Record<string, { label: string; color: string; dot: string }
 export default function LotsPage() {
     const [lots, setLots] = useState<MockLot[]>([]);
     const [selectedLot, setSelectedLot] = useState<MockLot | null>(null);
+    const [isNewOpen, setIsNewOpen] = useState(false);
+    const [selectedOrderId, setSelectedOrderId] = useState("");
+    const [selectedItemIdx, setSelectedItemIdx] = useState<number | null>(null);
 
     const refresh = useCallback(() => setLots([...store.lots]), []);
     useEffect(() => { refresh(); return store.subscribe(refresh); }, [refresh]);
+
+    const resetForm = () => {
+        setSelectedOrderId("");
+        setSelectedItemIdx(null);
+    };
+
+    const handleCreateLot = () => {
+        if (!selectedOrderId || selectedItemIdx === null) return;
+        // 実際には store.createLotFromOrder(orderId, itemIdx) のようなメソッドが必要だが、
+        // 既存の createOrder ロジックでロットは自動生成される仕様のため、
+        // ここではプレースホルダー的に動作を定義。
+        showToast("success", "新規ロットを登録しました（デモ）");
+        setIsNewOpen(false);
+        resetForm();
+    };
 
     return (
         <div className="space-y-4 animate-in fade-in duration-300">
@@ -62,8 +80,39 @@ export default function LotsPage() {
             {/* 新規ロット登録モーダル */}
             <Modal open={isNewOpen} onClose={() => { setIsNewOpen(false); resetForm(); }} title="新規ロット登録" subtitle="受注品目から製造ロットを作成します" width="max-w-2xl">
                 <div className="space-y-4">
-                    {/* Content for new lot registration modal */}
-                    <p className="text-sm text-slate-500">This is a placeholder for the new lot registration form.</p>
+                    <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">対象受注</label>
+                        <select value={selectedOrderId} onChange={(e) => setSelectedOrderId(e.target.value)} className="select-base">
+                            <option value="">受注を選択</option>
+                            {store.orders.filter(o => o.status === "pending").map(o => (
+                                <option key={o.id} value={o.id}>{o.orderNumber} - {o.customerName}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {selectedOrderId && (
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">対象品目</label>
+                            <div className="space-y-2">
+                                {store.orders.find(o => o.id === selectedOrderId)?.items.map((item, i) => (
+                                    <button key={i} onClick={() => setSelectedItemIdx(i)}
+                                        className={`w-full text-left p-3 rounded-xl border transition ${selectedItemIdx === i ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:bg-slate-50"}`}>
+                                        <div className="flex justify-between items-center">
+                                            <span className="font-bold text-sm">{item.product}</span>
+                                            <span className="text-xs text-slate-500">{item.qty} 個</span>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="pt-2">
+                        <button onClick={handleCreateLot} disabled={!selectedOrderId || selectedItemIdx === null}
+                            className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300">
+                            ロットを作成する
+                        </button>
+                    </div>
                 </div>
             </Modal>
         </div>
