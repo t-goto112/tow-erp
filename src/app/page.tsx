@@ -1,10 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import {
-    AlertTriangle, Wallet, TrendingUp, Layers, CalendarDays,
-    ChevronRight, X, Check, Edit2,
-} from "lucide-react";
+import { Search, Plus, Filter, LayoutGrid, List, ChevronRight, Edit2, History, ArrowRightLeft, User, Package, Calendar, MapPin, Subtitles, Clock, CheckCircle2, AlertCircle, X, ChevronDown, Trash2, ArrowLeftRight, MoreHorizontal, ShieldCheck, FileText, Settings, LogOut, LayoutDashboard, Truck, Wallet, Database, MoreVertical, Layers, Boxes, BadgeCheck, AlertTriangle } from 'lucide-react';
 import { store, type MockLot, type ProcessEntry, type Delivery } from "@/lib/mockStore";
 import { showToast } from "@/components/Toast";
 import Modal from "@/components/Modal";
@@ -299,7 +295,8 @@ function LotDetailModal({ lot, onClose }: { lot: MockLot | null; onClose: () => 
     const handleDeliveryAdjust = (processId: string, deliveryId: string) => {
         const result = store.manualAdjustDeliveryQty(lot.id, processId, deliveryId, adjustMode, Number(editQty), targetSub || undefined);
         if (result.ok) {
-            showToast("success", "調整を実行しました");
+            const msg = result.syncPayment ? "調整を実行し、支払金額も更新しました" : "調整を実行しました（支払済のため金額は維持されます）";
+            showToast(result.syncPayment ? "success" : "info", msg);
             setEditId(null);
             setTick((t: number) => t + 1);
         } else {
@@ -338,8 +335,12 @@ function LotDetailModal({ lot, onClose }: { lot: MockLot | null; onClose: () => 
                                     : group?.templates.filter(t => t.sortOrder > proc.stepOrder).sort((a, b) => a.sortOrder - b.sortOrder)[0];
                                 const subOptions = targetTpl?.subcontractors || [];
 
+                                // 支払ステータス取得 (V7.8)
+                                const payLine = store.paymentLines.find(pl => pl.lotNumber === lot.lotNumber && pl.processName === proc.name && pl.subcontractor === proc.subcontractor);
+                                const isSyncedStatus = payLine?.status === "wip" || payLine?.status === "pre_payment";
+
                                 return (
-                                    <div key={del.id} className="bg-white rounded-xl border border-slate-100 overflow-hidden shadow-sm">
+                                    <div key={del.id} className={`bg-white rounded-xl border overflow-hidden shadow-sm transition-all ${isEd ? "border-blue-200 ring-2 ring-blue-50" : "border-slate-100"}`}>
                                         <div className="flex items-center justify-between p-2.5 text-xs">
                                             <div className="flex items-center gap-3">
                                                 <span className="font-bold text-slate-700">{del.qty}個</span>
@@ -358,7 +359,23 @@ function LotDetailModal({ lot, onClose }: { lot: MockLot | null; onClose: () => 
                                             <div className="p-3 border-t border-blue-50 bg-blue-50/20 space-y-3">
                                                 <div className="flex items-center justify-between">
                                                     <h5 className="text-[10px] font-black text-blue-600 uppercase">明細調整 - {del.id}</h5>
-                                                    <span className="text-[9px] text-slate-400">※支払非連動</span>
+                                                    <div className="flex items-center gap-1.5">
+                                                        {payLine ? (
+                                                            <>
+                                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isSyncedStatus ? "bg-blue-100 text-blue-600" : "bg-emerald-100 text-emerald-600"}`}>
+                                                                    支払:{payLine.status === "wip" ? "仕掛中" : payLine.status === "pre_payment" ? "支払前" : payLine.status === "paid" ? "支払済" : "確認済"}
+                                                                </span>
+                                                                {!isSyncedStatus && adjustMode === "correct" && (
+                                                                    <div className="flex items-center gap-1 text-amber-600" title="支払確定済みのため、金額は自動修正されません">
+                                                                        <AlertCircle size={10} />
+                                                                        <span className="text-[9px] font-bold">非連動</span>
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-[9px] text-slate-400 font-bold italic">支払情報なし</span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <div>

@@ -47,6 +47,9 @@ CREATE POLICY "Admins can manage processes" ON processes FOR ALL USING (
 CREATE POLICY "Anyone authenticated can read processes" ON processes FOR SELECT USING (auth.role() = 'authenticated');
 
 -- ────────── 3. 業務データ (Orders, Lots, Lot Processes) ──────────
+CREATE POLICY "Anyone authenticated can read lot_process_deliveries" ON lot_process_deliveries FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Authenticated users can manage lot_process_deliveries" ON lot_process_deliveries FOR ALL USING (auth.role() = 'authenticated');
+
 -- ... (既存のポリシーは維持) ...
 
 -- ────────── 4. 支払データ (Payments) ──────────

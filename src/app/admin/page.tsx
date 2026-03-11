@@ -108,6 +108,30 @@ export default function AdminPage() {
             <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4">
                 <p className="text-xs text-slate-400 font-bold">💡 管理者アカウントの権限は変更できません。一般ユーザーの閲覧・編集権限をチェックボックスで個別に設定できます。</p>
             </div>
+
+            {/* サンドボックスツール */}
+            <div className="bg-amber-50 rounded-3xl border border-amber-200 p-8 space-y-4">
+                <div className="flex items-center gap-3 text-amber-700">
+                    <Shield className="w-6 h-6" />
+                    <h3 className="text-lg font-black uppercase tracking-tight">サンドボックスツール</h3>
+                </div>
+                <p className="text-sm text-amber-800/70 font-medium">
+                    デモ利用やテストの後に、すべての実績データ（受注、ロット、在庫、支払履歴など）を初期のデモ状態にリセットできます。
+                    <br />
+                    <span className="text-amber-600 font-bold">※この操作は取り消せません。</span>
+                </p>
+                <button
+                    onClick={() => {
+                        if (confirm("すべての実績データを初期状態にリセットしますか？この操作は取り消せません。")) {
+                            store.resetForSandbox();
+                            showToast("success", "システムを初期デモ状態にリセットしました");
+                        }
+                    }}
+                    className="bg-amber-600 text-white px-6 py-3 rounded-2xl font-black text-sm shadow-xl shadow-amber-600/20 hover:bg-amber-700 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2"
+                >
+                    デモデータをリセットする
+                </button>
+            </div>
         </div>
     );
 }

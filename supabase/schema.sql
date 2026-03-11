@@ -41,7 +41,9 @@ CREATE TABLE processes (
   product_id UUID REFERENCES products(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   sort_order INT NOT NULL DEFAULT 0,
+  group_index INT NOT NULL DEFAULT 0, -- メイン工程、工程登録2などのグループ
   is_parallel BOOLEAN DEFAULT FALSE,
+  is_assembly_point BOOLEAN DEFAULT FALSE, -- パーツ組付けポイントフラグ
   parallel_group TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -109,11 +111,24 @@ CREATE TABLE lot_processes (
   input_quantity INT NOT NULL DEFAULT 0,
   completed_quantity INT DEFAULT 0,
   defect_quantity INT DEFAULT 0,
+  loss_qty INT DEFAULT 0,           -- 欠損・端数数量
+  loss_confirmed BOOLEAN DEFAULT FALSE, -- 欠損確定フラグ
   unit_price_override NUMERIC(10,2),
   is_rework BOOLEAN DEFAULT FALSE,
   rework_charge BOOLEAN DEFAULT FALSE,
   started_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- ─── 8.1 納入明細 (V7.7/V7.8 対応) ───
+CREATE TABLE lot_process_deliveries (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lot_process_id UUID REFERENCES lot_processes(id) ON DELETE CASCADE,
+  qty INT NOT NULL,
+  delivery_date DATE,
+  completion_date DATE,
+  due_date DATE,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -136,8 +151,8 @@ CREATE TABLE payments (
   period_start DATE NOT NULL,
   period_end DATE NOT NULL,
   total_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
-  status TEXT DEFAULT 'draft'
-    CHECK (status IN ('draft','pending_approval','approved','paid')),
+  status TEXT DEFAULT 'wip'
+    CHECK (status IN ('wip','pre_payment','paid','confirmed')), -- mockStore と統一
   submitted_by UUID REFERENCES profiles(id),
   approved_by UUID REFERENCES profiles(id),
   submitted_at TIMESTAMPTZ,
@@ -199,13 +214,13 @@ CREATE TABLE warehouses (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- ─── 13. 在庫 (完成品・原材料) ───
+-- ─── 13. 在庫 (完成品・原材料・パーツ) ───
 CREATE TABLE inventory (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   product_id UUID REFERENCES products(id),
   warehouse_id UUID REFERENCES warehouses(id),
   lot_id UUID REFERENCES lots(id),
-  item_type TEXT CHECK (item_type IN ('product', 'material')),
+  item_type TEXT CHECK (item_type IN ('product', 'material', 'parts')), -- parts を追加
   quantity NUMERIC(12,2) NOT NULL DEFAULT 0,
   unit TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),

@@ -679,8 +679,8 @@ class MockStore {
         return { ok: true };
     }
 
-    /** 納入明細単位の手動調整 (V7.7) */
-    manualAdjustDeliveryQty(lotId: string, processId: string, deliveryId: string, mode: "correct" | "move_prev" | "move_next", newQty: number, targetSub?: string): { ok: boolean; error?: string } {
+    /** 納入明細単位の手動調整 (V7.7 / V7.8 連動強化) */
+    manualAdjustDeliveryQty(lotId: string, processId: string, deliveryId: string, mode: "correct" | "move_prev" | "move_next", newQty: number, targetSub?: string): { ok: boolean; error?: string; syncPayment?: boolean } {
         const lot = this.lots.find(l => l.id === lotId);
         if (!lot) return { ok: false, error: "ロットが見つかりません" };
         const proc = lot.processes.find(p => p.id === processId);
@@ -689,6 +689,7 @@ class MockStore {
         if (!del) return { ok: false, error: "明細が見つかりません" };
 
         const actualQty = Math.min(newQty, del.qty);
+        let syncPayment = false;
 
         if (mode === "correct") {
             const diff = newQty - del.qty;
@@ -700,9 +701,28 @@ class MockStore {
             if (proc.currentQty < 0) proc.currentQty = 0;
             if (proc.completedQty < 0) proc.completedQty = 0;
 
-            this.addHistory("明細修正", `${lot.lotNumber} [${proc.name}] 明細数量を ${newQty}個に修正 (差分: ${diff})`, lot.lotNumber);
+            // 支払連動ロジック (V7.8)
+            // 該当する支払明細を探す (仕掛中または支払前)
+            const pl = this.paymentLines.find(p =>
+                p.lotNumber === lot.lotNumber &&
+                p.processName === proc.name &&
+                p.subcontractor === proc.subcontractor &&
+                (p.status === "wip" || p.status === "pre_payment")
+            );
+
+            if (pl) {
+                pl.qty += diff;
+                if (pl.qty <= 0) {
+                    this.paymentLines = this.paymentLines.filter(p => p.id !== pl.id);
+                } else {
+                    pl.amount = pl.qty * (pl.unitPriceOverride || pl.unitPrice);
+                }
+                syncPayment = true;
+            }
+
+            this.addHistory("明細修正", `${lot.lotNumber} [${proc.name}] 明細数量を ${newQty}個に修正 (差分: ${diff}${syncPayment ? ", 支払連動あり" : ""})`, lot.lotNumber);
             this.notify();
-            return { ok: true };
+            return { ok: true, syncPayment };
         }
 
         // 移動モード (前または後へ)
@@ -1087,6 +1107,18 @@ class MockStore {
             });
         });
         return alerts.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    }
+
+    // ─── サンドボックス（デモ状態へのリセット） ───
+    resetForSandbox() {
+        this.lots = createInitialLots();
+        this.orders = createInitialOrders();
+        this.products = createInitialProducts();
+        this.paymentLines = createInitialPaymentLines();
+        this.inventory = createInitialInventory();
+        this.users = createInitialUsers();
+        this.history = [];
+        this.notify();
     }
 }
 
