@@ -71,21 +71,30 @@ function UserProfileFooter() {
 // Sidebar logic to use the fetched profile for navigation
 function SidebarContent({ pathname }: { pathname: string }) {
     const [profile, setProfile] = useState<{ role: string; permissions?: any } | null>(null);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const getProfile = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                const { data } = await supabase
-                    .from('profiles')
-                    .select('role, permissions')
-                    .eq('id', user.id)
-                    .single();
-                if (data) setProfile(data);
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    const { data, error } = await supabase
+                        .from('profiles')
+                        .select('role, permissions')
+                        .eq('id', user.id)
+                        .single();
+                    if (data) setProfile(data);
+                }
+            } catch (err) {
+                console.error("Sidebar profile fetch error:", err);
+            } finally {
+                setLoading(false);
             }
         };
         getProfile();
     }, []);
+
+    if (loading) return <div className="flex-1 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>;
 
     const isAdmin = profile?.role === 'admin';
     const permissions = profile?.permissions || {};
@@ -93,7 +102,9 @@ function SidebarContent({ pathname }: { pathname: string }) {
     const isVisible = (href: string) => {
         if (isAdmin) return true;
         const pageKey = href.replace('/', '') || 'dashboard'; // / -> dashboard
-        return permissions[pageKey]?.view !== false; // Default to visible unless explicitly false
+        // If regular user and no explicit permission found, default to visible if not admin page
+        if (href === '/admin') return false;
+        return permissions[pageKey]?.view !== false;
     };
 
     const filteredNavItems = navItems.filter(item => isVisible(item.href));

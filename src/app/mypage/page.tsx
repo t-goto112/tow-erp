@@ -159,8 +159,8 @@ export default function MyPage() {
 
             <button
                 onClick={handleSave}
-                disabled={saving}
-                className="w-full bg-slate-800 text-white font-bold py-4 rounded-2xl shadow-xl shadow-slate-800/20 hover:bg-slate-900 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                disabled={saving || !profile}
+                className="w-full bg-slate-800 text-white font-bold py-4 rounded-2xl shadow-xl shadow-slate-800/20 hover:bg-slate-900 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "設定内容を保存する"}
             </button>

@@ -245,10 +245,23 @@ BEGIN
 END $$;
 
 -- profiles テーブルだけは特別な管理者ポリシーを追加（自分または管理者が更新可能）
-DROP POLICY IF EXISTS "Authenticated full access" ON profiles;
+DROP POLICY IF EXISTS "Profiles access" ON profiles;
 CREATE POLICY "Profiles access" ON profiles FOR ALL USING (
   auth.uid() = id OR (SELECT role FROM profiles WHERE id = auth.uid()) = 'admin'
 );
+
+-- 明示的な更新ポリシーも追加（重複しても問題なし）
+DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
+CREATE POLICY "Users can update own profile" ON profiles
+  FOR UPDATE USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Admin can update all profiles" ON profiles;
+CREATE POLICY "Admin can update all profiles" ON profiles
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
 
 -- 完了確認
 SELECT 'System tables and RLS fully configured!' AS result;
