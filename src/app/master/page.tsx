@@ -2,32 +2,48 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Plus, Trash2, Edit2, Check, Loader2, ChevronRight, ArrowUp, ArrowDown, X, Package, Copy } from "lucide-react";
-import { store, type MockProduct, type ProcessTemplate, type ProcessGroup } from "@/lib/mockStore";
 import { showToast } from "@/components/Toast";
 import Modal from "@/components/Modal";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import {
+    fetchMasterProducts, createProduct, updateProduct, deleteProduct,
+    processesToFormGroups,
+    type MasterProduct, type FormGroup
+} from "@/lib/services/masterService";
 
 let _formUid = Date.now();
 function formUid() { return `f${++_formUid}`; }
 
 export default function MasterPage() {
-    const [products, setProducts] = useState<MockProduct[]>([]);
+    const [products, setProducts] = useState<MasterProduct[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editProduct, setEditProduct] = useState<MockProduct | null>(null);
+    const [editProduct, setEditProduct] = useState<MasterProduct | null>(null);
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const [step, setStep] = useState<1 | 2>(1);
+    const [loading, setLoading] = useState(false);
+    const [fetching, setFetching] = useState(true);
 
     // 商品フォーム
     const [formName, setFormName] = useState("");
     const [formCode, setFormCode] = useState("");
 
     // 工程グループ
-    const [formGroups, setFormGroups] = useState<ProcessGroup[]>([]);
+    const [formGroups, setFormGroups] = useState<FormGroup[]>([]);
 
-    const [loading, setLoading] = useState(false);
+    const refresh = useCallback(async () => {
+        try {
+            setFetching(true);
+            const data = await fetchMasterProducts();
+            setProducts(data);
+        } catch (e: any) {
+            console.error(e);
+            showToast("error", "商品データの取得に失敗しました");
+        } finally {
+            setFetching(false);
+        }
+    }, []);
 
-    const refresh = useCallback(() => setProducts([...store.products]), []);
-    useEffect(() => { refresh(); return store.subscribe(refresh); }, [refresh]);
+    useEffect(() => { refresh(); }, [refresh]);
 
     const resetForm = () => {
         setFormName(""); setFormCode("");
@@ -37,19 +53,18 @@ export default function MasterPage() {
 
     const openNew = () => { resetForm(); setIsModalOpen(true); };
 
-    const openEdit = (p: MockProduct) => {
+    const openEdit = (p: MasterProduct) => {
         setEditProduct(p);
         setFormName(p.name); setFormCode(p.code);
-        setFormGroups(JSON.parse(JSON.stringify(p.processGroups)));
+        setFormGroups(processesToFormGroups(p.processes || []));
         setStep(1); setIsModalOpen(true);
     };
 
-    const duplicateProduct = (p: MockProduct) => {
-        setEditProduct(null); // Because it is a new item
+    const duplicateProduct = (p: MasterProduct) => {
+        setEditProduct(null);
         setFormName(p.name + " (コピー)");
         setFormCode(p.code + "-COPY");
-        // Update IDs within processGroups to ensure uniqueness
-        const duplicatedGroups = JSON.parse(JSON.stringify(p.processGroups)).map((g: any) => ({
+        const duplicatedGroups = processesToFormGroups(p.processes || []).map((g: any) => ({
             ...g,
             id: formUid(),
             templates: g.templates.map((t: any) => ({
@@ -75,7 +90,7 @@ export default function MasterPage() {
     };
 
     const removeGroup = (gi: number) => {
-        setFormGroups(prev => prev.filter((_, i) => i !== gi));
+        setFormGroups(prev => prev.filter((_: any, i: number) => i !== gi));
     };
 
     const addProcess = (gi: number) => {
@@ -86,7 +101,7 @@ export default function MasterPage() {
 
     const removeProcess = (gi: number, pi: number) => {
         const arr = [...formGroups];
-        arr[gi].templates = arr[gi].templates.filter((_, i) => i !== pi).map((p, i) => ({ ...p, sortOrder: i + 1 }));
+        arr[gi].templates = arr[gi].templates.filter((_: any, i: number) => i !== pi).map((p: any, i: number) => ({ ...p, sortOrder: i + 1 }));
         setFormGroups(arr);
     };
 
@@ -96,7 +111,7 @@ export default function MasterPage() {
         const ni = pi + dir;
         if (ni < 0 || ni >= tpl.length) return;
         [tpl[pi], tpl[ni]] = [tpl[ni], tpl[pi]];
-        arr[gi].templates = tpl.map((p, i) => ({ ...p, sortOrder: i + 1 }));
+        arr[gi].templates = tpl.map((p: any, i: number) => ({ ...p, sortOrder: i + 1 }));
         setFormGroups(arr);
     };
 
@@ -120,35 +135,46 @@ export default function MasterPage() {
 
     const removeSubcontractor = (gi: number, pi: number, si: number) => {
         const arr = [...formGroups];
-        arr[gi].templates[pi].subcontractors = arr[gi].templates[pi].subcontractors.filter((_, i) => i !== si);
+        arr[gi].templates[pi].subcontractors = arr[gi].templates[pi].subcontractors.filter((_: any, i: number) => i !== si);
         setFormGroups(arr);
     };
 
     const handleSave = async () => {
         setLoading(true);
-        await new Promise(r => setTimeout(r, 300));
-
-        const cleanGroups = formGroups.map(g => ({
-            ...g, templates: g.templates.filter(t => t.name),
-        })).filter(g => g.templates.length > 0);
-
-        const data = { name: formName, code: formCode, processGroups: cleanGroups };
-
-        if (editProduct) {
-            store.updateProduct(editProduct.id, data);
-            showToast("success", `「${formName}」を更新しました`);
-        } else {
-            store.createProduct(data);
-            showToast("success", `「${formName}」を登録しました`);
+        try {
+            if (editProduct) {
+                await updateProduct(editProduct.id, formName, formCode, formGroups);
+                showToast("success", `「${formName}」を更新しました`);
+            } else {
+                await createProduct(formName, formCode, formGroups);
+                showToast("success", `「${formName}」を登録しました`);
+            }
+            setIsModalOpen(false); resetForm();
+            await refresh();
+        } catch (e: any) {
+            console.error(e);
+            showToast("error", e.message || "保存に失敗しました");
+        } finally {
+            setLoading(false);
         }
-        setLoading(false); setIsModalOpen(false); resetForm();
     };
 
     const handleDelete = async () => {
         if (!deleteId) return;
-        store.deleteProduct(deleteId);
-        showToast("success", "削除しました");
-        setDeleteId(null);
+        try {
+            await deleteProduct(deleteId);
+            showToast("success", "削除しました");
+            setDeleteId(null);
+            await refresh();
+        } catch (e: any) {
+            console.error(e);
+            showToast("error", e.message || "削除に失敗しました");
+        }
+    };
+
+    // Convert processes to groups for display
+    const getProductGroups = (product: MasterProduct) => {
+        return processesToFormGroups(product.processes || []);
     };
 
     return (
@@ -162,42 +188,51 @@ export default function MasterPage() {
 
             {/* 商品カード一覧 */}
             <div className="space-y-3">
-                {products.map(p => (
-                    <div key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition">
-                        <div className="flex items-start justify-between mb-3">
-                            <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className="font-mono text-xs font-bold text-blue-600">{p.code}</span>
-                                    <span className="font-bold text-slate-800">{p.name}</span>
-                                </div>
-                                <p className="text-xs text-slate-400">{p.processGroups.length}グループ | {p.processGroups.reduce((s, g) => s + g.templates.length, 0)}工程</p>
-                            </div>
-                            <div className="flex items-center gap-1">
-                                <button onClick={() => duplicateProduct(p)} className="p-1.5 rounded-md hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition" title="複製"><Copy size={14} /></button>
-                                <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition" title="編集"><Edit2 size={14} /></button>
-                                <button onClick={() => setDeleteId(p.id)} className="p-1.5 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 transition" title="削除"><Trash2 size={14} /></button>
-                            </div>
-                        </div>
-                        {/* 工程グループ別フロー表示 */}
-                        {p.processGroups.map((g, gi) => (
-                            <div key={g.id} className="mb-2">
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{g.label}</p>
-                                <div className="flex items-center gap-1 overflow-x-auto pb-1">
-                                    {g.templates.sort((a, b) => a.sortOrder - b.sortOrder).map((pt, i) => (
-                                        <div key={pt.id} className="flex items-center gap-1 shrink-0">
-                                            <div className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-center">
-                                                <p className="text-[10px] font-bold text-slate-600">{pt.name}</p>
-                                                <p className="text-[9px] text-slate-400">{pt.subcontractors.map(s => s.name).join(", ")}</p>
-                                            </div>
-                                            {i < g.templates.length - 1 && <ChevronRight className="w-3 h-3 text-slate-300 shrink-0" />}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
+                {fetching && products.length === 0 && (
+                    <div className="text-center py-20 bg-white rounded-xl border border-slate-200">
+                        <Loader2 className="w-6 h-6 animate-spin mx-auto text-slate-400" />
+                        <p className="text-sm text-slate-400 mt-2">読み込み中...</p>
                     </div>
-                ))}
-                {products.length === 0 && <div className="text-center py-20 bg-white rounded-xl border border-dashed border-slate-200"><p className="text-sm text-slate-400">商品が登録されていません</p></div>}
+                )}
+                {products.map((p: MasterProduct) => {
+                    const groups = getProductGroups(p);
+                    return (
+                        <div key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition">
+                            <div className="flex items-start justify-between mb-3">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-mono text-xs font-bold text-blue-600">{p.code}</span>
+                                        <span className="font-bold text-slate-800">{p.name}</span>
+                                    </div>
+                                    <p className="text-xs text-slate-400">{groups.length}グループ | {groups.reduce((s: number, g: any) => s + g.templates.length, 0)}工程</p>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <button onClick={() => duplicateProduct(p)} className="p-1.5 rounded-md hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition" title="複製"><Copy size={14} /></button>
+                                    <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition" title="編集"><Edit2 size={14} /></button>
+                                    <button onClick={() => setDeleteId(p.id)} className="p-1.5 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 transition" title="削除"><Trash2 size={14} /></button>
+                                </div>
+                            </div>
+                            {/* 工程グループ別フロー表示 */}
+                            {groups.map((g: any, gi: number) => (
+                                <div key={g.id || gi} className="mb-2">
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{g.label}</p>
+                                    <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                                        {g.templates.sort((a: any, b: any) => a.sortOrder - b.sortOrder).map((pt: any, i: number) => (
+                                            <div key={pt.id || i} className="flex items-center gap-1 shrink-0">
+                                                <div className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-center">
+                                                    <p className="text-[10px] font-bold text-slate-600">{pt.name}</p>
+                                                    <p className="text-[9px] text-slate-400">{pt.subcontractors.map((s: any) => s.name).join(", ")}</p>
+                                                </div>
+                                                {i < g.templates.length - 1 && <ChevronRight className="w-3 h-3 text-slate-300 shrink-0" />}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    );
+                })}
+                {!fetching && products.length === 0 && <div className="text-center py-20 bg-white rounded-xl border border-dashed border-slate-200"><p className="text-sm text-slate-400">商品が登録されていません</p></div>}
             </div>
 
             {/* モーダル */}
@@ -235,7 +270,7 @@ export default function MasterPage() {
                     {step === 2 && (
                         <>
                             <div className="space-y-5 max-h-[50vh] overflow-y-auto pr-1">
-                                {formGroups.map((group, gi) => (
+                                {formGroups.map((group: any, gi: number) => (
                                     <div key={group.id} className="border-2 border-blue-100 rounded-2xl p-4">
                                         <div className="flex items-center justify-between mb-3">
                                             <span className="text-xs font-black text-blue-600 uppercase">{group.label}</span>
@@ -244,7 +279,7 @@ export default function MasterPage() {
                                             )}
                                         </div>
 
-                                        {group.templates.map((proc, pi) => (
+                                        {group.templates.map((proc: any, pi: number) => (
                                             <div key={proc.id} className="bg-slate-50 rounded-2xl border border-slate-200 p-4 mb-3">
                                                 <div className="flex items-center justify-between mb-3">
                                                     <span className="text-xs font-black text-slate-500">工程 {pi + 1}</span>
@@ -268,7 +303,7 @@ export default function MasterPage() {
                                                 </div>
                                                 <div>
                                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">外注先・単価</label>
-                                                    {proc.subcontractors.map((sub, si) => (
+                                                    {proc.subcontractors.map((sub: any, si: number) => (
                                                         <div key={si} className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-2">
                                                             <input type="text" value={sub.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateSubcontractor(gi, pi, si, "name", e.target.value)} placeholder="外注先名" className="input-base text-xs flex-1 w-full" />
                                                             <div className="flex items-center gap-2 w-full sm:w-auto">

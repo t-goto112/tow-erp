@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Shield, Check, X, Eye, Edit2 } from "lucide-react";
-import { store, type UserPermission } from "@/lib/mockStore";
+import { Shield, Check, X, Eye, Edit2, Loader2 } from "lucide-react";
 import { showToast } from "@/components/Toast";
+import { supabase } from "@/lib/supabase";
 
 const pageNames: Record<string, string> = {
     dashboard: "ダッシュボード",
@@ -16,21 +16,70 @@ const pageNames: Record<string, string> = {
     admin: "管理者設定",
 };
 
+interface UserProfile {
+    id: string;
+    full_name: string;
+    role: string;
+    email?: string;
+}
+
 export default function AdminPage() {
-    const [users, setUsers] = useState<UserPermission[]>([]);
+    const [users, setUsers] = useState<UserProfile[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [resetting, setResetting] = useState(false);
 
-    const refresh = useCallback(() => setUsers([...store.users]), []);
-    useEffect(() => { refresh(); return store.subscribe(refresh); }, [refresh]);
+    const refresh = useCallback(async () => {
+        try {
+            setLoading(true);
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('id, full_name, role')
+                .order('created_at', { ascending: true });
+            if (error) throw error;
+            setUsers(data || []);
+        } catch (e: any) {
+            console.error(e);
+            showToast("error", "ユーザー情報の取得に失敗しました");
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
-    const togglePermission = (userId: string, page: string, type: "view" | "edit") => {
-        const user = users.find(u => u.userId === userId);
-        if (!user) return;
-        const current = user.permissions[page]?.[type] ?? false;
-        store.updatePermission(userId, page, type, !current);
-        showToast("success", "権限を更新しました");
-    };
+    useEffect(() => { refresh(); }, [refresh]);
 
     const pages = Object.keys(pageNames);
+
+    const handleSandboxReset = async () => {
+        if (!confirm("すべての実績データを初期状態にリセットしますか？この操作は取り消せません。")) return;
+        setResetting(true);
+        try {
+            // Delete transactional data in dependency order
+            const tables = [
+                'payment_items',
+                'payments',
+                'lot_process_deliveries',
+                'lot_process_history',
+                'lot_processes',
+                'lots',
+                'order_items',
+                'orders',
+                'inventory_history',
+                'inventory',
+            ];
+            for (const table of tables) {
+                const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                if (error) {
+                    console.warn(`Failed to clear ${table}:`, error.message);
+                }
+            }
+            showToast("success", "システムを初期状態にリセットしました");
+        } catch (e: any) {
+            console.error(e);
+            showToast("error", e.message || "リセットに失敗しました");
+        } finally {
+            setResetting(false);
+        }
+    };
 
     return (
         <div className="space-y-6 animate-in fade-in duration-300">
@@ -50,7 +99,7 @@ export default function AdminPage() {
                         <thead className="bg-slate-50">
                             <tr>
                                 <th className="px-4 py-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">ユーザー</th>
-                                {pages.map(p => (
+                                {pages.map((p: string) => (
                                     <th key={p} colSpan={2} className="px-2 py-3 text-center text-[9px] font-bold text-slate-400 uppercase tracking-wider border-l border-slate-100">
                                         {pageNames[p]}
                                     </th>
@@ -58,7 +107,7 @@ export default function AdminPage() {
                             </tr>
                             <tr className="bg-slate-50/50">
                                 <th></th>
-                                {pages.map(p => (
+                                {pages.map((p: string) => (
                                     <th key={`${p}-sub`} colSpan={2} className="px-1 pb-2 border-l border-slate-100">
                                         <div className="flex justify-center gap-2">
                                             <span className="text-[8px] text-slate-300 flex items-center gap-0.5"><Eye size={8} /> 閲覧</span>
@@ -69,37 +118,46 @@ export default function AdminPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {users.map(user => (
-                                <tr key={user.userId} className="hover:bg-slate-50/50 transition">
-                                    <td className="px-4 py-3">
-                                        <div>
-                                            <span className="font-bold text-slate-700">{user.name}</span>
-                                            <p className="text-[10px] text-slate-400">{user.email}</p>
-                                            <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-bold ${user.role === "admin" ? "bg-purple-50 text-purple-700" : "bg-slate-100 text-slate-500"}`}>
-                                                {user.role === "admin" ? "管理者" : "一般"}
-                                            </span>
-                                        </div>
-                                    </td>
-                                    {pages.map(page => {
-                                        const perm = user.permissions[page] ?? { view: false, edit: false };
-                                        const isAdmin = user.role === "admin";
-                                        return (
-                                            <td key={page} colSpan={2} className="px-1 py-3 border-l border-slate-100">
-                                                <div className="flex justify-center gap-2">
-                                                    <button onClick={() => !isAdmin && togglePermission(user.userId, page, "view")} disabled={isAdmin}
-                                                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition ${perm.view ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-300"} ${isAdmin ? "cursor-not-allowed opacity-50" : "hover:opacity-80"}`}>
-                                                        {perm.view ? <Check size={12} /> : <X size={12} />}
-                                                    </button>
-                                                    <button onClick={() => !isAdmin && togglePermission(user.userId, page, "edit")} disabled={isAdmin}
-                                                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition ${perm.edit ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-300"} ${isAdmin ? "cursor-not-allowed opacity-50" : "hover:opacity-80"}`}>
-                                                        {perm.edit ? <Check size={12} /> : <X size={12} />}
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        );
-                                    })}
-                                </tr>
-                            ))}
+                            {loading && (
+                                <tr><td colSpan={1 + pages.length * 2} className="text-center py-8">
+                                    <Loader2 className="w-5 h-5 animate-spin mx-auto text-slate-400" />
+                                </td></tr>
+                            )}
+                            {users.map((user: UserProfile) => {
+                                const isAdmin = user.role === "admin";
+                                return (
+                                    <tr key={user.id} className="hover:bg-slate-50/50 transition">
+                                        <td className="px-4 py-3">
+                                            <div>
+                                                <span className="font-bold text-slate-700">{user.full_name}</span>
+                                                <p className="text-[10px] text-slate-400">{user.email || user.id.slice(0, 8)}</p>
+                                                <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-bold ${isAdmin ? "bg-purple-50 text-purple-700" : "bg-slate-100 text-slate-500"}`}>
+                                                    {isAdmin ? "管理者" : "一般"}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        {pages.map((page: string) => {
+                                            // Admin users have full access; regular users get view-only by default
+                                            const hasView = isAdmin || true;
+                                            const hasEdit = isAdmin;
+                                            return (
+                                                <td key={page} colSpan={2} className="px-1 py-3 border-l border-slate-100">
+                                                    <div className="flex justify-center gap-2">
+                                                        <div
+                                                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition ${hasView ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-300"} ${isAdmin ? "cursor-not-allowed opacity-50" : "cursor-default"}`}>
+                                                            {hasView ? <Check size={12} /> : <X size={12} />}
+                                                        </div>
+                                                        <div
+                                                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition ${hasEdit ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-300"} ${isAdmin ? "cursor-not-allowed opacity-50" : "cursor-default"}`}>
+                                                            {hasEdit ? <Check size={12} /> : <X size={12} />}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -116,20 +174,17 @@ export default function AdminPage() {
                     <h3 className="text-lg font-black uppercase tracking-tight">サンドボックスツール</h3>
                 </div>
                 <p className="text-sm text-amber-800/70 font-medium">
-                    デモ利用やテストの後に、すべての実績データ（受注、ロット、在庫、支払履歴など）を初期のデモ状態にリセットできます。
+                    デモ利用やテストの後に、すべての実績データ（受注、ロット、在庫、支払履歴など）を初期状態にリセットできます。
                     <br />
-                    <span className="text-amber-600 font-bold">※この操作は取り消せません。</span>
+                    <span className="text-amber-600 font-bold">※この操作は取り消せません。マスタデータ（商品・工程・外注先）は維持されます。</span>
                 </p>
                 <button
-                    onClick={() => {
-                        if (confirm("すべての実績データを初期状態にリセットしますか？この操作は取り消せません。")) {
-                            store.resetForSandbox();
-                            showToast("success", "システムを初期デモ状態にリセットしました");
-                        }
-                    }}
-                    className="bg-amber-600 text-white px-6 py-3 rounded-2xl font-black text-sm shadow-xl shadow-amber-600/20 hover:bg-amber-700 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2"
+                    onClick={handleSandboxReset}
+                    disabled={resetting}
+                    className="bg-amber-600 text-white px-6 py-3 rounded-2xl font-black text-sm shadow-xl shadow-amber-600/20 hover:bg-amber-700 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    デモデータをリセットする
+                    {resetting ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
+                    {resetting ? "リセット中..." : "実績データをリセットする"}
                 </button>
             </div>
         </div>

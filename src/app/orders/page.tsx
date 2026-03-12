@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { Plus, ChevronRight, Loader2, Trash2 } from "lucide-react";
-import { store, type MockOrder, type OrderItem } from "@/lib/mockStore";
 import { showToast } from "@/components/Toast";
 import Modal from "@/components/Modal";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import { useSupabaseData, SupabaseOrder } from "@/lib/useSupabaseData";
+import { createSupabaseOrder, deleteSupabaseOrder } from "@/lib/services/orderService";
 
 const channelLabels: Record<string, string> = { ec: "EC", wholesale: "卸売", direct: "直販" };
 const statusLabels: Record<string, { label: string; color: string }> = {
@@ -16,9 +17,10 @@ const statusLabels: Record<string, { label: string; color: string }> = {
 };
 
 export default function OrdersPage() {
-    const [orders, setOrders] = useState<MockOrder[]>([]);
+    const { orders, products, loading: dataLoading, refresh } = useSupabaseData();
+
     const [isNewOpen, setIsNewOpen] = useState(false);
-    const [detailOrder, setDetailOrder] = useState<MockOrder | null>(null);
+    const [detailOrder, setDetailOrder] = useState<SupabaseOrder | null>(null);
     const [deleteId, setDeleteId] = useState<string | null>(null);
 
     // フィルタ
@@ -33,23 +35,21 @@ export default function OrdersPage() {
     const [formChannel, setFormChannel] = useState<"ec" | "wholesale" | "direct">("wholesale");
     const [formDueDate, setFormDueDate] = useState("");
     const [formNotes, setFormNotes] = useState("");
-    const [formItems, setFormItems] = useState<OrderItem[]>([{ product: "", qty: 0, unitPrice: 0, shipped: 0 }]);
+    const [formItems, setFormItems] = useState([{ product: "", qty: 0, unitPrice: 0, shipped: 0 }]);
     const [loading, setLoading] = useState(false);
-
-    const refresh = useCallback(() => setOrders([...store.orders]), []);
-    useEffect(() => { refresh(); return store.subscribe(refresh); }, [refresh]);
 
     const filtered = useMemo(() => {
         let data = orders;
         if (statusFilter !== "all") data = data.filter(o => o.status === statusFilter);
-        if (periodFrom) data = data.filter(o => o.createdAt >= periodFrom);
-        if (periodTo) data = data.filter(o => o.createdAt <= periodTo);
-        if (productFilter) data = data.filter(o => o.items.some(i => i.product.includes(productFilter)));
+        if (periodFrom) data = data.filter(o => o.created_at >= periodFrom);
+        if (periodTo) data = data.filter(o => o.created_at <= periodTo);
+        if (productFilter) data = data.filter(o => o.order_items.some(i => i.products?.name?.includes(productFilter)));
         return data;
     }, [orders, statusFilter, periodFrom, periodTo, productFilter]);
 
     const openNew = () => {
-        setFormNumber(store.nextOrderNumber);
+        // ID generation should ideally be backend sequence, generating temp one
+        setFormNumber(`ORD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(Math.random() * 1000)}`);
         setFormCustomer(""); setFormChannel("wholesale"); setFormDueDate(""); setFormNotes("");
         setFormItems([{ product: "", qty: 0, unitPrice: 0, shipped: 0 }]);
         setIsNewOpen(true);
@@ -61,20 +61,46 @@ export default function OrdersPage() {
         if (!formCustomer || !formDueDate || formItems.some(i => !i.product || i.qty <= 0)) {
             showToast("error", "必須項目を入力してください"); return;
         }
-        setLoading(true);
-        await new Promise(r => setTimeout(r, 300));
-        const items = formItems.map(i => ({ ...i, unitPrice: isEcOrDirect ? 0 : i.unitPrice }));
-        store.createOrder({ orderNumber: formNumber, customerName: formCustomer, channel: formChannel, dueDate: formDueDate, status: "pending", notes: formNotes, items });
-        showToast("success", `受注 ${formNumber} を登録しました`);
-        setLoading(false); setIsNewOpen(false);
+        try {
+            setLoading(true);
+            const items = formItems.map(i => ({ ...i, unitPrice: isEcOrDirect ? 0 : i.unitPrice }));
+            await createSupabaseOrder({
+                orderNumber: formNumber,
+                customerName: formCustomer,
+                channel: formChannel,
+                dueDate: formDueDate,
+                status: "pending",
+                notes: formNotes,
+                items
+            });
+            showToast("success", `受注 ${formNumber} を登録しました`);
+            setIsNewOpen(false);
+            refresh();
+        } catch (err) {
+            console.error(err);
+            showToast("error", "受注の登録に失敗しました");
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const handleDelete = () => {
+    const handleDelete = async () => {
         if (!deleteId) return;
-        store.deleteOrder(deleteId);
-        showToast("success", "受注を削除し、関連する仕掛・在庫を消去しました");
-        setDeleteId(null); setDetailOrder(null);
+        try {
+            await deleteSupabaseOrder(deleteId);
+            showToast("success", "受注を削除し、関連する仕掛・在庫データを消去しました");
+            setDeleteId(null);
+            setDetailOrder(null);
+            refresh();
+        } catch (err) {
+            console.error(err);
+            showToast("error", "受注の削除に失敗しました");
+        }
     };
+
+    if (dataLoading) {
+        return <div className="flex h-full items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;
+    }
 
     return (
         <div className="space-y-4 animate-in fade-in duration-300">
@@ -93,7 +119,7 @@ export default function OrdersPage() {
                     </div>
                     <select value={productFilter} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setProductFilter(e.target.value)} className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
                         <option value="">全製品</option>
-                        {store.products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                        {products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                     </select>
                 </div>
                 <button onClick={openNew} className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all">
@@ -103,23 +129,23 @@ export default function OrdersPage() {
 
             <div className="space-y-3">
                 {filtered.map(order => {
-                    const st = statusLabels[order.status];
-                    const total = order.items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
+                    const st = statusLabels[order.status] || statusLabels.pending;
+                    const total = order.order_items?.reduce((s, i) => s + i.quantity * i.unit_price, 0) || 0;
                     return (
                         <div key={order.id} onClick={() => setDetailOrder(order)} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md hover:border-blue-200 transition cursor-pointer group">
                             <div className="flex items-center justify-between mb-2">
                                 <div className="flex items-center gap-2">
-                                    <span className="font-mono text-sm font-bold text-blue-600">{order.orderNumber}</span>
+                                    <span className="font-mono text-sm font-bold text-blue-600">{order.order_number}</span>
                                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${st.color}`}>{st.label}</span>
                                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500">{channelLabels[order.channel]}</span>
                                 </div>
                                 <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition" />
                             </div>
-                            <p className="text-sm font-bold text-slate-700">{order.customerName}</p>
+                            <p className="text-sm font-bold text-slate-700">{order.customer_name}</p>
                             <div className="flex gap-3 text-[10px] text-slate-400 font-bold mt-1">
-                                <span>納期: {order.dueDate}</span>
+                                <span>納期: {order.due_date}</span>
                                 {total > 0 && <span>合計: ¥{total.toLocaleString()}</span>}
-                                <span>{order.items.length}品目</span>
+                                <span>{order.order_items?.length || 0}品目</span>
                             </div>
                         </div>
                     );
@@ -127,23 +153,24 @@ export default function OrdersPage() {
                 {filtered.length === 0 && <div className="text-center py-20 bg-white rounded-xl border border-dashed border-slate-200"><p className="text-sm text-slate-400">該当する受注はありません</p></div>}
             </div>
 
-            {/* 詳細モーダル — 削除ボタン追加 */}
-            <Modal open={!!detailOrder} onClose={() => setDetailOrder(null)} title={detailOrder?.orderNumber || ""} subtitle={detailOrder?.customerName} width="max-w-2xl">
+            {/* 詳細モーダル */}
+            <Modal open={!!detailOrder} onClose={() => setDetailOrder(null)} title={detailOrder?.order_number || ""} subtitle={detailOrder?.customer_name} width="max-w-2xl">
                 {detailOrder && (
                     <div className="space-y-4">
                         <div className="flex gap-2 flex-wrap text-xs">
-                            <span className={`px-2 py-0.5 rounded font-bold ${statusLabels[detailOrder.status].color}`}>{statusLabels[detailOrder.status].label}</span>
+                            <span className={`px-2 py-0.5 rounded font-bold ${statusLabels[detailOrder.status]?.color || statusLabels.pending.color}`}>{statusLabels[detailOrder.status]?.label || "未着手"}</span>
                             <span className="px-2 py-0.5 rounded font-bold bg-slate-100 text-slate-500">{channelLabels[detailOrder.channel]}</span>
-                            <span className="text-slate-400">納期: {detailOrder.dueDate}</span>
+                            <span className="text-slate-400">納期: {detailOrder.due_date}</span>
                         </div>
                         <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
                             <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">品目</p>
-                            {detailOrder.items.map((item, i) => (
+                            {detailOrder.order_items?.map((item, i) => (
                                 <div key={i} className="flex justify-between py-1 text-sm">
-                                    <span className="text-slate-700">{item.product} × {item.qty}</span>
-                                    {item.unitPrice > 0 && <span className="font-bold text-slate-600">¥{(item.qty * item.unitPrice).toLocaleString()}</span>}
+                                    <span className="text-slate-700">{item.products?.name} × {item.quantity}</span>
+                                    {item.unit_price > 0 && <span className="font-bold text-slate-600">¥{(item.quantity * item.unit_price).toLocaleString()}</span>}
                                 </div>
                             ))}
+
                         </div>
                         {detailOrder.notes && <p className="text-xs text-slate-500 bg-amber-50 rounded-xl p-3 border border-amber-200">📝 {detailOrder.notes}</p>}
                         <button onClick={() => setDeleteId(detailOrder.id)} className="w-full flex items-center justify-center gap-2 py-3 bg-red-50 text-red-600 font-bold rounded-2xl border border-red-200 hover:bg-red-100 transition text-sm">
@@ -167,7 +194,7 @@ export default function OrdersPage() {
                         {formItems.map((item, i) => (
                             <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-2">
                                 <select value={item.product} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { const arr = [...formItems]; arr[i].product = e.target.value; setFormItems(arr); }} className="select-base flex-1 w-full text-sm">
-                                    <option value="">選択</option>{store.products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                                    <option value="">選択</option>{products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                                 </select>
                                 <input type="number" placeholder="数量" value={item.qty || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const arr = [...formItems]; arr[i].qty = Number(e.target.value); setFormItems(arr); }} className="input-base w-full sm:w-24 shrink-0 px-2" />
                                 <input type="number" placeholder="単価" value={item.unitPrice || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const arr = [...formItems]; arr[i].unitPrice = Number(e.target.value); setFormItems(arr); }} className="input-base w-full sm:w-16 shrink-0 px-2 text-xs" disabled={isEcOrDirect} />

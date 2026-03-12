@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { CheckCircle2, Clock, AlertCircle, ShieldCheck, Download, Edit2, X, Check, Undo2, ChevronDown, ChevronRight } from "lucide-react";
-import { store, type PaymentLine } from "@/lib/mockStore";
+import React, { useState, useMemo } from "react";
+import { CheckCircle2, Clock, AlertCircle, ShieldCheck, Download, Edit2, X, Check, Undo2, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import { useSupabaseData } from "@/lib/useSupabaseData";
+import { advancePayment, revertPayment, updatePaymentItem } from "@/lib/services/paymentService";
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
     wip: { label: "仕掛中", color: "bg-slate-100 text-slate-600", icon: Clock },
@@ -16,48 +17,62 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.E
 type StatusFilter = "wip" | "pre_payment" | "paid" | "confirmed";
 
 export default function PaymentsPage() {
-    const [lines, setLines] = useState<PaymentLine[]>([]);
+    const { paymentItems, loading, refresh } = useSupabaseData();
+    const [actionLoading, setActionLoading] = useState(false);
+
+    // Map Supabase objects to flat list for UI
+    const lines = useMemo(() => {
+        return paymentItems.map((pi: any) => ({
+            id: pi.id,
+            paymentId: pi.payment_id,
+            lotNumber: pi.lot_processes?.lots?.lot_number || "不明",
+            processName: pi.lot_processes?.processes?.name || "不明",
+            subcontractor: pi.payments?.subcontractors?.name || "不明",
+            qty: pi.good_quantity,
+            unitPrice: pi.unit_price,
+            unitPriceOverride: pi.lot_processes?.unit_price_override || null,
+            amount: pi.amount,
+            completionDate: pi.created_at.split('T')[0],
+            status: (pi.payments?.status as any) || "wip"
+        }));
+    }, [paymentItems]);
+
     const [statusFilters, setStatusFilters] = useState<StatusFilter[]>(["wip", "pre_payment", "paid"]);
     const [dateFrom, setDateFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; });
     const [dateTo, setDateTo] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(0); return d.toISOString().split("T")[0]; });
     const [editId, setEditId] = useState<string | null>(null);
     const [editQty, setEditQty] = useState("");
     const [editPrice, setEditPrice] = useState("");
-    const [confirmAction, setConfirmAction] = useState<{ id: string; type: "advance" | "revert" } | null>(null);
+    const [confirmAction, setConfirmAction] = useState<{ id: string; paymentId: string; type: "advance" | "revert" } | null>(null);
     const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
 
-    const refresh = useCallback(() => setLines([...store.paymentLines]), []);
-    useEffect(() => { refresh(); return store.subscribe(refresh); }, [refresh]);
-
-    const toggleFilter = (f: StatusFilter) => setStatusFilters(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
+    const toggleFilter = (f: StatusFilter) => setStatusFilters(prev => prev.includes(f) ? prev.filter((x: any) => x !== f) : [...prev, f]);
 
     // 範囲フィルタ適用
     const filtered = useMemo(() => {
-        return lines.filter(pl => {
-            if (!statusFilters.includes(pl.status)) return false;
-            if (dateFrom && pl.completionDate && pl.completionDate < dateFrom) return false;
-            if (dateTo && pl.completionDate && pl.completionDate > dateTo) return false;
-            return true;
-        });
-    }, [lines, statusFilters, dateFrom, dateTo]);
+        let res = lines;
+        if (dateFrom) res = res.filter((pl: any) => pl.completionDate >= dateFrom);
+        if (dateTo) res = res.filter((pl: any) => pl.completionDate <= dateTo);
+        if (statusFilters.length > 0) res = res.filter((pl: any) => statusFilters.includes(pl.status));
+        return res;
+    }, [lines, dateFrom, dateTo, statusFilters]);
 
-    // サマリーはフィルタ後のデータで計算（範囲指定に連動）
+    // サマリー計算 (フィルタ適用前ではなくFilteredに対して行うか、全体か？要件によるがFilteredで計算する)
     const summary = useMemo(() => {
-        const s: Record<string, { count: number; total: number }> = { wip: { count: 0, total: 0 }, pre_payment: { count: 0, total: 0 }, paid: { count: 0, total: 0 }, confirmed: { count: 0, total: 0 } };
-        // 日付範囲のみ適用（ステータスフィルタは無視して全ステータスを表示）
-        const dateFiltered = lines.filter(pl => {
-            if (dateFrom && pl.completionDate && pl.completionDate < dateFrom) return false;
-            if (dateTo && pl.completionDate && pl.completionDate > dateTo) return false;
-            return true;
+        const s = { wip: { count: 0, total: 0 }, pre_payment: { count: 0, total: 0 }, paid: { count: 0, total: 0 }, confirmed: { count: 0, total: 0 } };
+        filtered.forEach((pl: any) => {
+            if (s[pl.status as keyof typeof s]) {
+                s[pl.status as keyof typeof s].count += 1;
+                s[pl.status as keyof typeof s].total += pl.amount;
+            }
         });
-        dateFiltered.forEach(pl => { s[pl.status].count++; s[pl.status].total += pl.amount; });
         return s;
-    }, [lines, dateFrom, dateTo]);
+    }, [filtered]);
 
     // 外注先グループ
     const groupedBySub = useMemo(() => {
-        const groups: Record<string, PaymentLine[]> = {};
-        filtered.forEach(pl => {
+        const groups: Record<string, any[]> = {};
+        filtered.forEach((pl: any) => {
             if (!groups[pl.subcontractor]) groups[pl.subcontractor] = [];
             groups[pl.subcontractor].push(pl);
         });
@@ -71,25 +86,67 @@ export default function PaymentsPage() {
         setExpandedSubs(prev => { const n = new Set(prev); if (n.has(sub)) n.delete(sub); else n.add(sub); return n; });
     };
 
-    const handleAdvance = () => { if (!confirmAction) return; store.advancePayment(confirmAction.id); showToast("success", "ステータスを進めました"); setConfirmAction(null); };
-    const handleRevert = () => { if (!confirmAction) return; store.revertPayment(confirmAction.id); showToast("warning", "ステータスを取り消しました"); setConfirmAction(null); };
+    const handleAdvance = async () => {
+        if (!confirmAction) return;
+        setActionLoading(true);
+        try {
+            await advancePayment(confirmAction.paymentId);
+            showToast("success", "ステータスを進めました");
+            setConfirmAction(null);
+            refresh();
+        } catch (e: any) {
+            showToast("error", "エラーが発生しました");
+        } finally {
+            setActionLoading(false);
+        }
+    };
+    const handleRevert = async () => {
+        if (!confirmAction) return;
+        setActionLoading(true);
+        try {
+            await revertPayment(confirmAction.paymentId);
+            showToast("warning", "ステータスを取り消しました");
+            setConfirmAction(null);
+            refresh();
+        } catch (e: any) {
+            showToast("error", "エラーが発生しました");
+        } finally {
+            setActionLoading(false);
+        }
+    };
 
-    const handleSaveEdit = (id: string) => {
-        store.updatePaymentLine(id, Number(editQty), editPrice ? Number(editPrice) : null);
-        showToast("success", "支払情報を更新しました");
-        setEditId(null);
+    const handleSaveEdit = async (id: string, paymentId: string) => {
+        setActionLoading(true);
+        try {
+            await updatePaymentItem(id, paymentId, Number(editQty), editPrice ? Number(editPrice) : null);
+            showToast("success", "支払情報を更新しました");
+            setEditId(null);
+            refresh();
+        } catch (e: any) {
+            showToast("error", "エラーが発生しました");
+        } finally {
+            setActionLoading(false);
+        }
     };
 
     const handleExportCSV = () => {
-        const headers = "外注先,ロット,工程,数量,単価,特値,金額,完了日,ステータス\n";
-        const rows = filtered.map(pl => `${pl.subcontractor},${pl.lotNumber},${pl.processName},${pl.qty},${pl.unitPrice},${pl.unitPriceOverride !== null ? pl.unitPriceOverride : ""},${pl.amount},${pl.completionDate},${statusConfig[pl.status].label}`).join("\n");
-        const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8;" });
+        const headers = ["外注先", "ロット番号", "工程", "数量", "単価", "金額", "完了日", "状態"];
+        const rows = filtered.map((pl: any) =>
+            [pl.subcontractor, pl.lotNumber, pl.processName, pl.qty, pl.unitPriceOverride !== null ? pl.unitPriceOverride : pl.unitPrice, pl.amount, pl.completionDate, statusConfig[pl.status]?.label || ""]
+                .map(v => `"${v}"`)
+                .join(",")
+        ); const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `payments_${new Date().toISOString().split("T")[0]}.csv`; a.click(); URL.revokeObjectURL(url);
         showToast("success", "CSVをダウンロードしました");
     };
 
     return (
-        <div className="space-y-4 animate-in fade-in duration-300">
+        <div className="space-y-4 animate-in fade-in duration-300 relative">
+            {(loading || actionLoading) && (
+                <div className="fixed inset-0 bg-slate-50/50 backdrop-blur-sm z-50 flex items-center justify-center">
+                    <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                </div>
+            )}
             {/* サマリー (範囲連動) */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {(Object.keys(statusConfig) as StatusFilter[]).map(s => {
@@ -149,7 +206,7 @@ export default function PaymentsPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100/60">
-                                    {items.map(pl => {
+                                    {items.map((pl: any) => {
                                         const st = statusConfig[pl.status];
                                         const isEditing = editId === pl.id;
                                         const canEdit = pl.status === "wip" || pl.status === "pre_payment";
@@ -170,15 +227,15 @@ export default function PaymentsPage() {
                                                     <div className="flex items-center gap-1 justify-end">
                                                         {isEditing ? (
                                                             <>
-                                                                <button onClick={() => handleSaveEdit(pl.id)} className="p-1 bg-blue-600 text-white rounded text-xs"><Check size={12} /></button>
+                                                                <button onClick={() => handleSaveEdit(pl.id, pl.paymentId)} className="p-1 bg-blue-600 text-white rounded text-xs"><Check size={12} /></button>
                                                                 <button onClick={() => setEditId(null)} className="p-1 bg-slate-200 rounded text-xs"><X size={12} /></button>
                                                             </>
                                                         ) : (
                                                             <>
                                                                 {canEdit && <button onClick={() => { setEditId(pl.id); setEditQty(String(pl.qty)); setEditPrice(pl.unitPriceOverride !== null ? String(pl.unitPriceOverride) : ""); }} title="編集" className="p-1 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition"><Edit2 size={14} /></button>}
-                                                                {(pl.status === "wip" || pl.status === "pre_payment") && <button onClick={() => setConfirmAction({ id: pl.id, type: "advance" })} title={pl.status === "wip" ? "完了(支払前)へ" : "支払済へ"} className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition"><CheckCircle2 size={14} /></button>}
-                                                                {pl.status === "paid" && <button onClick={() => setConfirmAction({ id: pl.id, type: "advance" })} title="確認済へ" className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition"><ShieldCheck size={14} /></button>}
-                                                                {(pl.status === "pre_payment" || pl.status === "paid" || pl.status === "confirmed") && <button onClick={() => setConfirmAction({ id: pl.id, type: "revert" })} title="取消" className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition"><Undo2 size={14} /></button>}
+                                                                {(pl.status === "wip" || pl.status === "pre_payment") && <button onClick={() => setConfirmAction({ id: pl.id, paymentId: pl.paymentId, type: "advance" })} title={pl.status === "wip" ? "完了(支払前)へ" : "支払済へ"} className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition"><CheckCircle2 size={14} /></button>}
+                                                                {pl.status === "paid" && <button onClick={() => setConfirmAction({ id: pl.id, paymentId: pl.paymentId, type: "advance" })} title="確認済へ" className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition"><ShieldCheck size={14} /></button>}
+                                                                {(pl.status === "pre_payment" || pl.status === "paid" || pl.status === "confirmed") && <button onClick={() => setConfirmAction({ id: pl.id, paymentId: pl.paymentId, type: "revert" })} title="取消" className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition"><Undo2 size={14} /></button>}
                                                             </>
                                                         )}
                                                     </div>
