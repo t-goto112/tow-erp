@@ -125,19 +125,43 @@ export default function AdminPage() {
                             )}
                             {users.map((user: UserProfile) => {
                                 const isAdmin = user.role === "admin";
+
+                                const toggleRole = async () => {
+                                    if (isAdmin && user.id === (await supabase.auth.getUser()).data.user?.id) {
+                                        showToast("error", "自分自身の管理者権限は解除できません");
+                                        return;
+                                    }
+                                    const newRole = isAdmin ? 'user' : 'admin';
+                                    const { error } = await supabase
+                                        .from('profiles')
+                                        .update({ role: newRole })
+                                        .eq('id', user.id);
+
+                                    if (error) {
+                                        showToast("error", "権限の更新に失敗しました");
+                                    } else {
+                                        showToast("success", `${user.full_name} を ${newRole === 'admin' ? '管理者' : '一般ユーザー'} に変更しました`);
+                                        refresh();
+                                    }
+                                };
+
                                 return (
                                     <tr key={user.id} className="hover:bg-slate-50/50 transition">
                                         <td className="px-4 py-3">
-                                            <div>
-                                                <span className="font-bold text-slate-700">{user.full_name}</span>
-                                                <p className="text-[10px] text-slate-400">{user.email || user.id.slice(0, 8)}</p>
-                                                <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-bold ${isAdmin ? "bg-purple-50 text-purple-700" : "bg-slate-100 text-slate-500"}`}>
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <span className="font-bold text-slate-700">{user.full_name}</span>
+                                                    <p className="text-[10px] text-slate-400">{user.email || user.id.slice(0, 8)}</p>
+                                                </div>
+                                                <button
+                                                    onClick={toggleRole}
+                                                    className={`px-2 py-0.5 rounded text-[9px] font-bold transition hover:opacity-80 ${isAdmin ? "bg-purple-50 text-purple-700" : "bg-slate-100 text-slate-500"}`}
+                                                >
                                                     {isAdmin ? "管理者" : "一般"}
-                                                </span>
+                                                </button>
                                             </div>
                                         </td>
                                         {pages.map((page: string) => {
-                                            // Admin users have full access; regular users get view-only by default
                                             const hasView = isAdmin || true;
                                             const hasEdit = isAdmin;
                                             return (

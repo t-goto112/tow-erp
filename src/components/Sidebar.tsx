@@ -1,5 +1,6 @@
 "use client";
 
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -12,6 +13,7 @@ import {
     User,
     Shield,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 const navItems = [
     { href: "/", icon: LayoutDashboard, label: "ダッシュボード" },
@@ -28,6 +30,30 @@ const subNavItems = [
 
 export default function Sidebar() {
     const pathname = usePathname();
+    const [role, setRole] = useState<string | null>(null);
+
+    useEffect(() => {
+        const getRole = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', user.id)
+                    .single();
+                if (data) setRole(data.role);
+            }
+        };
+        getRole();
+    }, []);
+
+    const isAdmin = role === 'admin';
+
+    // フィルタリングされたサブメニュー
+    const filteredSubNavItems = subNavItems.filter(item => {
+        if (item.href === '/admin') return isAdmin;
+        return true;
+    });
 
     return (
         <aside className="hidden md:flex w-64 flex-col bg-white border-r border-slate-200 shrink-0 z-10">
@@ -69,7 +95,7 @@ export default function Sidebar() {
 
                 <div className="my-4 border-t border-slate-100" />
 
-                {subNavItems.map((item) => {
+                {filteredSubNavItems.map((item) => {
                     const active = pathname === item.href;
                     return (
                         <Link
@@ -92,23 +118,46 @@ export default function Sidebar() {
 
             {/* User Account Footer */}
             <div className="border-t border-slate-100 p-4">
-                <Link
-                    href="/mypage"
-                    className="flex items-center gap-3 px-2 py-2 cursor-pointer hover:bg-slate-50 rounded-xl transition"
-                >
-                    <div className="w-9 h-9 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
-                        <User className="text-blue-600 w-4 h-4" />
-                    </div>
-                    <div className="overflow-hidden">
-                        <p className="text-sm font-bold text-slate-700 truncate">
-                            田中 義男
-                        </p>
-                        <p className="text-[10px] text-slate-400 truncate tracking-wider uppercase">
-                            Administrator
-                        </p>
-                    </div>
-                </Link>
+                <UserProfileFooter />
             </div>
         </aside>
+    );
+}
+
+function UserProfileFooter() {
+    const [profile, setProfile] = useState<{ full_name: string; role: string } | null>(null);
+
+    useEffect(() => {
+        const getProfile = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data } = await supabase
+                    .from('profiles')
+                    .select('full_name, role')
+                    .eq('id', user.id)
+                    .single();
+                if (data) setProfile(data);
+            }
+        };
+        getProfile();
+    }, []);
+
+    return (
+        <Link
+            href="/mypage"
+            className="flex items-center gap-3 px-2 py-2 cursor-pointer hover:bg-slate-50 rounded-xl transition"
+        >
+            <div className="w-9 h-9 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
+                <User className="text-blue-600 w-4 h-4" />
+            </div>
+            <div className="overflow-hidden">
+                <p className="text-sm font-bold text-slate-700 truncate">
+                    {profile?.full_name || "ゲストユーザー"}
+                </p>
+                <p className="text-[10px] text-slate-400 truncate tracking-wider uppercase">
+                    {profile?.role === 'admin' ? 'Administrator' : 'Staff Member'}
+                </p>
+            </div>
+        </Link>
     );
 }
