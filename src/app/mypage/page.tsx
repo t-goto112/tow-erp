@@ -40,18 +40,29 @@ export default function MyPage() {
     }, []);
 
     const handleSave = async () => {
-        if (!profile) return;
+        if (!profile) {
+            console.error("MyPage: Profile is null, cannot save");
+            return;
+        }
         setSaving(true);
+        console.log("MyPage: Attempting to save profile", profile);
         try {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('profiles')
                 .update({ full_name: profile.name })
-                .eq('id', profile.id);
+                .eq('id', profile.id)
+                .select();
 
-            if (error) throw error;
+            if (error) {
+                console.error("MyPage: Supabase update error", error);
+                throw error;
+            }
+
+            console.log("MyPage: Update successful", data);
             showToast("success", "プロフィールの更新が完了しました");
         } catch (err: any) {
-            showToast("error", "更新に失敗しました: " + err.message);
+            console.error("MyPage: Save attempt failed", err);
+            showToast("error", "更新に失敗しました: " + (err.message || "Unknown error"));
         } finally {
             setSaving(false);
         }

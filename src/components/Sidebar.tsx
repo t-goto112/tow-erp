@@ -31,24 +31,7 @@ const subNavItems = [
 
 // This section is now handled by SidebarContent and sub-navigation logic above.
 
-function UserProfileFooter() {
-    const [profile, setProfile] = useState<{ full_name: string; role: string; permissions?: any } | null>(null);
-
-    useEffect(() => {
-        const getProfile = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                const { data } = await supabase
-                    .from('profiles')
-                    .select('full_name, role, permissions')
-                    .eq('id', user.id)
-                    .single();
-                if (data) setProfile(data);
-            }
-        };
-        getProfile();
-    }, []);
-
+function UserProfileFooter({ profile }: { profile: any }) {
     return (
         <Link
             href="/mypage"
@@ -75,46 +58,64 @@ function SidebarContent({ pathname }: { pathname: string }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        let mounted = true;
+
         const getProfile = async () => {
             try {
                 const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    // Check metadata first as a fast fallback
-                    const metaRole = user.app_metadata?.role || user.user_metadata?.role;
+                if (!user) {
+                    if (mounted) setLoading(false);
+                    return;
+                }
 
-                    const { data, error } = await supabase
-                        .from('profiles')
-                        .select('role, permissions')
-                        .eq('id', user.id)
-                        .single();
+                // Metadata fallback
+                const metaRole = user.app_metadata?.role || user.user_metadata?.role;
 
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('role, permissions')
+                    .eq('id', user.id)
+                    .single();
+
+                if (mounted) {
                     if (data) {
                         setProfile(data);
                     } else if (metaRole) {
-                        // If profile fails but metadata exists, use it
                         setProfile({ role: metaRole as string });
                     }
                 }
             } catch (err) {
                 console.error("Sidebar profile fetch error:", err);
             } finally {
-                setLoading(false);
+                if (mounted) setLoading(false);
             }
         };
+
         getProfile();
+
+        // Listen for auth state changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+            if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+                getProfile();
+            }
+        });
+
+        return () => {
+            mounted = false;
+            subscription.unsubscribe();
+        };
     }, []);
 
-    if (loading) return <div className="flex-1 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>;
+    if (loading) return <div className="flex-1 flex items-center justify-center p-10"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>;
 
     const isAdmin = profile?.role === 'admin';
     const permissions = profile?.permissions || {};
 
     const isVisible = (href: string) => {
         if (isAdmin) return true;
-        const pageKey = href.replace('/', '') || 'dashboard'; // / -> dashboard
-        // If regular user and no explicit permission found, default to visible if not admin page
+        const pageKey = href.replace('/', '') || 'dashboard';
         if (href === '/admin') return false;
-        return permissions[pageKey]?.view !== false;
+        return (permissions as any)[pageKey]?.view !== false;
     };
 
     const filteredNavItems = navItems.filter(item => isVisible(item.href));
@@ -172,7 +173,7 @@ function SidebarContent({ pathname }: { pathname: string }) {
 
             {/* User Account Footer */}
             <div className="border-t border-slate-100 p-4">
-                <UserProfileFooter />
+                <UserProfileFooter profile={profile} />
             </div>
         </>
     );

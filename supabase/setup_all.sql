@@ -244,35 +244,35 @@ BEGIN
   END LOOP;
 END $$;
 
--- profiles テーブルだけは特別な管理者ポリシーを追加（自分または管理者が更新可能）
-DROP POLICY IF EXISTS "Profiles access" ON profiles;
-DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
-DROP POLICY IF EXISTS "Admin can update all profiles" ON profiles;
-DROP POLICY IF EXISTS "Users can view all profiles" ON profiles;
+-- profiles テーブルの RLS をさらに堅牢に
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
--- 全認証済みユーザーは全プロフィールを閲覧可能（マスタ表示などで必要）
-CREATE POLICY "Users can view all profiles" ON profiles
-  FOR SELECT USING (auth.role() = 'authenticated');
+DROP POLICY IF EXISTS "Allow insert for authenticated" ON profiles;
+DROP POLICY IF EXISTS "Allow select for authenticated" ON profiles;
+DROP POLICY IF EXISTS "Allow update for owners" ON profiles;
+DROP POLICY IF EXISTS "Allow all for admins" ON profiles;
 
--- 自分のプロフィールは更新可能
-CREATE POLICY "Users can update own profile" ON profiles
-  FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+-- 1. 作成: ログインユーザーなら誰でもOK
+CREATE POLICY "Profiles_Insert" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
 
--- admin ユーザーは他ユーザーのプロフィールも更新可能
-CREATE POLICY "Admin can update all profiles" ON profiles
-  FOR UPDATE USING (
-    EXISTS (
-      SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+-- 2. 閲覧: ログインユーザーなら誰でもOK (他の人の名前も見れるように)
+CREATE POLICY "Profiles_Select" ON profiles FOR SELECT USING (auth.role() = 'authenticated');
+
+-- 3. 更新: 「自分のデータ」なら無条件でOK
+CREATE POLICY "Profiles_Update_Owner" ON profiles FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+
+-- 4. 削除/更新: 管理者ならOK (role = 'admin' である行ではなく、操作者が admin かどうかをチェック)
+-- ※ 無限再帰を避けるため、サブクエリを工夫
+CREATE POLICY "Profiles_Admin_All" ON profiles FOR ALL USING (
+  EXISTS (
+    SELECT 1 FROM auth.users
+    WHERE auth.users.id = auth.uid()
+    AND (
+      auth.users.raw_app_meta_data->>'role' = 'admin' OR 
+      auth.users.raw_user_meta_data->>'role' = 'admin'
     )
-  );
-
--- admin ユーザーは他ユーザーのロール変更なども含め全操作可能
-CREATE POLICY "Admin full access" ON profiles
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
-    )
-  );
+  )
+);
 
 -- 完了確認
-SELECT 'System tables and RLS fully configured v2!' AS result;
+SELECT 'System tables and RLS fully configured v4!' AS result;
