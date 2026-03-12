@@ -79,12 +79,21 @@ function SidebarContent({ pathname }: { pathname: string }) {
             try {
                 const { data: { user } } = await supabase.auth.getUser();
                 if (user) {
+                    // Check metadata first as a fast fallback
+                    const metaRole = user.app_metadata?.role || user.user_metadata?.role;
+
                     const { data, error } = await supabase
                         .from('profiles')
                         .select('role, permissions')
                         .eq('id', user.id)
                         .single();
-                    if (data) setProfile(data);
+
+                    if (data) {
+                        setProfile(data);
+                    } else if (metaRole) {
+                        // If profile fails but metadata exists, use it
+                        setProfile({ role: metaRole as string });
+                    }
                 }
             } catch (err) {
                 console.error("Sidebar profile fetch error:", err);

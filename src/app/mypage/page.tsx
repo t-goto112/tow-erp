@@ -13,21 +13,28 @@ export default function MyPage() {
     useEffect(() => {
         const fetchProfile = async () => {
             setLoading(true);
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                const { data: pData } = await supabase
-                    .from('profiles')
-                    .select('full_name')
-                    .eq('id', user.id)
-                    .single();
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    const { data: pData, error } = await supabase
+                        .from('profiles')
+                        .select('full_name')
+                        .eq('id', user.id)
+                        .single();
 
-                setProfile({
-                    id: user.id,
-                    name: pData?.full_name || "",
-                    email: user.email || ""
-                });
+                    if (error) console.error("MyPage fetch error:", error);
+
+                    setProfile({
+                        id: user.id,
+                        name: pData?.full_name || "",
+                        email: user.email || ""
+                    });
+                }
+            } catch (e) {
+                console.error("MyPage load error:", e);
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         };
         fetchProfile();
     }, []);
