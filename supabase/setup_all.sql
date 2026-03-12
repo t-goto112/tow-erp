@@ -206,13 +206,59 @@ CREATE TABLE IF NOT EXISTS inventory_history (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- ─── 2. Auth連動トリガー ───
+-- profiles テーブルの RLS 抜根本体
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- 既存の全ポリシーを完全に削除
+DROP POLICY IF EXISTS "Profiles_Insert" ON profiles;
+DROP POLICY IF EXISTS "Profiles_Select" ON profiles;
+DROP POLICY IF EXISTS "Profiles_Update_Owner" ON profiles;
+DROP POLICY IF EXISTS "Profiles_Admin_All" ON profiles;
+DROP POLICY IF EXISTS "Allow select for authenticated" ON profiles;
+DROP POLICY IF EXISTS "Allow update for owners" ON profiles;
+DROP POLICY IF EXISTS "Allow all for admins" ON profiles;
+DROP POLICY IF EXISTS "Users can view all profiles" ON profiles;
+DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
+DROP POLICY IF EXISTS "Admin can update all profiles" ON profiles;
+DROP POLICY IF EXISTS "Admin full access" ON profiles;
+
+-- 1. 閲覧: 認証済みユーザーなら誰でもOK (受注一覧などで名前を出すため)
+CREATE POLICY "profiles_select_policy" ON profiles FOR SELECT USING (true);
+
+-- 2. 作成/更新: 自分自身の行であればOK
+CREATE POLICY "profiles_owner_policy" ON profiles 
+  FOR ALL USING (auth.uid() = id) 
+  WITH CHECK (auth.uid() = id);
+
+-- 3. 管理者: すべての操作を許可 (無限再帰を避けるため auth.jwt を見るのが確実)
+CREATE POLICY "profiles_admin_policy" ON profiles 
+  FOR ALL USING (
+    (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin' OR 
+    (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  );
+
+-- 4. 予備の管理者関数 (どうしてもJwtで取れない場合用)
+CREATE OR REPLACE FUNCTION check_is_admin() RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 5. トリガーを修正
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, full_name, role, permissions)
-  VALUES (NEW.id, COALESCE(NEW.raw_user_meta_data->>'full_name','未設定'), 'user', '{}'::jsonb)
-  ON CONFLICT (id) DO NOTHING;
+  INSERT INTO public.profiles (id, full_name, role)
+  VALUES (
+    NEW.id, 
+    COALESCE(NEW.raw_user_meta_data->>'full_name', '未設定'), 
+    COALESCE(NEW.raw_app_meta_data->>'role', COALESCE(NEW.raw_user_meta_data->>'role', 'user'))
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    role = EXCLUDED.role;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -222,57 +268,37 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 
--- ─── 3. RLS (Row Level Security) の完全開放 ───
--- 全テーブルに対して認証済みユーザーのフルアクセスを許可
+-- 6. 既存ユーザーのメタデータを profiles に強制同期 (一度限り)
+DO $$
+DECLARE
+  u RECORD;
+BEGIN
+  FOR u IN SELECT id, raw_app_meta_data, raw_user_meta_data FROM auth.users LOOP
+    INSERT INTO public.profiles (id, full_name, role)
+    VALUES (
+      u.id,
+      COALESCE(u.raw_user_meta_data->>'full_name', '未設定'),
+      COALESCE(u.raw_app_meta_data->>'role', COALESCE(u.raw_user_meta_data->>'role', 'user'))
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      role = COALESCE(u.raw_app_meta_data->>'role', COALESCE(u.raw_user_meta_data->>'role', public.profiles.role));
+  END LOOP;
+END $$;
+
+-- 7. 全テーブルの RLS を再構築 (profiles 以外は authenticated full access)
 DO $$ 
 DECLARE
   tbl TEXT;
 BEGIN
   FOR tbl IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
-    -- RLSを有効化
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
-    
-    -- 既存の全ポリシーを一度削除
+    IF tbl = 'profiles' THEN
+      CONTINUE; -- profiles は個別に定義済み
+    END IF;
     EXECUTE format('DROP POLICY IF EXISTS "Authenticated full access" ON %I', tbl);
-    EXECUTE format('DROP POLICY IF EXISTS "Authenticated read" ON %I', tbl);
-    EXECUTE format('DROP POLICY IF EXISTS "Authenticated insert" ON %I', tbl);
-    EXECUTE format('DROP POLICY IF EXISTS "Authenticated update" ON %I', tbl);
-    EXECUTE format('DROP POLICY IF EXISTS "Authenticated delete" ON %I', tbl);
-    
-    -- シンプルなフルアクセスポリシーを作成
     EXECUTE format('CREATE POLICY "Authenticated full access" ON %I FOR ALL USING (auth.role() = ''authenticated'')', tbl);
   END LOOP;
 END $$;
 
--- profiles テーブルの RLS をさらに堅牢に
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Allow insert for authenticated" ON profiles;
-DROP POLICY IF EXISTS "Allow select for authenticated" ON profiles;
-DROP POLICY IF EXISTS "Allow update for owners" ON profiles;
-DROP POLICY IF EXISTS "Allow all for admins" ON profiles;
-
--- 1. 作成: ログインユーザーなら誰でもOK
-CREATE POLICY "Profiles_Insert" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
-
--- 2. 閲覧: ログインユーザーなら誰でもOK (他の人の名前も見れるように)
-CREATE POLICY "Profiles_Select" ON profiles FOR SELECT USING (auth.role() = 'authenticated');
-
--- 3. 更新: 「自分のデータ」なら無条件でOK
-CREATE POLICY "Profiles_Update_Owner" ON profiles FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
-
--- 4. 削除/更新: 管理者ならOK (role = 'admin' である行ではなく、操作者が admin かどうかをチェック)
--- ※ 無限再帰を避けるため、サブクエリを工夫
-CREATE POLICY "Profiles_Admin_All" ON profiles FOR ALL USING (
-  EXISTS (
-    SELECT 1 FROM auth.users
-    WHERE auth.users.id = auth.uid()
-    AND (
-      auth.users.raw_app_meta_data->>'role' = 'admin' OR 
-      auth.users.raw_user_meta_data->>'role' = 'admin'
-    )
-  )
-);
-
 -- 完了確認
-SELECT 'System tables and RLS fully configured v4!' AS result;
+SELECT 'System fully restored with robust RLS and Metadata Sync v6' AS result;

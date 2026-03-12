@@ -29,22 +29,28 @@ const subNavItems = [
     { href: "/admin", icon: Shield, label: "管理者設定" },
 ];
 
-// This section is now handled by SidebarContent and sub-navigation logic above.
+function UserProfileFooter({ profile, loading }: { profile: any; loading: boolean }) {
+    if (loading) return (
+        <div className="flex items-center gap-3 px-2 py-2">
+            <div className="w-9 h-9 rounded-full bg-slate-50 flex items-center justify-center">
+                <Loader2 className="w-4 h-4 animate-spin text-slate-300" />
+            </div>
+        </div>
+    );
 
-function UserProfileFooter({ profile }: { profile: any }) {
     return (
         <Link
             href="/mypage"
-            className="flex items-center gap-3 px-2 py-2 cursor-pointer hover:bg-slate-50 rounded-xl transition"
+            className="flex items-center gap-3 px-2 py-2 cursor-pointer hover:bg-slate-50 rounded-xl transition group"
         >
-            <div className="w-9 h-9 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0 group-hover:bg-blue-100 transition">
                 <User className="text-blue-600 w-4 h-4" />
             </div>
             <div className="overflow-hidden">
                 <p className="text-sm font-bold text-slate-700 truncate">
                     {profile?.full_name || "ゲストユーザー"}
                 </p>
-                <p className="text-[10px] text-slate-400 truncate tracking-wider uppercase">
+                <p className="text-[10px] text-slate-400 truncate tracking-wider uppercase font-bold">
                     {profile?.role === 'admin' ? 'Administrator' : 'Staff Member'}
                 </p>
             </div>
@@ -52,61 +58,70 @@ function UserProfileFooter({ profile }: { profile: any }) {
     );
 }
 
-// Sidebar logic to use the fetched profile for navigation
-function SidebarContent({ pathname }: { pathname: string }) {
-    const [profile, setProfile] = useState<{ role: string; permissions?: any } | null>(null);
+export default function Sidebar() {
+    const pathname = usePathname();
+    const [profile, setProfile] = useState<{ full_name: string; role: string; permissions?: any } | null>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        let mounted = true;
+    const fetchProfile = async () => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const user = session?.user;
 
-        const getProfile = async () => {
-            try {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (!user) {
-                    if (mounted) setLoading(false);
-                    return;
-                }
-
-                // Metadata fallback
-                const metaRole = user.app_metadata?.role || user.user_metadata?.role;
-
-                const { data, error } = await supabase
-                    .from('profiles')
-                    .select('role, permissions')
-                    .eq('id', user.id)
-                    .single();
-
-                if (mounted) {
-                    if (data) {
-                        setProfile(data);
-                    } else if (metaRole) {
-                        setProfile({ role: metaRole as string });
-                    }
-                }
-            } catch (err) {
-                console.error("Sidebar profile fetch error:", err);
-            } finally {
-                if (mounted) setLoading(false);
+            if (!user) {
+                console.log("Sidebar: No session user found");
+                setProfile(null);
+                setLoading(false);
+                return;
             }
-        };
 
-        getProfile();
+            console.log("Sidebar: Fetching profile for", user.id);
 
-        // Listen for auth state changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-            if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-                getProfile();
+            // 1. Get profile from DB (Source of truth)
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('full_name, role, permissions')
+                .eq('id', user.id)
+                .single();
+
+            if (error) {
+                console.error("Sidebar: DB Fetch error", error);
+
+                // 2. Fallback to metadata if DB fetch fails
+                const metaRole = user.app_metadata?.role || user.user_metadata?.role;
+                const metaName = user.user_metadata?.full_name || "ゲストユーザー";
+
+                console.log("Sidebar: Fallback to metadata", { metaRole, metaName });
+                setProfile({
+                    full_name: metaName,
+                    role: (metaRole as string) || 'user',
+                    permissions: {}
+                });
+            } else if (data) {
+                console.log("Sidebar: Profile loaded successfully", data);
+                setProfile(data);
+            }
+        } catch (err) {
+            console.error("Sidebar catch error:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchProfile();
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            console.log("Sidebar: Auth Change Event", event);
+            if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
+                fetchProfile();
+            } else if (event === 'SIGNED_OUT') {
+                setProfile(null);
             }
         });
 
-        return () => {
-            mounted = false;
-            subscription.unsubscribe();
-        };
+        return () => subscription.unsubscribe();
     }, []);
-
-    if (loading) return <div className="flex-1 flex items-center justify-center p-10"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>;
 
     const isAdmin = profile?.role === 'admin';
     const permissions = profile?.permissions || {};
@@ -115,7 +130,9 @@ function SidebarContent({ pathname }: { pathname: string }) {
         if (isAdmin) return true;
         const pageKey = href.replace('/', '') || 'dashboard';
         if (href === '/admin') return false;
-        return (permissions as any)[pageKey]?.view !== false;
+        // Check permissions explicitly
+        const perms = permissions as any;
+        return perms[pageKey]?.view !== false;
     };
 
     const filteredNavItems = navItems.filter(item => isVisible(item.href));
@@ -125,8 +142,20 @@ function SidebarContent({ pathname }: { pathname: string }) {
     });
 
     return (
-        <>
-            {/* Main Nav */}
+        <aside className="hidden md:flex w-64 flex-col bg-white border-r border-slate-200 shrink-0 z-10 h-full">
+            <div className="p-6">
+                <Link href="/" className="flex items-center gap-3 group">
+                    <div className="w-8 h-8 flex items-center justify-center border-2 border-blue-600 rounded-bl-xl rounded-tr-xl transform rotate-3 group-hover:scale-105 transition">
+                        <span className="font-bold text-blue-600 text-lg tracking-tighter leading-none italic pr-0.5">
+                            T
+                        </span>
+                    </div>
+                    <h1 className="text-xl font-bold text-blue-600 tracking-widest uppercase font-sans">
+                        Towmei
+                    </h1>
+                </Link>
+            </div>
+
             <nav className="flex-1 px-4 py-2 space-y-1 overflow-y-auto mt-4">
                 {filteredNavItems.map((item) => {
                     const active = pathname === item.href;
@@ -171,34 +200,9 @@ function SidebarContent({ pathname }: { pathname: string }) {
                 })}
             </nav>
 
-            {/* User Account Footer */}
             <div className="border-t border-slate-100 p-4">
-                <UserProfileFooter profile={profile} />
+                <UserProfileFooter profile={profile} loading={loading} />
             </div>
-        </>
-    );
-}
-
-export default function Sidebar() {
-    const pathname = usePathname();
-
-    return (
-        <aside className="hidden md:flex w-64 flex-col bg-white border-r border-slate-200 shrink-0 z-10">
-            {/* Logo - Blue Theme */}
-            <div className="p-6">
-                <Link href="/" className="flex items-center gap-3 group">
-                    <div className="w-8 h-8 flex items-center justify-center border-2 border-blue-600 rounded-bl-xl rounded-tr-xl transform rotate-3 group-hover:scale-105 transition">
-                        <span className="font-bold text-blue-600 text-lg tracking-tighter leading-none italic pr-0.5">
-                            T
-                        </span>
-                    </div>
-                    <h1 className="text-xl font-bold text-blue-600 tracking-widest uppercase font-sans">
-                        Towmei
-                    </h1>
-                </Link>
-            </div>
-
-            <SidebarContent pathname={pathname} />
         </aside>
     );
 }

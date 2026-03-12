@@ -14,24 +14,25 @@ export default function MyPage() {
         const fetchProfile = async () => {
             setLoading(true);
             try {
-                const { data: { user } } = await supabase.auth.getUser();
+                const { data: { session } } = await supabase.auth.getSession();
+                const user = session?.user;
                 if (user) {
                     const { data: pData, error } = await supabase
                         .from('profiles')
-                        .select('full_name')
+                        .select('full_name') // id is already known from user
                         .eq('id', user.id)
                         .single();
 
-                    if (error) console.error("MyPage fetch error:", error);
+                    if (error) console.error("MyPage: DB Fetch error", error);
 
                     setProfile({
                         id: user.id,
-                        name: pData?.full_name || "",
+                        name: pData?.full_name || user.user_metadata?.full_name || "未設定",
                         email: user.email || ""
                     });
                 }
             } catch (e) {
-                console.error("MyPage load error:", e);
+                console.error("MyPage catch error:", e);
             } finally {
                 setLoading(false);
             }
