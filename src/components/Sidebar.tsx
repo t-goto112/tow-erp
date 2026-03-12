@@ -12,6 +12,7 @@ import {
     Database,
     User,
     Shield,
+    Loader2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
