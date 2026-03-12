@@ -28,52 +28,85 @@ const subNavItems = [
     { href: "/admin", icon: Shield, label: "管理者設定" },
 ];
 
-export default function Sidebar() {
-    const pathname = usePathname();
-    const [role, setRole] = useState<string | null>(null);
+// This section is now handled by SidebarContent and sub-navigation logic above.
+
+function UserProfileFooter() {
+    const [profile, setProfile] = useState<{ full_name: string; role: string; permissions?: any } | null>(null);
 
     useEffect(() => {
-        const getRole = async () => {
+        const getProfile = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 const { data } = await supabase
                     .from('profiles')
-                    .select('role')
+                    .select('full_name, role, permissions')
                     .eq('id', user.id)
                     .single();
-                if (data) setRole(data.role);
+                if (data) setProfile(data);
             }
         };
-        getRole();
+        getProfile();
     }, []);
 
-    const isAdmin = role === 'admin';
+    return (
+        <Link
+            href="/mypage"
+            className="flex items-center gap-3 px-2 py-2 cursor-pointer hover:bg-slate-50 rounded-xl transition"
+        >
+            <div className="w-9 h-9 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
+                <User className="text-blue-600 w-4 h-4" />
+            </div>
+            <div className="overflow-hidden">
+                <p className="text-sm font-bold text-slate-700 truncate">
+                    {profile?.full_name || "ゲストユーザー"}
+                </p>
+                <p className="text-[10px] text-slate-400 truncate tracking-wider uppercase">
+                    {profile?.role === 'admin' ? 'Administrator' : 'Staff Member'}
+                </p>
+            </div>
+        </Link>
+    );
+}
 
-    // フィルタリングされたサブメニュー
+// Sidebar logic to use the fetched profile for navigation
+function SidebarContent({ pathname }: { pathname: string }) {
+    const [profile, setProfile] = useState<{ role: string; permissions?: any } | null>(null);
+
+    useEffect(() => {
+        const getProfile = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data } = await supabase
+                    .from('profiles')
+                    .select('role, permissions')
+                    .eq('id', user.id)
+                    .single();
+                if (data) setProfile(data);
+            }
+        };
+        getProfile();
+    }, []);
+
+    const isAdmin = profile?.role === 'admin';
+    const permissions = profile?.permissions || {};
+
+    const isVisible = (href: string) => {
+        if (isAdmin) return true;
+        const pageKey = href.replace('/', '') || 'dashboard'; // / -> dashboard
+        return permissions[pageKey]?.view !== false; // Default to visible unless explicitly false
+    };
+
+    const filteredNavItems = navItems.filter(item => isVisible(item.href));
     const filteredSubNavItems = subNavItems.filter(item => {
         if (item.href === '/admin') return isAdmin;
-        return true;
+        return isVisible(item.href);
     });
 
     return (
-        <aside className="hidden md:flex w-64 flex-col bg-white border-r border-slate-200 shrink-0 z-10">
-            {/* Logo - Blue Theme */}
-            <div className="p-6">
-                <Link href="/" className="flex items-center gap-3 group">
-                    <div className="w-8 h-8 flex items-center justify-center border-2 border-blue-600 rounded-bl-xl rounded-tr-xl transform rotate-3 group-hover:scale-105 transition">
-                        <span className="font-bold text-blue-600 text-lg tracking-tighter leading-none italic pr-0.5">
-                            T
-                        </span>
-                    </div>
-                    <h1 className="text-xl font-bold text-blue-600 tracking-widest uppercase font-sans">
-                        Towmei
-                    </h1>
-                </Link>
-            </div>
-
+        <>
             {/* Main Nav */}
             <nav className="flex-1 px-4 py-2 space-y-1 overflow-y-auto mt-4">
-                {navItems.map((item) => {
+                {filteredNavItems.map((item) => {
                     const active = pathname === item.href;
                     return (
                         <Link
@@ -120,44 +153,30 @@ export default function Sidebar() {
             <div className="border-t border-slate-100 p-4">
                 <UserProfileFooter />
             </div>
-        </aside>
+        </>
     );
 }
 
-function UserProfileFooter() {
-    const [profile, setProfile] = useState<{ full_name: string; role: string } | null>(null);
-
-    useEffect(() => {
-        const getProfile = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                const { data } = await supabase
-                    .from('profiles')
-                    .select('full_name, role')
-                    .eq('id', user.id)
-                    .single();
-                if (data) setProfile(data);
-            }
-        };
-        getProfile();
-    }, []);
+export default function Sidebar() {
+    const pathname = usePathname();
 
     return (
-        <Link
-            href="/mypage"
-            className="flex items-center gap-3 px-2 py-2 cursor-pointer hover:bg-slate-50 rounded-xl transition"
-        >
-            <div className="w-9 h-9 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
-                <User className="text-blue-600 w-4 h-4" />
+        <aside className="hidden md:flex w-64 flex-col bg-white border-r border-slate-200 shrink-0 z-10">
+            {/* Logo - Blue Theme */}
+            <div className="p-6">
+                <Link href="/" className="flex items-center gap-3 group">
+                    <div className="w-8 h-8 flex items-center justify-center border-2 border-blue-600 rounded-bl-xl rounded-tr-xl transform rotate-3 group-hover:scale-105 transition">
+                        <span className="font-bold text-blue-600 text-lg tracking-tighter leading-none italic pr-0.5">
+                            T
+                        </span>
+                    </div>
+                    <h1 className="text-xl font-bold text-blue-600 tracking-widest uppercase font-sans">
+                        Towmei
+                    </h1>
+                </Link>
             </div>
-            <div className="overflow-hidden">
-                <p className="text-sm font-bold text-slate-700 truncate">
-                    {profile?.full_name || "ゲストユーザー"}
-                </p>
-                <p className="text-[10px] text-slate-400 truncate tracking-wider uppercase">
-                    {profile?.role === 'admin' ? 'Administrator' : 'Staff Member'}
-                </p>
-            </div>
-        </Link>
+
+            <SidebarContent pathname={pathname} />
+        </aside>
     );
 }

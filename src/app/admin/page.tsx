@@ -21,6 +21,7 @@ interface UserProfile {
     full_name: string;
     role: string;
     email?: string;
+    permissions?: Record<string, { view: boolean; edit: boolean }>;
 }
 
 export default function AdminPage() {
@@ -33,7 +34,7 @@ export default function AdminPage() {
             setLoading(true);
             const { data, error } = await supabase
                 .from('profiles')
-                .select('id, full_name, role')
+                .select('id, full_name, role, permissions')
                 .order('created_at', { ascending: true });
             if (error) throw error;
             setUsers(data || []);
@@ -125,6 +126,8 @@ export default function AdminPage() {
                             )}
                             {users.map((user: UserProfile) => {
                                 const isAdmin = user.role === "admin";
+                                // Parse permissions from JSONB, defaulting to true for admin and false for users
+                                const userPerms = user.permissions || {};
 
                                 const toggleRole = async () => {
                                     if (isAdmin && user.id === (await supabase.auth.getUser()).data.user?.id) {
@@ -141,6 +144,29 @@ export default function AdminPage() {
                                         showToast("error", "権限の更新に失敗しました");
                                     } else {
                                         showToast("success", `${user.full_name} を ${newRole === 'admin' ? '管理者' : '一般ユーザー'} に変更しました`);
+                                        refresh();
+                                    }
+                                };
+
+                                const togglePermission = async (page: string, type: 'view' | 'edit') => {
+                                    if (isAdmin) return; // Admins have all perms hardcoded/fixed in UI logic usually, or just don't allow changing
+
+                                    const newPerms = {
+                                        ...userPerms,
+                                        [page]: {
+                                            ...(userPerms[page] || { view: true, edit: false }),
+                                            [type]: !(userPerms[page]?.[type] ?? (type === 'view'))
+                                        }
+                                    };
+
+                                    const { error } = await supabase
+                                        .from('profiles')
+                                        .update({ permissions: newPerms })
+                                        .eq('id', user.id);
+
+                                    if (error) {
+                                        showToast("error", "権限の更新に失敗しました");
+                                    } else {
                                         refresh();
                                     }
                                 };
@@ -162,19 +188,25 @@ export default function AdminPage() {
                                             </div>
                                         </td>
                                         {pages.map((page: string) => {
-                                            const hasView = isAdmin || true;
-                                            const hasEdit = isAdmin;
+                                            // Admin users have full access (true); regular users use their recorded permissions
+                                            const hasView = isAdmin || (userPerms[page]?.view ?? true);
+                                            const hasEdit = isAdmin || (userPerms[page]?.edit ?? false);
+
                                             return (
                                                 <td key={page} colSpan={2} className="px-1 py-3 border-l border-slate-100">
                                                     <div className="flex justify-center gap-2">
-                                                        <div
-                                                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition ${hasView ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-300"} ${isAdmin ? "cursor-not-allowed opacity-50" : "cursor-default"}`}>
+                                                        <button
+                                                            onClick={() => togglePermission(page, 'view')}
+                                                            disabled={isAdmin}
+                                                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition ${hasView ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-300"} ${isAdmin ? "cursor-not-allowed opacity-50" : "hover:scale-110 active:scale-95"}`}>
                                                             {hasView ? <Check size={12} /> : <X size={12} />}
-                                                        </div>
-                                                        <div
-                                                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition ${hasEdit ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-300"} ${isAdmin ? "cursor-not-allowed opacity-50" : "cursor-default"}`}>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => togglePermission(page, 'edit')}
+                                                            disabled={isAdmin}
+                                                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition ${hasEdit ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-300"} ${isAdmin ? "cursor-not-allowed opacity-50" : "hover:scale-110 active:scale-95"}`}>
                                                             {hasEdit ? <Check size={12} /> : <X size={12} />}
-                                                        </div>
+                                                        </button>
                                                     </div>
                                                 </td>
                                             );
