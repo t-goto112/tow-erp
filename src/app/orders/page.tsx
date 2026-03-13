@@ -63,8 +63,9 @@ export default function OrdersPage() {
         }
         try {
             setLoading(true);
+            console.log("OrdersPage: Creating order", formNumber);
             const items = formItems.map(i => ({ ...i, unitPrice: isEcOrDirect ? 0 : i.unitPrice }));
-            await createSupabaseOrder({
+            const resultId = await createSupabaseOrder({
                 orderNumber: formNumber,
                 customerName: formCustomer,
                 channel: formChannel,
@@ -73,12 +74,16 @@ export default function OrdersPage() {
                 notes: formNotes,
                 items
             });
+
+            console.log("OrdersPage: Order created successfully", resultId);
             showToast("success", `受注 ${formNumber} を登録しました`);
             setIsNewOpen(false);
+
+            // 重要: refresh() が完了するのを待つ必要はないが、確実に呼ぶ
             refresh();
-        } catch (err) {
-            console.error(err);
-            showToast("error", "受注の登録に失敗しました");
+        } catch (err: any) {
+            console.error("OrdersPage: handleCreate error", err);
+            showToast("error", "受注の登録に失敗しました: " + (err.message || "Unknown error"));
         } finally {
             setLoading(false);
         }

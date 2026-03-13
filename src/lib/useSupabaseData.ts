@@ -136,9 +136,9 @@ export function useSupabaseData() {
 
     const [loading, setLoading] = useState(true);
 
-    const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async (isInitial = false) => {
         try {
-            setLoading(true);
+            if (isInitial) setLoading(true);
 
             // 1. Fetch Products
             const { data: pData, error: pErr } = await supabase.from('products').select('*');
@@ -194,20 +194,13 @@ export function useSupabaseData() {
             console.error("Failed to fetch data:", error);
             showToast("error", "データの取得に失敗しました");
         } finally {
-            setLoading(false);
+            if (isInitial) setLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        fetchData();
-
-        // Polling as a heavy-handed substitute for real-time until fully setup
-        const interval = setInterval(() => {
-            fetchData();
-        }, 30000);
-
-        return () => clearInterval(interval);
+        fetchData(true);
     }, [fetchData]);
 
-    return { products, orders, lots, inventory, processes, subcontractors, processRates, paymentItems, loading, refresh: fetchData };
+    return { products, orders, lots, inventory, processes, subcontractors, processRates, paymentItems, loading, refresh: () => fetchData(false) };
 }

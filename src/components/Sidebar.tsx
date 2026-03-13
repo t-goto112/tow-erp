@@ -130,8 +130,9 @@ export default function Sidebar() {
         if (isAdmin) return true;
         const pageKey = href.replace('/', '') || 'dashboard';
         if (href === '/admin') return false;
-        // Check permissions explicitly
+
         const perms = permissions as any;
+        // Default to true for view if not explicitly set to false
         return perms[pageKey]?.view !== false;
     };
 

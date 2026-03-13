@@ -12,7 +12,6 @@ const pageNames: Record<string, string> = {
     payments: "支払管理",
     routing: "工程実績",
     master: "マスタ管理",
-    lots: "ロット管理",
     admin: "管理者設定",
 };
 

@@ -24,7 +24,7 @@ export default function Modal({ open, onClose, title, subtitle, children, width 
     if (!open || !mounted) return null;
 
     const modalContent = (
-        <div className="fixed inset-0 z-[9999]">
+        <div className="fixed inset-0 z-[9990]">
             {/* Backdrop */}
             <div
                 className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"

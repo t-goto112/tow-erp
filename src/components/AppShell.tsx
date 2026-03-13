@@ -12,7 +12,7 @@ const pageTitles: Record<string, string> = {
     "/payments": "支払管理",
     "/routing": "工程実績・納入報告",
     "/master": "マスタ・各種設定",
-    "/lots": "ロット管理",
+    "/master": "マスタ・各種設定",
     "/admin": "管理者設定",
     "/mypage": "マイアカウント",
 };
