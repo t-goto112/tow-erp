@@ -14,7 +14,7 @@ import {
     Shield,
     Loader2,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { useSupabaseData } from "@/lib/useSupabaseData";
 
 const navItems = [
     { href: "/", icon: LayoutDashboard, label: "ダッシュボード" },
@@ -60,68 +60,7 @@ function UserProfileFooter({ profile, loading }: { profile: any; loading: boolea
 
 export default function Sidebar() {
     const pathname = usePathname();
-    const [profile, setProfile] = useState<{ full_name: string; role: string; permissions?: any } | null>(null);
-    const [loading, setLoading] = useState(true);
-
-    const fetchProfile = async () => {
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            const user = session?.user;
-
-            if (!user) {
-                console.log("Sidebar: No session user found");
-                setProfile(null);
-                setLoading(false);
-                return;
-            }
-
-            console.log("Sidebar: Fetching profile for", user.id);
-
-            // 1. Get profile from DB (Source of truth)
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('full_name, role, permissions')
-                .eq('id', user.id)
-                .single();
-
-            if (error) {
-                console.error("Sidebar: DB Fetch error", error);
-
-                // 2. Fallback to metadata if DB fetch fails
-                const metaRole = user.app_metadata?.role || user.user_metadata?.role;
-                const metaName = user.user_metadata?.full_name || "ゲストユーザー";
-
-                console.log("Sidebar: Fallback to metadata", { metaRole, metaName });
-                setProfile({
-                    full_name: metaName,
-                    role: (metaRole as string) || 'user',
-                    permissions: {}
-                });
-            } else if (data) {
-                console.log("Sidebar: Profile loaded successfully", data);
-                setProfile(data);
-            }
-        } catch (err) {
-            console.error("Sidebar catch error:", err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchProfile();
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            console.log("Sidebar: Auth Change Event", event);
-            if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
-                fetchProfile();
-            } else if (event === 'SIGNED_OUT') {
-                setProfile(null);
-            }
-        });
-
-        return () => subscription.unsubscribe();
-    }, []);
+    const { profile, loading } = useSupabaseData();
 
     const isAdmin = profile?.role === 'admin';
     const permissions = profile?.permissions || {};
@@ -129,10 +68,12 @@ export default function Sidebar() {
     const isVisible = (href: string) => {
         if (isAdmin) return true;
         const pageKey = href.replace('/', '') || 'dashboard';
+
+        // Explicitly hide admin page for non-admins
         if (href === '/admin') return false;
 
         const perms = permissions as any;
-        // Default to true for view if not explicitly set to false
+        // Check view permission. Default to true if not explicitly false.
         return perms[pageKey]?.view !== false;
     };
 

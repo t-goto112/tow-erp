@@ -10,7 +10,7 @@ import { adjustInventory, updateWarehouse } from "@/lib/services/inventoryServic
 export default function InventoryPage() {
     const [tab, setTab] = useState<"stock" | "wip">("stock");
     const { inventory, lots, loading, profile, refresh } = useSupabaseData();
-    const canEdit = profile?.role === 'admin' || (profile?.permissions?.inventory?.edit !== false);
+    const canEdit = profile?.role === 'admin' || (profile?.permissions?.inventory?.edit === true);
 
     const [adjustItem, setAdjustItem] = useState<SupabaseInventory | null>(null);
     const [warehouseEditItem, setWarehouseEditItem] = useState<SupabaseInventory | null>(null);
@@ -111,9 +111,6 @@ export default function InventoryPage() {
                                         </div>
                                     </td>
                                     <td className="px-4 py-3 text-right">
-                                        {canEdit && (
-                                            <button onClick={() => { setAdjustItem(item); setNewQuantity(String(item.quantity)); }} className="p-1.5 rounded-md hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition" title="数量修正"><Edit2 size={14} /></button>
-                                        )}
                                     </td>
                                 </tr>
                             ))}
@@ -127,7 +124,7 @@ export default function InventoryPage() {
             {tab === "wip" && (
                 <div className="space-y-3">
                     {wipByLot.map(lot => {
-                        const processList = lot.lot_processes ? [...lot.lot_processes].sort((a, b) => a.step_order - b.step_order) : [];
+                        const processList = lot.lot_processes ? [...lot.lot_processes].sort((a: any, b: any) => (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0)) : [];
 
                         return (
                             <div key={lot.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">

@@ -133,7 +133,7 @@ export function useSupabaseData() {
     const [processRates, setProcessRates] = useState<SupabaseProcessSubcontractorRate[]>([]);
 
     const [paymentItems, setPaymentItems] = useState<SupabasePaymentItem[]>([]);
-    const [profile, setProfile] = useState<{ role: string; permissions: any } | null>(null);
+    const [profile, setProfile] = useState<{ full_name: string; role: string; permissions: any } | null>(null);
 
     const [loading, setLoading] = useState(true);
 
@@ -146,10 +146,10 @@ export function useSupabaseData() {
             if (session?.user) {
                 const { data: profData } = await supabase
                     .from('profiles')
-                    .select('role, permissions')
+                    .select('full_name, role, permissions')
                     .eq('id', session.user.id)
                     .single();
-                setProfile(profData);
+                setProfile(profData as any);
             }
 
             // 1. Fetch Products

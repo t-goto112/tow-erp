@@ -84,7 +84,9 @@ CREATE TABLE order_items (
   order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
   product_id UUID REFERENCES products(id),
   quantity INT NOT NULL,
-  unit_price NUMERIC(10,2)
+  unit_price NUMERIC(10,2),
+  shipped_quantity INT DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- ─── 7. ロット (再帰的 Split/Merge) ───

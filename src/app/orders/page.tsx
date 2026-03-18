@@ -18,7 +18,7 @@ const statusLabels: Record<string, { label: string; color: string }> = {
 
 export default function OrdersPage() {
     const { orders, products, loading: dataLoading, profile, refresh } = useSupabaseData();
-    const canEdit = profile?.role === 'admin' || (profile?.permissions?.orders?.edit !== false);
+    const canEdit = profile?.role === 'admin' || (profile?.permissions?.orders?.edit === true);
 
     const [isNewOpen, setIsNewOpen] = useState(false);
     const [detailOrder, setDetailOrder] = useState<SupabaseOrder | null>(null);
@@ -36,15 +36,15 @@ export default function OrdersPage() {
     const [formChannel, setFormChannel] = useState<"ec" | "wholesale" | "direct">("wholesale");
     const [formDueDate, setFormDueDate] = useState("");
     const [formNotes, setFormNotes] = useState("");
-    const [formItems, setFormItems] = useState([{ product: "", qty: 0, unitPrice: 0, shipped: 0 }]);
+    const [formItems, setFormItems] = useState([{ product: "", quantity: 0, unitPrice: 0, shipped_quantity: 0 }]);
     const [loading, setLoading] = useState(false);
 
     const filtered = useMemo(() => {
-        let data = orders;
-        if (statusFilter !== "all") data = data.filter(o => o.status === statusFilter);
-        if (periodFrom) data = data.filter(o => o.created_at >= periodFrom);
-        if (periodTo) data = data.filter(o => o.created_at <= periodTo);
-        if (productFilter) data = data.filter(o => o.order_items.some(i => i.products?.name?.includes(productFilter)));
+        let data: SupabaseOrder[] = orders;
+        if (statusFilter !== "all") data = data.filter((o: SupabaseOrder) => o.status === statusFilter);
+        if (periodFrom) data = data.filter((o: SupabaseOrder) => o.created_at >= periodFrom);
+        if (periodTo) data = data.filter((o: SupabaseOrder) => o.created_at <= periodTo);
+        if (productFilter) data = data.filter((o: SupabaseOrder) => o.order_items.some((i: any) => i.products?.name?.includes(productFilter)));
         return data;
     }, [orders, statusFilter, periodFrom, periodTo, productFilter]);
 
@@ -52,14 +52,14 @@ export default function OrdersPage() {
         // ID generation should ideally be backend sequence, generating temp one
         setFormNumber(`ORD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(Math.random() * 1000)}`);
         setFormCustomer(""); setFormChannel("wholesale"); setFormDueDate(""); setFormNotes("");
-        setFormItems([{ product: "", qty: 0, unitPrice: 0, shipped: 0 }]);
+        setFormItems([{ product: "", quantity: 0, unitPrice: 0, shipped_quantity: 0 }]);
         setIsNewOpen(true);
     };
 
     const isEcOrDirect = formChannel === "ec" || formChannel === "direct";
 
     const handleCreate = async () => {
-        if (!formCustomer || !formDueDate || formItems.some(i => !i.product || i.qty <= 0)) {
+        if (!formCustomer || !formDueDate || formItems.some(i => !i.product || i.quantity <= 0)) {
             showToast("error", "必須項目を入力してください"); return;
         }
         try {
@@ -206,11 +206,11 @@ export default function OrdersPage() {
                                 <select value={item.product} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { const arr = [...formItems]; arr[i].product = e.target.value; setFormItems(arr); }} className="select-base flex-1 w-full text-sm">
                                     <option value="">選択</option>{products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                                 </select>
-                                <input type="number" placeholder="数量" value={item.qty || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const arr = [...formItems]; arr[i].qty = Number(e.target.value); setFormItems(arr); }} className="input-base w-full sm:w-24 shrink-0 px-2" />
+                                <input type="number" placeholder="数量" value={item.quantity || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const arr = [...formItems]; arr[i].quantity = Number(e.target.value); setFormItems(arr); }} className="input-base w-full sm:w-24 shrink-0 px-2" />
                                 <input type="number" placeholder="単価" value={item.unitPrice || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const arr = [...formItems]; arr[i].unitPrice = Number(e.target.value); setFormItems(arr); }} className="input-base w-full sm:w-16 shrink-0 px-2 text-xs" disabled={isEcOrDirect} />
                             </div>
                         ))}
-                        <button type="button" onClick={() => setFormItems(prev => [...prev, { product: "", qty: 0, unitPrice: 0, shipped: 0 }])} className="text-[10px] text-blue-600 font-bold hover:underline">+ 品目を追加</button>
+                        <button type="button" onClick={() => setFormItems(prev => [...prev, { product: "", quantity: 0, unitPrice: 0, shipped_quantity: 0 }])} className="text-[10px] text-blue-600 font-bold hover:underline">+ 品目を追加</button>
                     </div>
                     <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">備考</label><textarea value={formNotes} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormNotes(e.target.value)} rows={2} className="input-base" /></div>
                     <button onClick={handleCreate} disabled={loading} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2">

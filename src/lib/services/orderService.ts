@@ -1,9 +1,9 @@
 import { supabase } from "@/lib/supabase";
 interface OrderItem {
     product: string;
-    qty: number;
+    quantity: number;
     unitPrice: number;
-    shipped?: number;
+    shipped_quantity?: number;
 }
 
 export async function createSupabaseOrder(params: {
@@ -53,9 +53,9 @@ export async function createSupabaseOrder(params: {
                 .insert([{
                     order_id: orderId,
                     product_id: productId,
-                    quantity: item.qty,
+                    quantity: item.quantity,
                     unit_price: item.unitPrice,
-                    shipped_quantity: item.shipped || 0
+                    shipped_quantity: item.shipped_quantity || 0
                 }])
                 .select()
                 .single();
@@ -69,7 +69,7 @@ export async function createSupabaseOrder(params: {
                 .insert([{
                     lot_number: lotNumber,
                     product_id: productId,
-                    total_quantity: item.qty,
+                    total_quantity: item.quantity,
                     status: 'created',
                     order_id: orderId
                 }])
@@ -91,7 +91,7 @@ export async function createSupabaseOrder(params: {
                     lot_id: lotData.id,
                     process_id: t.id,
                     status: idx === 0 ? 'in_progress' : 'pending',
-                    input_quantity: idx === 0 ? item.qty : 0,
+                    input_quantity: idx === 0 ? item.quantity : 0,
                     completed_quantity: 0,
                     defect_quantity: 0,
                     loss_qty: 0,

@@ -15,12 +15,13 @@ export default function Dashboard() {
     const [customFrom, setCustomFrom] = useState("");
     const [customTo, setCustomTo] = useState("");
 
-    const { lots, orders, paymentItems, products } = useSupabaseData();
+    const { lots, orders, paymentItems, products, profile } = useSupabaseData();
+    const canEdit = profile?.role === 'admin' || (profile?.permissions?.dashboard?.edit !== false);
 
     // Map properties for UI
     const orderBacklog = useMemo(() => {
         return orders.filter(o => o.status !== "completed" && o.status !== "cancelled").reduce((sum, o) => {
-            return sum + (o.order_items || []).reduce((s, item) => s + Math.max(0, item.qty - (item.shipped || 0)) * item.unit_price, 0);
+            return sum + (o.order_items || []).reduce((s, item) => s + Math.max(0, item.quantity - (item.shipped_quantity || 0)) * item.unit_price, 0);
         }, 0);
     }, [orders]);
 
@@ -262,8 +263,8 @@ export default function Dashboard() {
                     {wipByLot.map((lot: any) => {
                         const currentProc = (lot.lot_processes || []).find((p: any) => p.status === "in_progress");
                         return (
-                            <div key={lot.id} onClick={() => setSelectedLot(lot)}
-                                className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md hover:border-blue-200 transition cursor-pointer group">
+                            <div key={lot.id} onClick={() => canEdit && setSelectedLot(lot)}
+                                className={`bg-white rounded-2xl border border-slate-200 shadow-sm p-4 transition ${canEdit ? 'hover:shadow-md hover:border-blue-200 cursor-pointer group' : 'opacity-80'}`}>
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <div className="flex items-center gap-2 mb-1">
@@ -276,7 +277,7 @@ export default function Dashboard() {
                                             {currentProc && <span className="text-blue-600">{currentProc.processes?.name || ""}</span>}
                                         </div>
                                     </div>
-                                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition" />
+                                    {canEdit && <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition" />}
                                 </div>
                                 <div className="mt-3 bg-slate-50 rounded-lg p-2 overflow-x-auto flex gap-2 text-[10px] text-slate-400 font-bold border border-slate-100">
                                     {(lot.lot_processes || []).map((p: any) => (

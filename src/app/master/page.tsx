@@ -10,6 +10,7 @@ import {
     processesToFormGroups,
     type MasterProduct, type FormGroup
 } from "@/lib/services/masterService";
+import { useSupabaseData } from "@/lib/useSupabaseData";
 
 let _formUid = Date.now();
 function formUid() { return `f${++_formUid}`; }
@@ -21,6 +22,8 @@ export default function MasterPage() {
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const [step, setStep] = useState<1 | 2>(1);
     const [loading, setLoading] = useState(false);
+    const { profile } = useSupabaseData();
+    const canEdit = profile?.role === 'admin' || (profile?.permissions?.master?.edit === true);
     const [fetching, setFetching] = useState(true);
 
     // 商品フォーム
@@ -51,7 +54,7 @@ export default function MasterPage() {
         setStep(1); setEditProduct(null);
     };
 
-    const openNew = () => { resetForm(); setIsModalOpen(true); };
+    const openNew = () => { if (!canEdit) return; resetForm(); setIsModalOpen(true); };
 
     const openEdit = (p: MasterProduct) => {
         setEditProduct(p);
@@ -181,9 +184,11 @@ export default function MasterPage() {
         <div className="space-y-4 animate-in fade-in duration-300">
             <div className="flex items-center justify-between">
                 <h3 className="text-xl font-black text-slate-800">商品マスタ管理</h3>
-                <button onClick={openNew} className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all">
-                    <Plus size={16} /> 新規登録
-                </button>
+                {canEdit && (
+                    <button onClick={openNew} className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all">
+                        <Plus size={16} /> 新規登録
+                    </button>
+                )}
             </div>
 
             {/* 商品カード一覧 */}
@@ -207,9 +212,9 @@ export default function MasterPage() {
                                     <p className="text-xs text-slate-400">{groups.length}グループ | {groups.reduce((s: number, g: any) => s + g.templates.length, 0)}工程</p>
                                 </div>
                                 <div className="flex items-center gap-1">
-                                    <button onClick={() => duplicateProduct(p)} className="p-1.5 rounded-md hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition" title="複製"><Copy size={14} /></button>
-                                    <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition" title="編集"><Edit2 size={14} /></button>
-                                    <button onClick={() => setDeleteId(p.id)} className="p-1.5 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 transition" title="削除"><Trash2 size={14} /></button>
+                                    {canEdit && <button onClick={() => duplicateProduct(p)} className="p-1.5 rounded-md hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition" title="複製"><Copy size={14} /></button>}
+                                    {canEdit && <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition" title="編集"><Edit2 size={14} /></button>}
+                                    {canEdit && <button onClick={() => setDeleteId(p.id)} className="p-1.5 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 transition" title="削除"><Trash2 size={14} /></button>}
                                 </div>
                             </div>
                             {/* 工程グループ別フロー表示 */}

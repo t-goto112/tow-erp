@@ -51,13 +51,13 @@ export async function updateLotProcessDelivery(
     // プロセスの状態を更新
     const { data: processData, error: pGetError } = await supabase
         .from('lot_processes')
-        .select('current_quantity')
+        .select('input_quantity')
         .eq('id', processId)
         .single();
 
     if (pGetError) throw pGetError;
 
-    const status = completedQty >= processData.current_quantity && processData.current_quantity > 0
+    const status = completedQty >= processData.input_quantity && processData.input_quantity > 0
         ? 'completed'
         : (completedQty > 0 ? 'in_progress' : 'pending');
 
@@ -72,7 +72,7 @@ export async function updateLotProcessDelivery(
     if (pUpdError) throw pUpdError;
 
     // 3. 次工程への引き継ぎ
-    // このプロセスが完了扱いで次工程がある場合、次工程のcurrent_quantityを増やす
+    // このプロセスが完了扱いで次工程がある場合、次工程のinput_quantityを増やす
     if (status === 'completed') {
         const { data: currentP } = await supabase
             .from('lot_processes')
@@ -83,7 +83,7 @@ export async function updateLotProcessDelivery(
         if (currentP) {
             const { data: nextP } = await supabase
                 .from('lot_processes')
-                .select('id, current_quantity')
+                .select('id, input_quantity')
                 .eq('lot_id', currentP.lot_id)
                 .eq('step_order', currentP.step_order + 1)
                 .single();
@@ -93,8 +93,8 @@ export async function updateLotProcessDelivery(
                 await supabase
                     .from('lot_processes')
                     .update({
-                        current_quantity: completedQty,
-                        status: nextP.current_quantity === 0 ? 'in_progress' : undefined
+                        input_quantity: completedQty,
+                        status: nextP.input_quantity === 0 ? 'in_progress' : undefined
                     })
                     .eq('id', nextP.id);
             } else {

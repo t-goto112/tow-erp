@@ -9,7 +9,7 @@ import { moveForward, registerWip, moveBack, moveToInventory, shipAndInvoice, co
 
 export default function RoutingPage() {
     const { lots, processes, subcontractors, processRates, loading: dataLoading, profile, refresh } = useSupabaseData();
-    const canEdit = profile?.role === 'admin' || (profile?.permissions?.routing?.edit !== false);
+    const canEdit = profile?.role === 'admin' || (profile?.permissions?.routing?.edit === true);
     const [selectedLotId, setSelectedLotId] = useState("");
     const [selectedProcessId, setSelectedProcessId] = useState("");
 
@@ -197,8 +197,9 @@ export default function RoutingPage() {
                 <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">ロット</label>
                     <select value={selectedLotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setSelectedLotId(e.target.value); setSelectedProcessId(""); }}
-                        className="select-base">
-                        <option value="">選択してください</option>
+                        disabled={!canEdit}
+                        className={`select-base ${!canEdit ? 'opacity-50 cursor-not-allowed bg-slate-100' : ''}`}>
+                        <option value="">{canEdit ? '選択してください' : '閲覧のみ（選択不可）'}</option>
                         {activeLots.map(l => <option key={l.id} value={l.id}>{l.lot_number} — {l.products?.name} ({l.total_quantity}個)</option>)}
                     </select>
                 </div>

@@ -1,7 +1,8 @@
 "use client";
 
 import { AlertTriangle, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 interface ConfirmDialogProps {
     open: boolean;
@@ -15,8 +16,13 @@ interface ConfirmDialogProps {
 
 export default function ConfirmDialog({ open, onClose, onConfirm, title, message, confirmLabel = "実行する", danger = false }: ConfirmDialogProps) {
     const [loading, setLoading] = useState(false);
+    const [mounted, setMounted] = useState(false);
 
-    if (!open) return null;
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    if (!open || !mounted) return null;
 
     const handleConfirm = async () => {
         setLoading(true);
@@ -25,8 +31,8 @@ export default function ConfirmDialog({ open, onClose, onConfirm, title, message
         onClose();
     };
 
-    return (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[10001] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
+    const dialogContent = (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
             <div className="max-w-sm w-full bg-white rounded-3xl shadow-2xl p-8 animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
                 <div className="flex flex-col items-center text-center gap-4">
                     <div className={`w-16 h-16 rounded-3xl flex items-center justify-center ${danger ? "bg-red-50 text-red-500" : "bg-amber-50 text-amber-500"}`}>
@@ -57,4 +63,9 @@ export default function ConfirmDialog({ open, onClose, onConfirm, title, message
             </div>
         </div>
     );
+
+    const modalRoot = document.getElementById("modal-root");
+    if (!modalRoot) return null;
+
+    return createPortal(dialogContent, modalRoot);
 }

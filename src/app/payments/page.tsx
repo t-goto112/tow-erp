@@ -18,7 +18,7 @@ type StatusFilter = "wip" | "pre_payment" | "paid" | "confirmed";
 
 export default function PaymentsPage() {
     const { paymentItems, loading, profile, refresh } = useSupabaseData();
-    const canEdit = profile?.role === 'admin' || (profile?.permissions?.payments?.edit !== false);
+    const canEdit = profile?.role === 'admin' || (profile?.permissions?.payments?.edit === true);
     const [actionLoading, setActionLoading] = useState(false);
 
     // Map Supabase objects to flat list for UI
