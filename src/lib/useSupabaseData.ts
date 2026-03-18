@@ -133,12 +133,24 @@ export function useSupabaseData() {
     const [processRates, setProcessRates] = useState<SupabaseProcessSubcontractorRate[]>([]);
 
     const [paymentItems, setPaymentItems] = useState<SupabasePaymentItem[]>([]);
+    const [profile, setProfile] = useState<{ role: string; permissions: any } | null>(null);
 
     const [loading, setLoading] = useState(true);
 
     const fetchData = useCallback(async (isInitial = false) => {
         try {
             if (isInitial) setLoading(true);
+
+            // 0. Fetch Current User Profile
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+                const { data: profData } = await supabase
+                    .from('profiles')
+                    .select('role, permissions')
+                    .eq('id', session.user.id)
+                    .single();
+                setProfile(profData);
+            }
 
             // 1. Fetch Products
             const { data: pData, error: pErr } = await supabase.from('products').select('*');
@@ -202,5 +214,5 @@ export function useSupabaseData() {
         fetchData(true);
     }, [fetchData]);
 
-    return { products, orders, lots, inventory, processes, subcontractors, processRates, paymentItems, loading, refresh: () => fetchData(false) };
+    return { products, orders, lots, inventory, processes, subcontractors, processRates, paymentItems, loading, profile, refresh: () => fetchData(false) };
 }

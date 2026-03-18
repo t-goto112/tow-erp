@@ -8,7 +8,8 @@ import { useSupabaseData, SupabaseLot, SupabaseLotProcess } from "@/lib/useSupab
 import { moveForward, registerWip, moveBack, moveToInventory, shipAndInvoice, confirmLoss } from "@/lib/services/routingService";
 
 export default function RoutingPage() {
-    const { lots, processes, subcontractors, processRates, loading: dataLoading, refresh } = useSupabaseData();
+    const { lots, processes, subcontractors, processRates, loading: dataLoading, profile, refresh } = useSupabaseData();
+    const canEdit = profile?.role === 'admin' || (profile?.permissions?.routing?.edit !== false);
     const [selectedLotId, setSelectedLotId] = useState("");
     const [selectedProcessId, setSelectedProcessId] = useState("");
 
@@ -87,7 +88,7 @@ export default function RoutingPage() {
     }, [selectedLotId, selectedProcessId, nextProcessSubs, prevProcessSubs, currentProcessSubs, selectedLot]);
 
     const handleForward = async () => {
-        if (!selectedLot || !selectedProc) return;
+        if (!canEdit || !selectedLot || !selectedProc) return;
         setLoading(true);
         try {
             await moveForward(selectedLot.id, selectedProc.id, Number(fwdQty), fwdCompletionDate, fwdDeliveryDate, fwdDueDate, nextProcessSubs[0]?.process_id, fwdNextSub || undefined, fwdOverride ? Number(fwdOverride) : undefined);
@@ -102,7 +103,7 @@ export default function RoutingPage() {
     };
 
     const handleRegisterWip = async () => {
-        if (!selectedLot || !selectedProc || !wipSub) return;
+        if (!canEdit || !selectedLot || !selectedProc || !wipSub) return;
         setLoading(true);
         try {
             // Find subcontractor ID by name
@@ -118,7 +119,7 @@ export default function RoutingPage() {
     };
 
     const handleBack = async () => {
-        if (!selectedLot || !selectedProc || prevProcessSubs.length === 0) return;
+        if (!canEdit || !selectedLot || !selectedProc || prevProcessSubs.length === 0) return;
         setLoading(true);
         try {
             const subId = prevProcessSubs.find(s => s.name === backPrevSub)?.id;
@@ -134,7 +135,7 @@ export default function RoutingPage() {
     };
 
     const handleMoveToInventory = async () => {
-        if (!selectedLot || !selectedProc) return;
+        if (!canEdit || !selectedLot || !selectedProc) return;
         setLoading(true);
         try {
             await moveToInventory(selectedLot.id, selectedProc.id, Number(fwdQty), warehouseName, fwdCompletionDate, selectedLot.product_id);
@@ -150,7 +151,7 @@ export default function RoutingPage() {
     };
 
     const handleShip = async () => {
-        if (!selectedLot || !selectedProc) return;
+        if (!canEdit || !selectedLot || !selectedProc) return;
         setLoading(true);
         try {
             await shipAndInvoice(selectedLot.id, selectedProc.id, Number(fwdQty), selectedLot.order_id);
@@ -166,7 +167,7 @@ export default function RoutingPage() {
     };
 
     const handleConfirmLoss = async () => {
-        if (!selectedLot || !selectedProc) return;
+        if (!canEdit || !selectedLot || !selectedProc) return;
         try {
             const r = await confirmLoss(selectedLot.id, selectedProc.id);
             setConfirmLoss(false);
@@ -241,10 +242,12 @@ export default function RoutingPage() {
                         <div><label className="block text-[10px] font-black text-slate-400 mb-1">特値 (任意)</label><input type="number" value={wipOverride} onChange={e => setWipOverride(e.target.value)} placeholder="空欄=標準単価" className="input-base" /></div>
                     </div>
 
-                    <button onClick={handleRegisterWip} disabled={loading || !wipQty || !wipDeliveryDate || !wipDueDate || !wipSub}
-                        className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2">
-                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>仕掛登録を確定</>}
-                    </button>
+                    {canEdit && (
+                        <button onClick={handleRegisterWip} disabled={loading || !wipQty || !wipDeliveryDate || !wipDueDate || !wipSub}
+                            className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2">
+                            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>仕掛登録を確定</>}
+                        </button>
+                    )}
                 </div>
             )}
 
@@ -301,24 +304,28 @@ export default function RoutingPage() {
                                         <div className="animate-in slide-in-from-top-2 duration-200">
                                             <label className="block text-[10px] font-black text-slate-400 mb-1">保管倉庫</label>
                                             <input type="text" value={warehouseName} onChange={(e) => setWarehouseName(e.target.value)} placeholder="例：本社倉庫" className="input-base mb-3" />
-                                            <button onClick={handleMoveToInventory} disabled={loading || !fwdQty || !fwdCompletionDate}
-                                                className="w-full bg-blue-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
-                                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4" /> 在庫へ移動を確定</>}
-                                            </button>
+                                            {canEdit && (
+                                                <button onClick={handleMoveToInventory} disabled={loading || !fwdQty || !fwdCompletionDate}
+                                                    className="w-full bg-blue-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
+                                                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4" /> 在庫へ移動を確定</>}
+                                                </button>
+                                            )}
                                         </div>
                                     )}
 
                                     {shipMode === "ship" && (
                                         <div className="animate-in slide-in-from-top-2 duration-200">
                                             <p className="text-[10px] text-slate-500 mb-3 bg-emerald-50 p-2 rounded-lg border border-emerald-100">受注残と連動し、出荷枚数を更新します。売上が自動計上されます。</p>
-                                            <button onClick={handleShip} disabled={loading || !fwdQty || !fwdCompletionDate}
-                                                className="w-full bg-emerald-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
-                                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4" /> 発送・売上計上を確定</>}
-                                            </button>
+                                            {canEdit && (
+                                                <button onClick={handleShip} disabled={loading || !fwdQty || !fwdCompletionDate}
+                                                    className="w-full bg-emerald-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
+                                                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4" /> 発送・売上計上を確定</>}
+                                                </button>
+                                            )}
                                         </div>
                                     )}
                                 </div>
-                            ) : (
+                            ) : canEdit && (
                                 <button onClick={handleForward} disabled={loading || !fwdQty || !fwdCompletionDate || !fwdDeliveryDate || !fwdDueDate}
                                     className="w-full bg-blue-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
                                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ArrowRight className="w-4 h-4" /> 次工程へ送る</>}
@@ -348,10 +355,12 @@ export default function RoutingPage() {
                                             )}
                                         </div>
                                     )}
-                                    <button onClick={handleBack} disabled={loading || !backQty || !backDate || !backDueDate}
-                                        className="w-full bg-amber-500 text-white font-bold py-3 rounded-2xl shadow-lg shadow-amber-500/20 hover:bg-amber-600 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
-                                        <ArrowLeft className="w-4 h-4" /> 差戻す
-                                    </button>
+                                    {canEdit && (
+                                        <button onClick={handleBack} disabled={loading || !backQty || !backDate || !backDueDate}
+                                            className="w-full bg-amber-500 text-white font-bold py-3 rounded-2xl shadow-lg shadow-amber-500/20 hover:bg-amber-600 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
+                                            <ArrowLeft className="w-4 h-4" /> 差戻す
+                                        </button>
+                                    )}
                                 </div>
                             )}
 
@@ -359,7 +368,9 @@ export default function RoutingPage() {
                                 <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-5 space-y-3">
                                     <h4 className="font-bold text-sm text-red-600 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> ロス確定</h4>
                                     <p className="text-xs text-slate-500">現在数 {selectedProcCurrentQty}個 を廃棄(ロス)として確定します。</p>
-                                    <button onClick={() => setConfirmLoss(true)} className="w-full bg-red-500 text-white font-bold py-3 rounded-2xl shadow-lg shadow-red-500/20 hover:bg-red-600 active:scale-[0.98] transition-all text-sm">ロス確定</button>
+                                    {canEdit && (
+                                        <button onClick={() => setConfirmLoss(true)} className="w-full bg-red-500 text-white font-bold py-3 rounded-2xl shadow-lg shadow-red-500/20 hover:bg-red-600 active:scale-[0.98] transition-all text-sm">ロス確定</button>
+                                    )}
                                 </div>
                             )}
                         </div>

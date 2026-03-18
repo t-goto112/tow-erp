@@ -9,7 +9,9 @@ import { adjustInventory, updateWarehouse } from "@/lib/services/inventoryServic
 
 export default function InventoryPage() {
     const [tab, setTab] = useState<"stock" | "wip">("stock");
-    const { inventory, lots, loading, refresh } = useSupabaseData();
+    const { inventory, lots, loading, profile, refresh } = useSupabaseData();
+    const canEdit = profile?.role === 'admin' || (profile?.permissions?.inventory?.edit !== false);
+
     const [adjustItem, setAdjustItem] = useState<SupabaseInventory | null>(null);
     const [warehouseEditItem, setWarehouseEditItem] = useState<SupabaseInventory | null>(null);
     const [newWarehouse, setNewWarehouse] = useState("");
@@ -97,14 +99,21 @@ export default function InventoryPage() {
                                 <tr key={item.id || index} className="hover:bg-slate-50/50 transition">
                                     <td className="px-4 py-3 font-bold text-slate-700">{item.products?.name}</td>
                                     <td className="px-4 py-3 text-right font-black text-lg">{item.quantity}</td>
-                                    <td className="px-4 py-3 text-xs text-slate-400 group cursor-pointer" onClick={() => { setWarehouseEditItem(item); setNewWarehouse(item.location || ""); }}>
+                                    <td className="px-4 py-3 text-xs text-slate-400 group cursor-pointer"
+                                        onClick={() => {
+                                            if (!canEdit) return;
+                                            setWarehouseEditItem(item);
+                                            setNewWarehouse(item.location || "");
+                                        }}>
                                         <div className="flex items-center gap-1 hover:text-blue-600 transition">
                                             {item.location || <span className="text-slate-300 italic">未設定</span>}
-                                            <Edit2 size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            {canEdit && <Edit2 size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
                                         </div>
                                     </td>
                                     <td className="px-4 py-3 text-right">
-                                        <button onClick={() => { setAdjustItem(item); setNewQuantity(String(item.quantity)); }} className="p-1.5 rounded-md hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition" title="数量修正"><Edit2 size={14} /></button>
+                                        {canEdit && (
+                                            <button onClick={() => { setAdjustItem(item); setNewQuantity(String(item.quantity)); }} className="p-1.5 rounded-md hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition" title="数量修正"><Edit2 size={14} /></button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}

@@ -17,7 +17,8 @@ const statusLabels: Record<string, { label: string; color: string }> = {
 };
 
 export default function OrdersPage() {
-    const { orders, products, loading: dataLoading, refresh } = useSupabaseData();
+    const { orders, products, loading: dataLoading, profile, refresh } = useSupabaseData();
+    const canEdit = profile?.role === 'admin' || (profile?.permissions?.orders?.edit !== false);
 
     const [isNewOpen, setIsNewOpen] = useState(false);
     const [detailOrder, setDetailOrder] = useState<SupabaseOrder | null>(null);
@@ -127,9 +128,11 @@ export default function OrdersPage() {
                         {products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                     </select>
                 </div>
-                <button onClick={openNew} className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all">
-                    <Plus size={16} /> 新規受注
-                </button>
+                {canEdit && (
+                    <button onClick={openNew} className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all">
+                        <Plus size={16} /> 新規受注
+                    </button>
+                )}
             </div>
 
             <div className="space-y-3">
@@ -178,9 +181,11 @@ export default function OrdersPage() {
 
                         </div>
                         {detailOrder.notes && <p className="text-xs text-slate-500 bg-amber-50 rounded-xl p-3 border border-amber-200">📝 {detailOrder.notes}</p>}
-                        <button onClick={() => setDeleteId(detailOrder.id)} className="w-full flex items-center justify-center gap-2 py-3 bg-red-50 text-red-600 font-bold rounded-2xl border border-red-200 hover:bg-red-100 transition text-sm">
-                            <Trash2 size={14} /> この受注を削除する
-                        </button>
+                        {canEdit && (
+                            <button onClick={() => setDeleteId(detailOrder.id)} className="w-full flex items-center justify-center gap-2 py-3 bg-red-50 text-red-600 font-bold rounded-2xl border border-red-200 hover:bg-red-100 transition text-sm">
+                                <Trash2 size={14} /> この受注を削除する
+                            </button>
+                        )}
                     </div>
                 )}
             </Modal>

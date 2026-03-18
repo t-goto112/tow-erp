@@ -17,7 +17,8 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.E
 type StatusFilter = "wip" | "pre_payment" | "paid" | "confirmed";
 
 export default function PaymentsPage() {
-    const { paymentItems, loading, refresh } = useSupabaseData();
+    const { paymentItems, loading, profile, refresh } = useSupabaseData();
+    const canEdit = profile?.role === 'admin' || (profile?.permissions?.payments?.edit !== false);
     const [actionLoading, setActionLoading] = useState(false);
 
     // Map Supabase objects to flat list for UI
@@ -87,7 +88,7 @@ export default function PaymentsPage() {
     };
 
     const handleAdvance = async () => {
-        if (!confirmAction) return;
+        if (!canEdit || !confirmAction) return;
         setActionLoading(true);
         try {
             await advancePayment(confirmAction.paymentId);
@@ -101,7 +102,7 @@ export default function PaymentsPage() {
         }
     };
     const handleRevert = async () => {
-        if (!confirmAction) return;
+        if (!canEdit || !confirmAction) return;
         setActionLoading(true);
         try {
             await revertPayment(confirmAction.paymentId);
@@ -116,6 +117,7 @@ export default function PaymentsPage() {
     };
 
     const handleSaveEdit = async (id: string, paymentId: string) => {
+        if (!canEdit) return;
         setActionLoading(true);
         try {
             await updatePaymentItem(id, paymentId, Number(editQty), editPrice ? Number(editPrice) : null);
@@ -209,7 +211,7 @@ export default function PaymentsPage() {
                                     {items.map((pl: any) => {
                                         const st = statusConfig[pl.status];
                                         const isEditing = editId === pl.id;
-                                        const canEdit = pl.status === "wip" || pl.status === "pre_payment";
+                                        const canEditItem = pl.status === "wip" || pl.status === "pre_payment";
                                         return (
                                             <tr key={pl.id} className="hover:bg-slate-50/50 transition">
                                                 <td className="px-4 py-2 font-mono text-xs font-bold text-blue-600">{pl.lotNumber}</td>
@@ -232,10 +234,10 @@ export default function PaymentsPage() {
                                                             </>
                                                         ) : (
                                                             <>
-                                                                {canEdit && <button onClick={() => { setEditId(pl.id); setEditQty(String(pl.qty)); setEditPrice(pl.unitPriceOverride !== null ? String(pl.unitPriceOverride) : ""); }} title="編集" className="p-1 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition"><Edit2 size={14} /></button>}
-                                                                {(pl.status === "wip" || pl.status === "pre_payment") && <button onClick={() => setConfirmAction({ id: pl.id, paymentId: pl.paymentId, type: "advance" })} title={pl.status === "wip" ? "完了(支払前)へ" : "支払済へ"} className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition"><CheckCircle2 size={14} /></button>}
-                                                                {pl.status === "paid" && <button onClick={() => setConfirmAction({ id: pl.id, paymentId: pl.paymentId, type: "advance" })} title="確認済へ" className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition"><ShieldCheck size={14} /></button>}
-                                                                {(pl.status === "pre_payment" || pl.status === "paid" || pl.status === "confirmed") && <button onClick={() => setConfirmAction({ id: pl.id, paymentId: pl.paymentId, type: "revert" })} title="取消" className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition"><Undo2 size={14} /></button>}
+                                                                {canEdit && canEditItem && <button onClick={() => { setEditId(pl.id); setEditQty(String(pl.qty)); setEditPrice(pl.unitPriceOverride !== null ? String(pl.unitPriceOverride) : ""); }} title="編集" className="p-1 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition"><Edit2 size={14} /></button>}
+                                                                {canEdit && (pl.status === "wip" || pl.status === "pre_payment") && <button onClick={() => setConfirmAction({ id: pl.id, paymentId: pl.paymentId, type: "advance" })} title={pl.status === "wip" ? "完了(支払前)へ" : "支払済へ"} className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition"><CheckCircle2 size={14} /></button>}
+                                                                {canEdit && pl.status === "paid" && <button onClick={() => setConfirmAction({ id: pl.id, paymentId: pl.paymentId, type: "advance" })} title="確認済へ" className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition"><ShieldCheck size={14} /></button>}
+                                                                {canEdit && (pl.status === "pre_payment" || pl.status === "paid" || pl.status === "confirmed") && <button onClick={() => setConfirmAction({ id: pl.id, paymentId: pl.paymentId, type: "revert" })} title="取消" className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition"><Undo2 size={14} /></button>}
                                                             </>
                                                         )}
                                                     </div>
