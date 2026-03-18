@@ -49,8 +49,22 @@ export default function OrdersPage() {
     }, [orders, statusFilter, periodFrom, periodTo, productFilter]);
 
     const openNew = () => {
-        // ID generation should ideally be backend sequence, generating temp one
-        setFormNumber(`ORD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(Math.random() * 1000)}`);
+        const now = new Date();
+        const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+        
+        // Find existing orders for this month to determine the next serial number
+        const monthOrders = orders.filter(o => o.order_number.startsWith(yearMonth));
+        const maxNum = monthOrders.reduce((max, o) => {
+            const parts = o.order_number.split('-');
+            if (parts.length > 1) {
+                const num = parseInt(parts[1], 10);
+                return !isNaN(num) ? Math.max(max, num) : max;
+            }
+            return max;
+        }, 0);
+        
+        const nextNum = maxNum + 1;
+        setFormNumber(`${yearMonth}-${nextNum}`);
         setFormCustomer(""); setFormChannel("wholesale"); setFormDueDate(""); setFormNotes("");
         setFormItems([{ product: "", quantity: 0, unitPrice: 0, shipped_quantity: 0 }]);
         setIsNewOpen(true);
