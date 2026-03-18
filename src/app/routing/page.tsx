@@ -78,7 +78,7 @@ export default function RoutingPage() {
         if (selectedLot) {
             setFwdQty(""); setFwdCompletionDate(today); setFwdDeliveryDate(today); setFwdDueDate(today); setFwdOverride(""); setFwdNextSub("");
             setBackQty(""); setBackDate(today); setBackDueDate(today); setBackPrevSub("");
-            setWipQty(selectedLot.totalQty.toString()); setWipDeliveryDate(today); setWipDueDate(today); setWipSub(""); setWipOverride("");
+            setWipQty(selectedLot.total_quantity.toString()); setWipDeliveryDate(today); setWipDueDate(today); setWipSub(""); setWipOverride("");
             setShipMode(null);
             // 外注先が1つしかない場合は固定
             if (nextProcessSubs.length === 1) setFwdNextSub(nextProcessSubs[0].name);
