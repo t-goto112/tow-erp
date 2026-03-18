@@ -149,11 +149,11 @@ export default function InventoryPage() {
                                         <tbody className="divide-y divide-slate-100">
                                             {processList.map(proc => (
                                                 <tr key={proc.id} className={proc.status === "in_progress" ? "bg-blue-50/50" : ""}>
-                                                    <td className="px-3 py-2 font-bold text-slate-700">{proc.process_name}</td>
+                                                    <td className="px-3 py-2 font-bold text-slate-700">{(proc as any).processes?.name}</td>
                                                     <td className="px-3 py-2 text-slate-500">{proc.subcontractors?.name || "自社"}</td>
-                                                    <td className="px-3 py-2 text-right font-bold">{proc.current_quantity > 0 ? <span className="text-blue-600">{proc.current_quantity}</span> : <span className="text-slate-300">0</span>}</td>
+                                                    <td className="px-3 py-2 text-right font-bold">{(proc as any).input_quantity > 0 ? <span className="text-blue-600">{(proc as any).input_quantity}</span> : <span className="text-slate-300">0</span>}</td>
                                                     <td className="px-3 py-2 text-right font-bold text-emerald-600">{proc.completed_quantity}</td>
-                                                    <td className="px-3 py-2 text-right">{proc.loss_quantity > 0 ? <span className="text-red-500 font-bold">{proc.loss_quantity}</span> : <span className="text-slate-300">0</span>}</td>
+                                                    <td className="px-3 py-2 text-right">{(proc as any).loss_qty > 0 ? <span className="text-red-500 font-bold">{(proc as any).loss_qty}</span> : <span className="text-slate-300">0</span>}</td>
                                                     <td className="px-3 py-2 text-center text-[10px] font-bold">
                                                         {proc.status === "completed" ? <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">完了</span> :
                                                             proc.status === "in_progress" ? <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded">仕掛</span> :

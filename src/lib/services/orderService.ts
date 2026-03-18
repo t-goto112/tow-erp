@@ -90,9 +90,9 @@ export async function createSupabaseOrder(params: {
                 const processesToInsert = templates.map((t, idx) => ({
                     lot_id: lotData.id,
                     process_id: t.id,
-                    subcontractor_id: t.default_subcontractor_id, // 引き継ぎ
+                    subcontractor_id: (t as any).default_subcontractor_id || null, // 外注先引き継ぎ
                     status: idx === 0 ? 'in_progress' : 'pending',
-                    input_quantity: idx === 0 ? item.quantity : 0,
+                    input_quantity: 0, // 最初は0にする（ユーザーの要望）
                     completed_quantity: 0,
                     defect_quantity: 0,
                     loss_qty: 0,
