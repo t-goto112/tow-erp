@@ -1,33 +1,73 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
-import { Search, Plus, Filter, LayoutGrid, List, ChevronRight, Edit2, History, ArrowRightLeft, User, Package, Calendar, CalendarDays, TrendingUp, MapPin, Subtitles, Clock, CheckCircle2, AlertCircle, X, ChevronDown, Trash2, ArrowLeftRight, MoreHorizontal, ShieldCheck, FileText, Settings, LogOut, LayoutDashboard, Truck, Wallet, Database, MoreVertical, Layers, Boxes, BadgeCheck, AlertTriangle } from 'lucide-react';
-import { store, type MockLot, type ProcessEntry, type Delivery } from "@/lib/mockStore";
+import { Search, Plus, Filter, LayoutGrid, List, ChevronRight, Edit2, History, ArrowRightLeft, User, Package, Calendar, CalendarDays, TrendingUp, MapPin, Subtitles, Clock, CheckCircle2, AlertCircle, X, ChevronDown, Trash2, ArrowLeftRight, MoreHorizontal, ShieldCheck, FileText, Settings, LogOut, LayoutDashboard, Truck, Wallet, Database, MoreVertical, Layers, Boxes, BadgeCheck, AlertTriangle, Save } from 'lucide-react';
+import { updateLotProcessDelivery } from "@/lib/services/lotService";
 import { showToast } from "@/components/Toast";
 import Modal from "@/components/Modal";
 
+import { useSupabaseData } from "@/lib/useSupabaseData";
+
 export default function Dashboard() {
     const [, setTick] = useState(0);
-    const [selectedLot, setSelectedLot] = useState<MockLot | null>(null);
+    const [selectedLot, setSelectedLot] = useState<any | null>(null);
     const [ganttRange, setGanttRange] = useState<"month" | "3month" | "custom">("month");
     const [customFrom, setCustomFrom] = useState("");
     const [customTo, setCustomTo] = useState("");
 
-    const refresh = useCallback(() => setTick((t: number) => t + 1), []);
-    useEffect(() => { refresh(); return store.subscribe(refresh); }, [refresh]);
+    const { lots, orders, paymentItems, products, profile, refresh } = useSupabaseData();
 
-    const lots = store.lots;
-    const orderBacklog = store.totalOrderBacklog;
-    const paymentDue = store.paymentLines.filter(p => p.status === "pre_payment").reduce((s, p) => s + p.amount, 0);
+    // 1秒ごとにティック（タイマー用）
+    useEffect(() => {
+        const timer = setInterval(() => setTick(t => t + 1), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    // Map properties for UI
+    const orderBacklog = useMemo(() => {
+        return orders.filter(o => o.status !== "completed" && o.status !== "cancelled").reduce((sum, o) => {
+            return sum + (o.order_items || []).reduce((s, item) => s + Math.max(0, (item.quantity || 0) - (item.shipped_quantity || 0)) * (item.unit_price || 0), 0);
+        }, 0);
+    }, [orders]);
+
+    const activeOrderCount = useMemo(() => orders.filter(o => o.status !== "completed" && o.status !== "cancelled").length, [orders]);
+
+    const paymentDue = useMemo(() => {
+        return paymentItems.filter((p: any) => p.payments?.status === "pre_payment").reduce((s, p) => s + (p.amount || 0), 0);
+    }, [paymentItems]);
 
     // 仕掛品をロットで集計
-    const wipByLot = lots.filter(l => l.status !== "completed").map(lot => {
-        const wipQty = lot.processes.reduce((s, p) => s + p.currentQty, 0);
-        return { ...lot, wipQty };
-    }).filter(l => l.wipQty > 0 || l.status === "created");
+    const wipByLot = useMemo(() => {
+        return lots.filter(l => l.status !== "completed").map(lot => {
+            const wipQty = (lot.lot_processes || []).reduce((s: number, p: any) => s + (p.input_quantity || 0) - (p.completed_quantity || 0), 0);
+            return { ...lot, wipQty };
+        }).filter(l => l.wipQty > 0 || l.status === "created");
+    }, [lots]);
 
-    const alerts = store.deadlineAlerts;
+    const alerts = useMemo(() => {
+        const todayStr = new Date().toISOString().split("T")[0];
+        const a: any[] = [];
+        lots.forEach(lot => {
+            if (lot.status === "completed") return;
+            (lot.lot_processes || []).forEach((p: any) => {
+                (p.lot_process_deliveries || []).forEach((d: any) => {
+                    if (d.completion_date) return;
+                    if (d.due_date) {
+                        a.push({
+                            lot: lot.lot_number,
+                            process: p.processes?.name || "",
+                            qty: d.qty,
+                            dueDate: d.due_date,
+                            isOverdue: d.due_date < todayStr
+                        });
+                    }
+                });
+            });
+        });
+        return a.sort((x, y) => x.dueDate.localeCompare(y.dueDate));
+    }, [lots]);
 
     // ガントチャートの日付範囲
     const todayDate = new Date();
@@ -51,20 +91,35 @@ export default function Dashboard() {
     }, [ganttRange, customFrom, customTo]);
 
     // ガントチャートのロットグループ用データ
-    const ganttLots = lots.filter(l => l.status !== "completed").map(lot => {
-        const bars: { name: string; sub: string; start: string; end: string; color: string; isCurrent: boolean; total: number; wip: number; comp: number; }[] = [];
-        lot.processes.forEach(proc => {
-            if (proc.deliveries.length === 0 && proc.status === "pending") return;
-            const starts = proc.deliveries.map(d => d.deliveryDate).filter(Boolean).sort();
-            const ends = proc.deliveries.map(d => d.completionDate || d.dueDate).filter(Boolean).sort();
-            const barStart = starts[0] || "";
-            const barEnd = ends[ends.length - 1] || "";
-            const isOverdue = barEnd && barEnd < todayStr && proc.status !== "completed";
-            const color = proc.status === "completed" ? "bg-emerald-400" : isOverdue ? "bg-red-400" : "bg-blue-400";
-            bars.push({ name: proc.name, sub: proc.subcontractor, start: barStart, end: barEnd, color, isCurrent: proc.status === "in_progress", total: proc.currentQty + proc.completedQty, wip: proc.currentQty, comp: proc.completedQty });
+    const ganttLots = useMemo(() => {
+        return lots.filter(l => l.status !== "completed").map(lot => {
+            const bars: { name: string; sub: string; start: string; end: string; color: string; isCurrent: boolean; total: number; wip: number; comp: number; }[] = [];
+            (lot.lot_processes || []).forEach((proc: any) => {
+                const devs = proc.lot_process_deliveries || [];
+                if (devs.length === 0 && proc.status === "pending") return;
+                const starts = devs.map((d: any) => d.delivery_date).filter(Boolean).sort();
+                const ends = devs.map((d: any) => d.completion_date || d.due_date).filter(Boolean).sort();
+                const barStart = starts[0] || (lot.created_at ? lot.created_at.split('T')[0] : "");
+                const barEnd = ends[ends.length - 1] || "";
+                const isOverdue = barEnd && barEnd < todayStr && proc.status !== "completed";
+                const color = proc.status === "completed" ? "bg-emerald-400" : isOverdue ? "bg-red-400" : "bg-blue-400";
+
+                const currQty = (proc.input_quantity || 0) - (proc.completed_quantity || 0);
+                bars.push({
+                    name: proc.processes?.name || "",
+                    sub: proc.subcontractors?.name || "",
+                    start: barStart,
+                    end: barEnd,
+                    color,
+                    isCurrent: proc.status === "in_progress",
+                    total: (proc.input_quantity || 0),
+                    wip: currQty,
+                    comp: (proc.completed_quantity || 0)
+                });
+            });
+            return { lot, bars };
         });
-        return { lot, bars };
-    });
+    }, [lots, todayStr]);
 
     const dayWidth = ganttRange === "3month" ? 12 : 24;
 
@@ -72,7 +127,7 @@ export default function Dashboard() {
         <div className="space-y-6 animate-in fade-in duration-300">
             {/* サマリーカード (完成品在庫削除) */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <SummaryCard icon={<Wallet className="w-5 h-5" />} label="受注残高" value={`¥${orderBacklog.toLocaleString()}`} sub={`${store.orders.filter(o => o.status !== "completed" && o.status !== "cancelled").length}件`} color="bg-blue-50 text-blue-600" />
+                <SummaryCard icon={<Wallet className="w-5 h-5" />} label="受注残高" value={`¥${orderBacklog.toLocaleString()}`} sub={`${activeOrderCount}件`} color="bg-blue-50 text-blue-600" />
                 <SummaryCard icon={<Layers className="w-5 h-5" />} label="仕掛品" value={`${wipByLot.reduce((s, l) => s + l.wipQty, 0)}`} sub={`${wipByLot.length}ロット`} color="bg-amber-50 text-amber-600" />
                 <SummaryCard icon={<TrendingUp className="w-5 h-5" />} label="支払予定" value={`¥${paymentDue.toLocaleString()}`} sub="未払額" color="bg-emerald-50 text-emerald-600" />
             </div>
@@ -143,16 +198,16 @@ export default function Dashboard() {
                                 <div className="flex items-center cursor-pointer sticky left-0 z-10 bg-white hover:bg-slate-50" onClick={() => setSelectedLot(lot)}>
                                     <div className="w-[200px] shrink-0 px-4 py-2 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                                         <div className="flex items-center gap-1.5">
-                                            <span className="font-mono text-xs font-bold text-blue-600">{lot.lotNumber}</span>
-                                            <span className="text-[10px] text-slate-500 truncate" title={lot.product}>{lot.product}</span>
+                                            <span className="font-mono text-xs font-bold text-blue-600">{lot.lot_number}</span>
+                                            <span className="text-[10px] text-slate-500 truncate" title={lot.products?.name || ""}>{lot.products?.name || ""}</span>
                                             <ChevronRight className="w-3 h-3 text-slate-300 shrink-0 ml-auto" />
                                         </div>
                                     </div>
                                     <div className="flex-1 relative h-2 z-10 pointer-events-none">
                                         {/* 全体スパン（薄いバー） */}
                                         {(() => {
-                                            const starts = bars.map(b => b.start).sort();
-                                            const ends = bars.map(b => b.end).sort();
+                                            const starts = bars.map(b => b.start).filter(Boolean).sort();
+                                            const ends = bars.map(b => b.end).filter(Boolean).sort();
                                             if (starts.length === 0) return null;
                                             const s = starts[0] >= ganttDates.start ? starts[0] : ganttDates.start;
                                             const e = ends[ends.length - 1] <= ganttDates.end ? ends[ends.length - 1] : ganttDates.end;
@@ -212,30 +267,30 @@ export default function Dashboard() {
                     <Layers className="w-4 h-4 text-blue-500" /> ロット別仕掛一覧
                 </h3>
                 <div className="space-y-2">
-                    {wipByLot.map(lot => {
-                        const currentProc = lot.processes.find(p => p.status === "in_progress");
+                    {wipByLot.map((lot: any) => {
+                        const currentProc = (lot.lot_processes || []).find((p: any) => p.status === "in_progress");
                         return (
                             <div key={lot.id} onClick={() => setSelectedLot(lot)}
                                 className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md hover:border-blue-200 transition cursor-pointer group">
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <div className="flex items-center gap-2 mb-1">
-                                            <span className="font-mono text-sm font-bold text-blue-600">{lot.lotNumber}</span>
-                                            <span className="text-xs text-slate-500">{lot.product}</span>
+                                            <span className="font-mono text-sm font-bold text-blue-600">{lot.lot_number}</span>
+                                            <span className="text-xs text-slate-500">{lot.products?.name || ""}</span>
                                         </div>
                                         <div className="flex gap-3 text-[10px] text-slate-400 font-bold">
-                                            <span>受注数: {lot.totalQty}</span>
+                                            <span>受注数: {lot.total_quantity}</span>
                                             <span>仕掛: {lot.wipQty}</span>
-                                            {currentProc && <span className="text-blue-600">{currentProc.name}</span>}
+                                            {currentProc && <span className="text-blue-600">{currentProc.processes?.name || ""}</span>}
                                         </div>
                                     </div>
                                     <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition" />
                                 </div>
                                 <div className="mt-3 bg-slate-50 rounded-lg p-2 overflow-x-auto flex gap-2 text-[10px] text-slate-400 font-bold border border-slate-100">
-                                    {lot.processes.map(p => (
+                                    {(lot.lot_processes || []).map((p: any) => (
                                         <div key={p.id} className={`flex items-center gap-1 py-0.5 px-2 rounded-md shrink-0 ${p.status === "completed" ? "bg-emerald-100 text-emerald-700" : p.status === "in_progress" ? "bg-blue-100 text-blue-700" : "bg-white border border-slate-200"}`}>
-                                            <span className="font-black text-[9px] whitespace-nowrap">{p.name}</span>
-                                            <span className="opacity-70 whitespace-nowrap">: 仕掛{p.currentQty}/完了{p.completedQty}</span>
+                                            <span className="font-black text-[9px] whitespace-nowrap">{p.processes?.name || ""}</span>
+                                            <span className="opacity-70 whitespace-nowrap">: 仕掛{(p.input_quantity || 0) - (p.completed_quantity || 0)}/完了{p.completed_quantity || 0}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -267,155 +322,118 @@ export default function Dashboard() {
             )}
 
             {/* ロット詳細（カード編集 — 納入日も編集可、数量同期） */}
-            <LotDetailModal lot={selectedLot} onClose={() => setSelectedLot(null)} />
+            <LotDetailModal lot={selectedLot} onClose={() => setSelectedLot(null)} refresh={refresh} />
         </div>
     );
 }
 
 function SummaryCard({ icon, label, value, sub, color }: { icon: React.ReactNode; label: string; value: string; sub: string; color: string }) {
     return (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex items-start gap-4">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${color}`}>{icon}</div>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex items-start gap-4 transition hover:shadow-md hover:border-blue-100 group">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition group-hover:scale-110 duration-300 ${color}`}>{icon}</div>
             <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
-                <p className="text-2xl font-black text-slate-800">{value}</p>
-                <p className="text-xs text-slate-400">{sub}</p>
+                <p className="text-2xl font-black text-slate-800 tracking-tight">{value}</p>
+                <p className="text-xs text-slate-400 font-bold">{sub}</p>
             </div>
         </div>
     );
 }
 
-function LotDetailModal({ lot, onClose }: { lot: MockLot | null; onClose: () => void }) {
-    const [editId, setEditId] = useState<string | null>(null);
-    const [editQty, setEditQty] = useState("");
-    const [adjustMode, setAdjustMode] = useState<"correct" | "move_prev" | "move_next">("correct");
-    const [targetSub, setTargetSub] = useState("");
-    const [, setTick] = useState(0);
+function LotDetailModal({ lot, onClose, refresh }: { lot: any | null; onClose: () => void; refresh: () => void }) {
+    const [editingDelivery, setEditingDelivery] = useState<string | null>(null);
+    const [editVal, setEditVal] = useState<{ qty: number; date: string; due: string }>({ qty: 0, date: "", due: "" });
+    const [saving, setSaving] = useState(false);
 
     if (!lot) return null;
 
-    const handleDeliveryAdjust = (processId: string, deliveryId: string) => {
-        const result = store.manualAdjustDeliveryQty(lot.id, processId, deliveryId, adjustMode, Number(editQty), targetSub || undefined);
-        if (result.ok) {
-            const msg = result.syncPayment ? "調整を実行し、支払金額も更新しました" : "調整を実行しました（支払済のため金額は維持されます）";
-            showToast(result.syncPayment ? "success" : "info", msg);
-            setEditId(null);
-            setTick((t: number) => t + 1);
-        } else {
-            showToast("error", result.error || "エラー");
+    const procs = [...(lot.lot_processes || [])].sort((a: any, b: any) => (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0));
+
+    const handleSave = async (procId: string) => {
+        if (!editingDelivery) return;
+        setSaving(true);
+        try {
+            await updateLotProcessDelivery(procId, editingDelivery, editVal.qty, editVal.date, editVal.due);
+            showToast("success", "実績を更新しました");
+            setEditingDelivery(null);
+            refresh();
+        } catch (e) {
+            console.error(e);
+            showToast("error", "更新に失敗しました");
+        } finally {
+            setSaving(false);
         }
     };
 
     return (
-        <Modal open={!!lot} onClose={onClose} title={lot ? `${lot.lotNumber} — ${lot.product}` : ""} subtitle={lot ? `総数量: ${lot.totalQty}個` : ""} width="max-w-2xl">
+        <Modal open={!!lot} onClose={onClose} title={lot ? `${lot.lot_number} — ${lot.products?.name || ""}` : ""} subtitle={lot ? `総数量: ${lot.total_quantity}個` : ""} width="max-w-2xl">
             <div className="space-y-4 max-h-[70vh] overflow-y-auto px-1">
-                {lot.processes.sort((a, b) => a.stepOrder - b.stepOrder).map(proc => (
-                    <div key={proc.id} className="bg-slate-50/50 rounded-2xl p-4 border border-slate-100 mb-4">
-                        <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-3">
-                                <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center shadow-sm border border-slate-100">
-                                    <span className="text-[10px] font-black text-slate-400">#{proc.stepOrder}</span>
+                {procs.map((proc: any) => {
+                    const currQty = (proc.input_quantity || 0) - (proc.completed_quantity || 0);
+                    const deliveries = proc.lot_process_deliveries || [];
+                    return (
+                        <div key={proc.id} className="bg-slate-50/50 rounded-2xl p-4 border border-slate-100 mb-4">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center shadow-sm border border-slate-100">
+                                        <span className="text-[10px] font-black text-slate-400">#{proc.processes?.sort_order || 0}</span>
+                                    </div>
+                                    <div className="flex-1">
+                                        <h4 className="text-sm font-black text-slate-800 tracking-tight">{proc.processes?.name || ""}</h4>
+                                        <p className="text-[10px] text-slate-400 font-bold">{proc.subcontractors?.name || "未割当"}</p>
+                                    </div>
                                 </div>
-                                <div className="flex-1">
-                                    <h4 className="text-sm font-black text-slate-800 tracking-tight">{proc.name}</h4>
-                                    <p className="text-[10px] text-slate-400 font-bold">{proc.subcontractor || "未割当"} ・ 単価: ¥{proc.unitPrice}</p>
+                                <div className="flex gap-2 text-[10px] font-bold items-center">
+                                    <span className="text-slate-500">仕掛:{currQty}</span>
+                                    <span className="text-emerald-600">完了:{proc.completed_quantity || 0}</span>
                                 </div>
                             </div>
-                            <div className="flex gap-2 text-[10px] font-bold items-center">
-                                <span className="text-slate-500">現在:{proc.currentQty}</span>
-                                <span className="text-emerald-600">完了:{proc.completedQty}</span>
-                            </div>
-                        </div>
 
-                        <div className="space-y-1.5">
-                            {proc.deliveries.length > 0 ? proc.deliveries.map(del => {
-                                const isEd = editId === del.id;
-                                const product = store.products.find(p => p.id === lot.productId);
-                                const group = product?.processGroups[proc.groupIndex];
-                                const targetTpl = adjustMode === "move_prev"
-                                    ? group?.templates.filter(t => t.sortOrder < proc.stepOrder).sort((a, b) => b.sortOrder - a.sortOrder)[0]
-                                    : group?.templates.filter(t => t.sortOrder > proc.stepOrder).sort((a, b) => a.sortOrder - b.sortOrder)[0];
-                                const subOptions = targetTpl?.subcontractors || [];
-
-                                // 支払ステータス取得 (V7.8)
-                                const payLine = store.paymentLines.find(pl => pl.lotNumber === lot.lotNumber && pl.processName === proc.name && pl.subcontractor === proc.subcontractor);
-                                const isSyncedStatus = payLine?.status === "wip" || payLine?.status === "pre_payment";
-
-                                return (
-                                    <div key={del.id} className={`bg-white rounded-xl border overflow-hidden shadow-sm transition-all ${isEd ? "border-blue-200 ring-2 ring-blue-50" : "border-slate-100"}`}>
-                                        <div className="flex items-center justify-between p-2.5 text-xs">
-                                            <div className="flex items-center gap-3">
-                                                <span className="font-bold text-slate-700">{del.qty}個</span>
-                                                <span className="text-slate-400">納入:{del.deliveryDate}</span>
-                                                {del.completionDate && <span className="text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">完了:{del.completionDate}</span>}
+                            <div className="space-y-1.5">
+                                {deliveries.length > 0 ? deliveries.map((del: any) => (
+                                    <div key={del.id} className="bg-white rounded-xl border border-slate-100 overflow-hidden shadow-sm">
+                                        {editingDelivery === del.id ? (
+                                            <div className="p-3 space-y-3">
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    <div>
+                                                        <label className="text-[8px] font-bold text-slate-400 block mb-1">数量</label>
+                                                        <input type="number" value={editVal.qty} onChange={e => setEditVal({ ...editVal, qty: Number(e.target.value) })} className="w-full text-xs border border-slate-200 rounded px-2 py-1" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[8px] font-bold text-slate-400 block mb-1">納入日</label>
+                                                        <input type="date" value={editVal.date} onChange={e => setEditVal({ ...editVal, date: e.target.value })} className="w-full text-[10px] border border-slate-200 rounded px-1 py-1" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[8px] font-bold text-slate-400 block mb-1">期限</label>
+                                                        <input type="date" value={editVal.due} onChange={e => setEditVal({ ...editVal, due: e.target.value })} className="w-full text-[10px] border border-slate-200 rounded px-1 py-1" />
+                                                    </div>
+                                                </div>
+                                                <div className="flex justify-end gap-2">
+                                                    <button onClick={() => setEditingDelivery(null)} className="text-[10px] font-bold text-slate-400 px-3 py-1">キャンセル</button>
+                                                    <button onClick={() => handleSave(proc.id)} disabled={saving} className="bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded flex items-center gap-1">
+                                                        {saving ? "保存中..." : <><Save size={10} /> 保存</>}
+                                                    </button>
+                                                </div>
                                             </div>
-                                            {!isEd && (
-                                                <button onClick={() => { setEditId(del.id); setEditQty(String(del.qty)); setAdjustMode("correct"); setTargetSub(""); }}
-                                                    className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-blue-600">
+                                        ) : (
+                                            <div className="flex items-center justify-between p-2.5 text-xs">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="font-bold text-slate-700">{del.qty}個</span>
+                                                    {del.delivery_date && <span className="text-slate-400">納入:{del.delivery_date}</span>}
+                                                    {del.due_date && <span className="text-slate-400">期限:{del.due_date}</span>}
+                                                    {del.completion_date && <span className="text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">完了:{del.completion_date}</span>}
+                                                </div>
+                                                <button onClick={(e) => { e.stopPropagation(); setEditingDelivery(del.id); setEditVal({ qty: del.qty, date: del.delivery_date || "", due: del.due_date || "" }); }} className="p-1 hover:bg-slate-50 rounded transition text-slate-300 hover:text-blue-600">
                                                     <Edit2 size={12} />
                                                 </button>
-                                            )}
-                                        </div>
-
-                                        {isEd && (
-                                            <div className="p-3 border-t border-blue-50 bg-blue-50/20 space-y-3">
-                                                <div className="flex items-center justify-between">
-                                                    <h5 className="text-[10px] font-black text-blue-600 uppercase">明細調整 - {del.id}</h5>
-                                                    <div className="flex items-center gap-1.5">
-                                                        {payLine ? (
-                                                            <>
-                                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isSyncedStatus ? "bg-blue-100 text-blue-600" : "bg-emerald-100 text-emerald-600"}`}>
-                                                                    支払:{payLine.status === "wip" ? "仕掛中" : payLine.status === "pre_payment" ? "支払前" : payLine.status === "paid" ? "支払済" : "確認済"}
-                                                                </span>
-                                                                {!isSyncedStatus && adjustMode === "correct" && (
-                                                                    <div className="flex items-center gap-1 text-amber-600" title="支払確定済みのため、金額は自動修正されません">
-                                                                        <AlertCircle size={10} />
-                                                                        <span className="text-[9px] font-bold">非連動</span>
-                                                                    </div>
-                                                                )}
-                                                            </>
-                                                        ) : (
-                                                            <span className="text-[9px] text-slate-400 font-bold italic">支払情報なし</span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    <div>
-                                                        <label className="block text-[9px] text-slate-400 mb-0.5">数量</label>
-                                                        <input type="number" value={editQty} onChange={(e) => setEditQty(e.target.value)} className="w-full input-base !py-1 text-sm font-bold" />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-[9px] text-slate-400 mb-0.5">モード</label>
-                                                        <select value={adjustMode} onChange={(e) => setAdjustMode(e.target.value as any)} className="w-full select-base !py-1 text-xs">
-                                                            <option value="correct">修正</option>
-                                                            <option value="move_prev">差戻し</option>
-                                                            <option value="move_next">送り</option>
-                                                        </select>
-                                                    </div>
-                                                </div>
-
-                                                {(adjustMode === "move_prev" || adjustMode === "move_next") && (
-                                                    <div>
-                                                        <label className="block text-[9px] text-slate-400 mb-0.5">外注先選択</label>
-                                                        <select value={targetSub} onChange={(e) => setTargetSub(e.target.value)} className="w-full select-base !py-1 text-xs">
-                                                            <option value="">(デフォルト)</option>
-                                                            {subOptions.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
-                                                        </select>
-                                                    </div>
-                                                )}
-
-                                                <div className="flex justify-end gap-2 pt-1">
-                                                    <button onClick={() => setEditId(null)} className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold">キャンセル</button>
-                                                    <button onClick={() => handleDeliveryAdjust(proc.id, del.id)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-bold shadow-sm">実行</button>
-                                                </div>
                                             </div>
                                         )}
                                     </div>
-                                );
-                            }) : <p className="text-[10px] text-slate-300 italic">実績なし</p>}
+                                )) : <p className="text-[10px] text-slate-300 italic">実績なし</p>}
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </Modal>
     );
