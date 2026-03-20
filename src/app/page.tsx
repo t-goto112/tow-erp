@@ -9,12 +9,15 @@ import { useSupabaseData } from "@/lib/useSupabaseData";
 
 export default function Dashboard() {
     const [, setTick] = useState(0);
-    const [selectedLot, setSelectedLot] = useState<any | null>(null);
+    const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
     const [ganttRange, setGanttRange] = useState<"month" | "3month" | "custom">("month");
     const [customFrom, setCustomFrom] = useState("");
     const [customTo, setCustomTo] = useState("");
 
     const { lots, orders, paymentItems, products, profile, refresh, subcontractors, processRates } = useSupabaseData();
+
+    // Keep selectedLot in sync with refreshed lots data for real-time modal update
+    const selectedLot = selectedLotId ? lots.find(l => l.id === selectedLotId) || null : null;
 
     // 1秒ごとにティック（タイマー用）
     useEffect(() => {
@@ -191,7 +194,7 @@ export default function Dashboard() {
                         {/* ロットグループ */}
                         {ganttLots.map(({ lot, bars }) => (
                             <div key={lot.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition">
-                                <div className="flex items-center cursor-pointer sticky left-0 z-10 bg-white hover:bg-slate-50" onClick={() => setSelectedLot(lot)}>
+                                <div className="flex items-center cursor-pointer sticky left-0 z-10 bg-white hover:bg-slate-50" onClick={() => setSelectedLotId(lot.id)}>
                                     <div className="w-[200px] shrink-0 px-4 py-2 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                                         <div className="flex items-center gap-1.5">
                                             <span className="font-mono text-xs font-bold text-blue-600">{lot.lot_number}</span>
@@ -263,7 +266,7 @@ export default function Dashboard() {
                     {wipByLot.map((lot: any) => {
                         const currentProc = (lot.lot_processes || []).find((p: any) => p.status === "in_progress");
                         return (
-                            <div key={lot.id} onClick={() => setSelectedLot(lot)}
+                            <div key={lot.id} onClick={() => setSelectedLotId(lot.id)}
                                 className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md hover:border-blue-200 transition cursor-pointer group">
                                 <div className="flex items-center justify-between">
                                     <div>
@@ -294,7 +297,7 @@ export default function Dashboard() {
             </section>
 
             {/* ロット詳細（カード編集） */}
-            <LotDetailModal lot={selectedLot} onClose={() => setSelectedLot(null)} refresh={refresh} paymentItems={paymentItems} processRates={processRates} />
+            <LotDetailModal lot={selectedLot} onClose={() => setSelectedLotId(null)} refresh={refresh} paymentItems={paymentItems} processRates={processRates} />
         </div>
     );
 }
@@ -365,8 +368,7 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
                     process_id: targetProc.id,
                     qty: qty,
                     delivery_date: new Date().toISOString().split('T')[0],
-                    due_date: del.due_date,
-                    status: 'pending'
+                    due_date: del.due_date
                 });
             }
 

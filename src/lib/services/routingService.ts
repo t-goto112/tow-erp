@@ -25,8 +25,7 @@ export async function moveForward(
         .from('lot_processes')
         .update({
             completed_quantity: newCompleted,
-            status: (currentProc.input_quantity || 0) - (currentProc.loss_qty || 0) <= newCompleted ? 'completed' : 'in_progress',
-            completed_at: completionDate // In a real app we might store arrays of completions
+            status: (currentProc.input_quantity || 0) - (currentProc.loss_qty || 0) <= newCompleted ? 'completed' : 'in_progress'
         })
         .eq('id', currentProcessId);
     if (updErr) throw updErr;
@@ -84,11 +83,10 @@ export async function moveForward(
         const { error: delErr } = await supabase
             .from('lot_process_deliveries')
             .insert([{
-                lot_process_id: nextProcId,
+                process_id: nextProcId,
                 qty: qty,
                 delivery_date: nextDeliveryDate,
-                due_date: nextDueDate,
-                status: 'pending' // V8 schema uses status or just missing completion_date
+                due_date: nextDueDate
             }]);
         if (delErr) throw delErr;
     }
@@ -119,7 +117,7 @@ export async function registerWip(
     if (uErr) throw uErr;
 
     const { error: iErr } = await supabase.from('lot_process_deliveries').insert([{
-        lot_process_id: processId,
+        process_id: processId,
         qty: qty,
         delivery_date: deliveryDate,
         due_date: dueDate
@@ -127,6 +125,10 @@ export async function registerWip(
     if (iErr) throw iErr;
 
     await supabase.from('lots').update({ status: 'in_progress' }).eq('id', lotId);
+
+    // Create WIP payment item for this registration
+    const updatedProc = { ...proc, subcontractor_id: subcontractorId, unit_price_override: overridePrice };
+    await createPaymentItem(updatedProc, qty, deliveryDate, overridePrice, 'wip');
 
     return { ok: true };
 }
@@ -167,7 +169,7 @@ export async function moveBack(
         }).eq('id', prevProc.id);
 
         await supabase.from('lot_process_deliveries').insert([{
-            lot_process_id: prevProc.id,
+            process_id: prevProc.id,
             qty: qty,
             delivery_date: returnDate,
             due_date: prevDueDate
@@ -184,7 +186,7 @@ export async function moveBack(
         if (insErr) throw insErr;
 
         await supabase.from('lot_process_deliveries').insert([{
-            lot_process_id: newProcData.id,
+            process_id: newProcData.id,
             qty: qty,
             delivery_date: returnDate,
             due_date: prevDueDate
@@ -302,7 +304,8 @@ async function createPaymentItem(
     currentProc: any,
     qty: number,
     completionDate: string,
-    overridePrice?: number | null
+    overridePrice?: number | null,
+    paymentStatus: string = 'pre_payment'
 ) {
     if (!currentProc.subcontractor_id) return; // No subcontractor, no payment
 
@@ -348,7 +351,7 @@ async function createPaymentItem(
             period_start: periodStart,
             period_end: periodEnd,
             total_amount: amount,
-            status: 'pre_payment'
+            status: paymentStatus
         }]).select().single();
         if (error) throw error;
         paymentId = newPayment.id;

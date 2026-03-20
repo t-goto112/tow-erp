@@ -87,19 +87,27 @@ export async function createSupabaseOrder(params: {
                 .order('sort_order', { ascending: true });
 
             if (templates && templates.length > 0) {
-                const processesToInsert = templates.map((t, idx) => ({
-                    lot_id: lotData.id,
-                    process_id: t.id,
-                    subcontractor_id: (t as any).default_subcontractor_id || null, // 外注先引き継ぎ
-                    status: idx === 0 ? 'in_progress' : 'pending',
-                    input_quantity: 0, // 最初は0にする（ユーザーの要望）
-                    completed_quantity: 0,
-                    defect_quantity: 0,
-                    loss_qty: 0,
-                    loss_confirmed: false,
-                    is_rework: false,
-                    rework_charge: false
-                }));
+                // Find default subcontractor for first process template's first rate
+                const processesToInsert: any[] = [];
+                for (const t of templates) {
+                    // Look up default subcontractor from process_subcontractor_rates
+                    let defaultSubId: string | null = null;
+                    const { data: rates } = await supabase
+                        .from('process_subcontractor_rates')
+                        .select('subcontractor_id')
+                        .eq('process_id', t.id)
+                        .limit(1);
+                    if (rates && rates.length > 0) {
+                        defaultSubId = rates[0].subcontractor_id;
+                    }
+                    processesToInsert.push({
+                        lot_id: lotData.id,
+                        process_id: t.id,
+                        subcontractor_id: defaultSubId,
+                        status: 'pending',
+                        input_quantity: 0
+                    });
+                }
 
                 const { error: procError } = await supabase
                     .from('lot_processes')

@@ -146,19 +146,69 @@ export async function updateProduct(
         .eq('id', productId);
     if (pErr) throw pErr;
 
-    // 2. Delete old processes (CASCADE will clean up rates)
-    const { error: delErr } = await supabase
+    // 2. Get existing processes for this product
+    const { data: existingProcs } = await supabase
         .from('processes')
-        .delete()
+        .select('id')
         .eq('product_id', productId);
-    if (delErr) throw delErr;
+    const existingIds = new Set<string>((existingProcs || []).map((p: any) => p.id));
 
-    // 3. Re-insert processes and rates
+    // 3. Collect all process IDs that will remain after update
+    const keepIds = new Set<string>();
+    const newProcesses: { group: FormGroup; gi: number; tpl: FormProcess }[] = [];
+
     for (let gi = 0; gi < groups.length; gi++) {
         const group = groups[gi];
         for (const tpl of group.templates) {
             if (!tpl.name) continue;
+            // If the template ID matches an existing process, it's an update
+            if (existingIds.has(tpl.id)) {
+                keepIds.add(tpl.id);
+            }
+            newProcesses.push({ group, gi, tpl });
+        }
+    }
 
+    // 4. Delete processes that are no longer referenced (only those without lot_processes FK)
+    const idsToRemove = Array.from(existingIds).filter(id => !keepIds.has(id));
+    for (const id of idsToRemove) {
+        // Check if any lot_processes reference this process
+        const { data: refs } = await supabase
+            .from('lot_processes')
+            .select('id')
+            .eq('process_id', id)
+            .limit(1);
+        if (!refs || refs.length === 0) {
+            // Safe to delete
+            await supabase.from('processes').delete().eq('id', id);
+        }
+        // If referenced, leave it (orphan process that will be cleaned up later)
+    }
+
+    // 5. Upsert processes: update existing, insert new
+    for (const { gi, tpl } of newProcesses) {
+        if (keepIds.has(tpl.id)) {
+            // Update existing process
+            await supabase.from('processes').update({
+                name: tpl.name,
+                sort_order: tpl.sortOrder,
+                group_index: gi,
+                is_assembly_point: !!tpl.isAssemblyPoint,
+            }).eq('id', tpl.id);
+
+            // Delete old rates and re-insert
+            await supabase.from('process_subcontractor_rates').delete().eq('process_id', tpl.id);
+            for (const sub of tpl.subcontractors) {
+                if (!sub.name) continue;
+                const subId = await findOrCreateSubcontractor(sub.name);
+                await supabase.from('process_subcontractor_rates').insert({
+                    process_id: tpl.id,
+                    subcontractor_id: subId,
+                    unit_price: sub.unitPrice || 0,
+                });
+            }
+        } else {
+            // Insert new process
             const { data: proc, error: procErr } = await supabase
                 .from('processes')
                 .insert({
@@ -175,14 +225,11 @@ export async function updateProduct(
             for (const sub of tpl.subcontractors) {
                 if (!sub.name) continue;
                 const subId = await findOrCreateSubcontractor(sub.name);
-                const { error: rErr } = await supabase
-                    .from('process_subcontractor_rates')
-                    .insert({
-                        process_id: proc.id,
-                        subcontractor_id: subId,
-                        unit_price: sub.unitPrice || 0,
-                    });
-                if (rErr) throw rErr;
+                await supabase.from('process_subcontractor_rates').insert({
+                    process_id: proc.id,
+                    subcontractor_id: subId,
+                    unit_price: sub.unitPrice || 0,
+                });
             }
         }
     }
@@ -224,12 +271,12 @@ export function processesToFormGroups(processes: MasterProcess[]): FormGroup[] {
     }
 
     // Sort templates within each group by sortOrder
-    for (const group of groupMap.values()) {
+    for (const group of Array.from(groupMap.values())) {
         group.templates.sort((a, b) => a.sortOrder - b.sortOrder);
     }
 
     // Return groups sorted by group index
     return Array.from(groupMap.entries())
-        .sort(([a], [b]) => a - b)
-        .map(([, g]) => g);
+        .sort(([a]: [number, FormGroup], [b]: [number, FormGroup]) => a - b)
+        .map(([, g]: [number, FormGroup]) => g);
 }
