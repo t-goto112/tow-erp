@@ -78,7 +78,7 @@ export default function RoutingPage() {
         if (selectedLot) {
             setFwdQty(""); setFwdCompletionDate(today); setFwdDeliveryDate(today); setFwdDueDate(today); setFwdOverride(""); setFwdNextSub("");
             setBackQty(""); setBackDate(today); setBackDueDate(today); setBackPrevSub("");
-            setWipQty(selectedLot.total_quantity.toString()); setWipDeliveryDate(today); setWipDueDate(today); setWipSub(""); setWipOverride("");
+            setWipQty(selectedLot.quantity.toString()); setWipDeliveryDate(today); setWipDueDate(today); setWipSub(""); setWipOverride("");
             setShipMode(null);
             // 外注先が1つしかない場合は固定
             if (nextProcessSubs.length === 1) setFwdNextSub(nextProcessSubs[0].name);
@@ -200,7 +200,7 @@ export default function RoutingPage() {
                         disabled={!canEdit}
                         className={`select-base ${!canEdit ? 'opacity-50 cursor-not-allowed bg-slate-100' : ''}`}>
                         <option value="">{canEdit ? '選択してください' : '閲覧のみ（選択不可）'}</option>
-                        {activeLots.map(l => <option key={l.id} value={l.id}>{l.lot_number} — {l.products?.name} ({l.total_quantity}個)</option>)}
+                        {activeLots.map(l => <option key={l.id} value={l.id}>{l.lot_number} — {l.products?.name} ({l.quantity}個)</option>)}
                     </select>
                 </div>
                 {selectedLot && (

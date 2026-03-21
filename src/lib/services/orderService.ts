@@ -69,9 +69,9 @@ export async function createSupabaseOrder(params: {
                 .insert([{
                     lot_number: lotNumber,
                     product_id: productId,
-                    total_quantity: item.quantity,
-                    status: 'created',
-                    order_id: orderId
+                    quantity: item.quantity,
+                    order_item_id: orderItemData.id,
+                    status: 'created'
                 }])
                 .select()
                 .single();

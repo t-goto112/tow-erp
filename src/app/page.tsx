@@ -275,7 +275,7 @@ export default function Dashboard() {
                                             <span className="text-xs text-slate-500">{lot.products?.name || ""}</span>
                                         </div>
                                         <div className="flex gap-3 text-[10px] text-slate-400 font-bold">
-                                            <span>受注数: {lot.total_quantity}</span>
+                                            <span>受注数: {lot.quantity}</span>
                                             <span>仕掛: {lot.wipQty}</span>
                                             {currentProc && <span className="text-blue-600">{currentProc.processes?.name || ""}</span>}
                                         </div>
@@ -384,7 +384,7 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
     };
 
     return (
-        <Modal open={!!lot} onClose={onClose} title={lot ? `${lot.lot_number} — ${lot.products?.name || ""}` : ""} subtitle={lot ? `総数量: ${lot.total_quantity}個` : ""} width="max-w-2xl">
+        <Modal open={!!lot} onClose={onClose} title={lot ? `${lot.lot_number} — ${lot.products?.name || ""}` : ""} subtitle={lot ? `総数量: ${lot.quantity}個` : ""} width="max-w-2xl">
             <div className="space-y-4 max-h-[70vh] overflow-y-auto px-1 text-slate-800">
                 {procs.map((proc: any) => (
                     <div key={proc.id} className="bg-slate-50/50 rounded-2xl p-4 border border-slate-100 mb-4">

@@ -25,7 +25,8 @@ export async function moveForward(
         .from('lot_processes')
         .update({
             completed_quantity: newCompleted,
-            status: (currentProc.input_quantity || 0) - (currentProc.loss_qty || 0) <= newCompleted ? 'completed' : 'in_progress'
+            status: (currentProc.input_quantity || 0) - (currentProc.loss_qty || 0) <= newCompleted ? 'completed' : 'in_progress',
+            completed_at: completionDate
         })
         .eq('id', currentProcessId);
     if (updErr) throw updErr;
@@ -83,7 +84,7 @@ export async function moveForward(
         const { error: delErr } = await supabase
             .from('lot_process_deliveries')
             .insert([{
-                process_id: nextProcId,
+                lot_process_id: nextProcId,
                 qty: qty,
                 delivery_date: nextDeliveryDate,
                 due_date: nextDueDate
@@ -117,7 +118,7 @@ export async function registerWip(
     if (uErr) throw uErr;
 
     const { error: iErr } = await supabase.from('lot_process_deliveries').insert([{
-        process_id: processId,
+        lot_process_id: processId,
         qty: qty,
         delivery_date: deliveryDate,
         due_date: dueDate
@@ -169,7 +170,7 @@ export async function moveBack(
         }).eq('id', prevProc.id);
 
         await supabase.from('lot_process_deliveries').insert([{
-            process_id: prevProc.id,
+            lot_process_id: prevProc.id,
             qty: qty,
             delivery_date: returnDate,
             due_date: prevDueDate
@@ -186,7 +187,7 @@ export async function moveBack(
         if (insErr) throw insErr;
 
         await supabase.from('lot_process_deliveries').insert([{
-            process_id: newProcData.id,
+            lot_process_id: newProcData.id,
             qty: qty,
             delivery_date: returnDate,
             due_date: prevDueDate
@@ -217,13 +218,11 @@ export async function moveToInventory(
     await createPaymentItem(currentProc, qty, completionDate, currentProc.unit_price_override);
 
     // Insert to inventory
-    // 1. check if exact item_type and product exists in warehouse?
     const { data: invs } = await supabase
         .from('inventory')
         .select('*')
         .eq('product_id', productId)
-        .eq('item_type', 'finished')
-        .eq('location', warehouseName);
+        .eq('item_type', 'product');
 
     if (invs && invs.length > 0) {
         await supabase.from('inventory').update({ quantity: invs[0].quantity + qty }).eq('id', invs[0].id);
@@ -231,8 +230,7 @@ export async function moveToInventory(
         await supabase.from('inventory').insert([{
             product_id: productId,
             quantity: qty,
-            item_type: 'finished',
-            location: warehouseName
+            item_type: 'product'
         }]);
     }
 

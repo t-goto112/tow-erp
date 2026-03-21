@@ -131,7 +131,7 @@ export default function InventoryPage() {
                                 <div className="flex items-center gap-2 mb-3">
                                     <span className="font-mono text-sm font-bold text-blue-600">{lot.lot_number}</span>
                                     <span className="text-xs text-slate-500">{lot.products?.name}</span>
-                                    <span className="text-[10px] text-slate-400 font-bold ml-auto">受注数 {lot.total_quantity}個</span>
+                                    <span className="text-[10px] text-slate-400 font-bold ml-auto">受注数 {lot.quantity}個</span>
                                 </div>
                                 {/* 工程別テーブル */}
                                 <div className="bg-slate-50 rounded-xl overflow-hidden border border-slate-100">

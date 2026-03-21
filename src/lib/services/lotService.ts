@@ -37,7 +37,7 @@ export async function updateLotProcessDelivery(
     const { data: deliveries, error: listError } = await supabase
         .from('lot_process_deliveries')
         .select('*')
-        .eq('process_id', processId);
+        .eq('lot_process_id', processId);
 
     if (listError) throw listError;
 

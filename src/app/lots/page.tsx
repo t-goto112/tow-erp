@@ -58,7 +58,7 @@ export default function LotsPage() {
                                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${st.color}`}>{st.label}</span>
                                     </div>
                                     <p className="text-sm font-bold text-slate-700">{lot.products?.name}</p>
-                                    <p className="text-[10px] text-slate-400 mt-0.5">総数: {lot.total_quantity}個 | 仕掛: {wipQty}個 | ロス: {MathTotalLoss}個</p>
+                                    <p className="text-[10px] text-slate-400 mt-0.5">総数: {lot.quantity}個 | 仕掛: {wipQty}個 | ロス: {MathTotalLoss}個</p>
                                 </div>
                                 <div className="text-right">
                                     {currentActive && <p className="text-xs font-bold text-blue-600">{currentActive.process_name}</p>}
@@ -67,7 +67,7 @@ export default function LotsPage() {
                             </div>
                             <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-slate-100">
                                 {processList.map(p => {
-                                    const pct = lot.total_quantity > 0 ? (p.completed_quantity / lot.total_quantity) * 100 : 0;
+                                    const pct = lot.quantity > 0 ? (p.completed_quantity / lot.quantity) * 100 : 0;
                                     return <div key={p.id} title={`${p.process_name}: ${p.completed_quantity}完了 / ${p.current_quantity}仕掛`} style={{ width: `${Math.max(pct, 2)}%` }}
                                         className={`rounded-full transition-all ${p.status === "completed" ? "bg-emerald-400" : p.status === "in_progress" ? "bg-blue-400" : "bg-slate-200"}`} />;
                                 })}
@@ -151,7 +151,7 @@ function LotDetailModal({ lot, onClose, refresh }: { lot: SupabaseLot | null; on
     };
 
     return (
-        <Modal open={!!lot} onClose={onClose} title={`${lot.lot_number} — ${lot.products?.name}`} subtitle={`総数量: ${lot.total_quantity}個`} width="max-w-2xl">
+        <Modal open={!!lot} onClose={onClose} title={`${lot.lot_number} — ${lot.products?.name}`} subtitle={`総数量: ${lot.quantity}個`} width="max-w-2xl">
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
                 {processList.map((proc) => (
                     <div key={proc.id} className={`rounded-2xl border p-4 ${proc.status === "in_progress" ? "border-blue-200 bg-blue-50/30" : "border-slate-100"}`}>
