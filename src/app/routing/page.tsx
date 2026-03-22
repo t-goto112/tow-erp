@@ -5,7 +5,7 @@ import { ArrowRight, ArrowLeft, AlertTriangle, Loader2, Check } from "lucide-rea
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { useSupabaseData, SupabaseLot, SupabaseLotProcess } from "@/lib/useSupabaseData";
-import { moveForward, registerWip, moveBack, moveToInventory, shipAndInvoice, confirmLoss, mergeToMainPart } from "@/lib/services/routingService";
+import { moveForward, registerWip, moveBack, moveToInventory, shipAndInvoice, confirmLoss as confirmLossService } from "@/lib/services/routingService";
 
 export default function RoutingPage() {
     const { lots, processes, subcontractors, processRates, loading: dataLoading, profile, refresh } = useSupabaseData();
@@ -34,11 +34,11 @@ export default function RoutingPage() {
     const [backDueDate, setBackDueDate] = useState("");
     const [backPrevSub, setBackPrevSub] = useState("");
 
-    const [confirmLoss, setConfirmLoss] = useState(false);
+    const [showConfirmLoss, setShowConfirmLoss] = useState(false);
     const [loading, setLoading] = useState(false);
 
     // 最終工程の分岐
-    const [shipMode, setShipMode] = useState<"inventory" | "ship" | "merge" | null>(null);
+    const [shipMode, setShipMode] = useState<"inventory" | "ship" | null>(null);
     const [warehouseName, setWarehouseName] = useState("本社倉庫");
 
     const activeLots = lots.filter(l => l.status !== "completed");
@@ -92,7 +92,9 @@ export default function RoutingPage() {
         if (!canEdit || !selectedLot || !selectedProc) return;
         setLoading(true);
         try {
-            await moveForward(selectedLot.id, selectedProc.id, Number(fwdQty), fwdCompletionDate, fwdDeliveryDate, fwdDueDate, nextProcessSubs[0]?.process_id, fwdNextSub || undefined, fwdOverride ? Number(fwdOverride) : undefined);
+            // Convert subcontractor name to ID
+            const nextSubId = fwdNextSub ? nextProcessSubs.find(s => s.name === fwdNextSub)?.id : undefined;
+            await moveForward(selectedLot.id, selectedProc.id, Number(fwdQty), fwdCompletionDate, fwdDeliveryDate, fwdDueDate, nextProcessSubs[0]?.process_id, nextSubId, fwdOverride ? Number(fwdOverride) : undefined);
             showToast("success", `${fwdQty}個を次工程へ送りました`);
             setFwdQty("");
             refresh();
@@ -167,27 +169,13 @@ export default function RoutingPage() {
         }
     };
 
-    const handleMerge = async () => {
-        if (!canEdit || !selectedLot || !selectedProc) return;
-        setLoading(true);
-        try {
-            await mergeToMainPart(selectedLot.id, selectedProc.id, Number(fwdQty), fwdCompletionDate);
-            showToast("success", `${fwdQty}個をメインパーツに合流しました`);
-            setFwdQty("");
-            setShipMode(null);
-            refresh();
-        } catch (e: any) {
-            showToast("error", e.message || "エラー");
-        } finally {
-            setLoading(false);
-        }
-    };
+
 
     const handleConfirmLoss = async () => {
         if (!canEdit || !selectedLot || !selectedProc) return;
         try {
-            const r = await confirmLoss(selectedLot.id, selectedProc.id);
-            setConfirmLoss(false);
+            const r = await confirmLossService(selectedLot.id, selectedProc.id);
+            setShowConfirmLoss(false);
             showToast("success", `${r.lossQty}個をロスとして確定しました`);
             refresh();
         } catch (e: any) {
@@ -316,9 +304,6 @@ export default function RoutingPage() {
                                         {selectedProc.processes?.group_index === 0 && (
                                             <button onClick={() => setShipMode("ship")} className={`flex-1 py-3 rounded-xl text-xs font-bold border-2 transition-all ${shipMode === "ship" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200"}`}>発送・納品</button>
                                         )}
-                                        {selectedProc.processes?.group_index !== 0 && (
-                                            <button onClick={() => setShipMode("merge")} className={`flex-1 py-3 rounded-xl text-xs font-bold border-2 transition-all ${shipMode === "merge" ? "border-amber-500 bg-amber-50 text-amber-700" : "border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200"}`}>メインパーツへ合流</button>
-                                        )}
                                     </div>
 
                                     {shipMode === "inventory" && (
@@ -390,7 +375,7 @@ export default function RoutingPage() {
                                     <h4 className="font-bold text-sm text-red-600 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> ロス確定</h4>
                                     <p className="text-xs text-slate-500">現在数 {selectedProcCurrentQty}個 を廃棄(ロス)として確定します。</p>
                                     {canEdit && (
-                                        <button onClick={() => setConfirmLoss(true)} className="w-full bg-red-500 text-white font-bold py-3 rounded-2xl shadow-lg shadow-red-500/20 hover:bg-red-600 active:scale-[0.98] transition-all text-sm">ロス確定</button>
+                                        <button onClick={() => setShowConfirmLoss(true)} className="w-full bg-red-500 text-white font-bold py-3 rounded-2xl shadow-lg shadow-red-500/20 hover:bg-red-600 active:scale-[0.98] transition-all text-sm">ロス確定</button>
                                     )}
                                 </div>
                             )}
@@ -408,7 +393,7 @@ export default function RoutingPage() {
                 </>
             )}
 
-            <ConfirmDialog open={confirmLoss} onClose={() => setConfirmLoss(false)} onConfirm={handleConfirmLoss}
+            <ConfirmDialog open={showConfirmLoss} onClose={() => setShowConfirmLoss(false)} onConfirm={handleConfirmLoss}
                 title="ロスを確定しますか？" message={`${selectedProcCurrentQty}個を廃棄として記録します。この操作は取り消せません。`} confirmLabel="ロス確定" danger />
         </div>
     );
