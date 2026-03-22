@@ -41,7 +41,7 @@ export default function Dashboard() {
     // 仕掛品をロットで集計
     const wipByLot = useMemo(() => {
         return lots.filter(l => l.status !== "completed").map(lot => {
-            const wipQty = (lot.lot_processes || []).reduce((s: number, p: any) => s + (p.input_quantity || 0) - (p.completed_quantity || 0), 0);
+            const wipQty = (lot.lot_processes || []).reduce((s: number, p: any) => s + (p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0), 0);
             return { ...lot, wipQty };
         }).filter(l => l.wipQty > 0 || l.status === "created");
     }, [lots]);
@@ -104,7 +104,7 @@ export default function Dashboard() {
                 const isOverdue = barEnd && barEnd < todayStr && proc.status !== "completed";
                 const color = proc.status === "completed" ? "bg-emerald-400" : isOverdue ? "bg-red-400" : "bg-blue-400";
 
-                const currQty = (proc.input_quantity || 0) - (proc.completed_quantity || 0);
+                const currQty = (proc.input_quantity || 0) - (proc.completed_quantity || 0) - (proc.loss_qty || 0);
                 bars.push({
                     name: proc.processes?.name || "",
                     sub: proc.subcontractors?.name || "",
@@ -275,7 +275,7 @@ export default function Dashboard() {
                                             <span className="text-xs text-slate-500">{lot.products?.name || ""}</span>
                                         </div>
                                         <div className="flex gap-3 text-[10px] text-slate-400 font-bold">
-                                            <span>受注数: {lot.quantity}</span>
+                                            <span>受注数: {lot.total_quantity}</span>
                                             <span>仕掛: {lot.wipQty}</span>
                                             {currentProc && <span className="text-blue-600">{currentProc.processes?.name || ""}</span>}
                                         </div>
@@ -286,7 +286,7 @@ export default function Dashboard() {
                                     {(lot.lot_processes || []).map((p: any) => (
                                         <div key={p.id} className={`flex items-center gap-1 py-0.5 px-2 rounded-md shrink-0 ${p.status === "completed" ? "bg-emerald-100 text-emerald-700" : p.status === "in_progress" ? "bg-blue-100 text-blue-700" : "bg-white border border-slate-200"}`}>
                                             <span className="font-black text-[9px] whitespace-nowrap">{p.processes?.name || ""}</span>
-                                            <span className="opacity-70 whitespace-nowrap">: 仕掛{(p.input_quantity || 0) - (p.completed_quantity || 0)}/完了{p.completed_quantity || 0}</span>
+                                            <span className="opacity-70 whitespace-nowrap">: 仕掛{(p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0)}/完了{p.completed_quantity || 0}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -304,12 +304,12 @@ export default function Dashboard() {
 
 function SummaryCard({ icon, label, value, sub, color }: { icon: React.ReactNode; label: string; value: string; sub: string; color: string }) {
     return (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex items-start gap-4 transition hover:shadow-md hover:border-blue-100 group">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition group-hover:scale-110 duration-300 ${color}`}>{icon}</div>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex items-start gap-4">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${color}`}>{icon}</div>
             <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
-                <p className="text-2xl font-black text-slate-800 tracking-tight">{value}</p>
-                <p className="text-xs text-slate-400 font-bold">{sub}</p>
+                <p className="text-2xl font-black text-slate-800">{value}</p>
+                <p className="text-xs text-slate-400">{sub}</p>
             </div>
         </div>
     );
@@ -365,7 +365,7 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
 
                 // 新しい実績レコードを作成
                 await supabase.from('lot_process_deliveries').insert({
-                    process_id: targetProc.id,
+                    lot_process_id: targetProc.id,
                     qty: qty,
                     delivery_date: new Date().toISOString().split('T')[0],
                     due_date: del.due_date
@@ -384,7 +384,7 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
     };
 
     return (
-        <Modal open={!!lot} onClose={onClose} title={lot ? `${lot.lot_number} — ${lot.products?.name || ""}` : ""} subtitle={lot ? `総数量: ${lot.quantity}個` : ""} width="max-w-2xl">
+        <Modal open={!!lot} onClose={onClose} title={lot ? `${lot.lot_number} — ${lot.products?.name || ""}` : ""} subtitle={lot ? `総数量: ${lot.total_quantity}個` : ""} width="max-w-2xl">
             <div className="space-y-4 max-h-[70vh] overflow-y-auto px-1 text-slate-800">
                 {procs.map((proc: any) => (
                     <div key={proc.id} className="bg-slate-50/50 rounded-2xl p-4 border border-slate-100 mb-4">
@@ -395,11 +395,13 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
                                 </div>
                                 <div className="flex-1">
                                     <h4 className="text-sm font-black text-slate-800 tracking-tight">{proc.processes?.name || ""}</h4>
-                                    <p className="text-[10px] text-slate-400 font-bold">{proc.subcontractors?.name || "未割当"}</p>
+                                    <p className="text-[10px] text-slate-400 font-bold">
+                                        {proc.subcontractors?.name || "未割当"} ・ 単価: ¥{(proc.unit_price_override || (processRates.find(r => r.process_id === proc.process_id && r.subcontractor_id === proc.subcontractor_id)?.unit_price) || 0).toLocaleString()}
+                                    </p>
                                 </div>
                             </div>
                             <div className="flex gap-2 text-[10px] font-bold items-center">
-                                <span className="text-slate-500">現在:{(proc.input_quantity || 0) - (proc.completed_quantity || 0)}</span>
+                                <span className="text-slate-500">現在:{(proc.input_quantity || 0) - (proc.completed_quantity || 0) - (proc.loss_qty || 0)}</span>
                                 <span className="text-emerald-600">完了:{proc.completed_quantity || 0}</span>
                             </div>
                         </div>
@@ -440,7 +442,7 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
                                                         {payLine ? (
                                                             <>
                                                                 <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isSyncedStatus ? "bg-blue-100 text-blue-600" : "bg-emerald-100 text-emerald-600"}`}>
-                                                                    支払:{payLine.payments?.status === "pre_payment" ? "支払前" : payLine.payments?.status === "paid" ? "支払済" : "確定済"}
+                                                                    支払:{payLine.payments?.status === "wip" ? "仕掛中" : payLine.payments?.status === "pre_payment" ? "支払前" : payLine.payments?.status === "paid" ? "支払済" : "確認済"}
                                                                 </span>
                                                                 {!isSyncedStatus && adjustMode === "correct" && (
                                                                     <div className="flex items-center gap-1 text-amber-600" title="支払確定済みのため、金額は自動修正されません">
@@ -457,11 +459,11 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <div>
                                                         <label className="block text-[9px] text-slate-400 mb-0.5">数量</label>
-                                                        <input type="number" value={editQty} onChange={(e) => setEditQty(e.target.value)} className="w-full border border-slate-200 rounded px-2 py-1 text-sm font-bold bg-white" />
+                                                        <input type="number" value={editQty} onChange={(e) => setEditQty(e.target.value)} className="input-base !py-1 text-sm font-bold" />
                                                     </div>
                                                     <div>
                                                         <label className="block text-[9px] text-slate-400 mb-0.5">モード</label>
-                                                        <select value={adjustMode} onChange={(e) => setAdjustMode(e.target.value as any)} className="w-full border border-slate-200 rounded px-2 py-1 text-xs bg-white">
+                                                        <select value={adjustMode} onChange={(e) => setAdjustMode(e.target.value as any)} className="select-base !py-1 text-xs">
                                                             <option value="correct">修正</option>
                                                             <option value="move_prev">差戻し</option>
                                                             <option value="move_next">送り</option>
@@ -472,7 +474,7 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
                                                 {(adjustMode === "move_prev" || adjustMode === "move_next") && (
                                                     <div>
                                                         <label className="block text-[9px] text-slate-400 mb-0.5">外注先選択 (移動先)</label>
-                                                        <select value={targetSubId} onChange={(e) => setTargetSubId(e.target.value)} className="w-full border border-slate-200 rounded px-2 py-1 text-xs bg-white">
+                                                        <select value={targetSubId} onChange={(e) => setTargetSubId(e.target.value)} className="select-base !py-1 text-xs">
                                                             <option value="">(デフォルト)</option>
                                                             {subOptions.map(r => <option key={r.subcontractor_id} value={r.subcontractor_id}>{r.subcontractors?.name}</option>)}
                                                         </select>

@@ -25,8 +25,7 @@ export async function moveForward(
         .from('lot_processes')
         .update({
             completed_quantity: newCompleted,
-            status: (currentProc.input_quantity || 0) - (currentProc.loss_qty || 0) <= newCompleted ? 'completed' : 'in_progress',
-            completed_at: completionDate
+            status: (currentProc.input_quantity || 0) - (currentProc.loss_qty || 0) <= newCompleted ? 'completed' : 'in_progress'
         })
         .eq('id', currentProcessId);
     if (updErr) throw updErr;
@@ -71,8 +70,7 @@ export async function moveForward(
                     process_id: nextProcessTemplateId,
                     subcontractor_id: nextSubcontractorId || null,
                     input_quantity: qty,
-                    status: 'in_progress',
-                    unit_price_override: overridePrice
+                    status: 'in_progress'
                 }])
                 .select()
                 .single();
@@ -112,7 +110,6 @@ export async function registerWip(
     const { error: uErr } = await supabase.from('lot_processes').update({
         input_quantity: (proc.input_quantity || 0) + qty,
         subcontractor_id: subcontractorId,
-        unit_price_override: overridePrice,
         status: 'in_progress'
     }).eq('id', processId);
     if (uErr) throw uErr;
@@ -222,16 +219,52 @@ export async function moveToInventory(
         .from('inventory')
         .select('*')
         .eq('product_id', productId)
-        .eq('item_type', 'product');
+        .eq('location', warehouseName);
 
     if (invs && invs.length > 0) {
-        await supabase.from('inventory').update({ quantity: invs[0].quantity + qty }).eq('id', invs[0].id);
+        await supabase.from('inventory').update({ total_quantity: invs[0].total_quantity + qty }).eq('id', invs[0].id);
     } else {
         await supabase.from('inventory').insert([{
             product_id: productId,
-            quantity: qty,
-            item_type: 'product'
+            total_quantity: qty,
+            location: warehouseName
         }]);
+    }
+
+    await updateLotStatus(lotId);
+    return { ok: true };
+}
+
+export async function mergeToMainPart(
+    lotId: string,
+    currentProcessId: string,
+    qty: number,
+    completionDate: string
+) {
+    const { data: currentProc, error: cpErr } = await supabase.from('lot_processes').select('*').eq('id', currentProcessId).single();
+    if (cpErr) throw cpErr;
+
+    const newCompleted = (currentProc.completed_quantity || 0) + qty;
+    await supabase.from('lot_processes').update({
+        completed_quantity: newCompleted,
+        status: (currentProc.input_quantity || 0) - (currentProc.loss_qty || 0) <= newCompleted ? 'completed' : 'in_progress'
+    }).eq('id', currentProcessId);
+
+    await createPaymentItem(currentProc, qty, completionDate, currentProc.unit_price_override);
+
+    // Find main part's first process
+    const { data: procs } = await supabase
+        .from('lot_processes')
+        .select('*, processes(group_index, sort_order)')
+        .eq('lot_id', lotId);
+    
+    if (procs) {
+        const mainProc = procs.find((p: any) => p.processes?.group_index === 0 && p.processes?.sort_order === 1);
+        if (mainProc) {
+            await supabase.from('lot_processes').update({
+                input_quantity: (mainProc.input_quantity || 0) + qty
+            }).eq('id', mainProc.id);
+        }
     }
 
     await updateLotStatus(lotId);

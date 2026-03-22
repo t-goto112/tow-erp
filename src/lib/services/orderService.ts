@@ -48,17 +48,16 @@ export async function createSupabaseOrder(params: {
 
             const productId = prodData.id;
 
-            const { data: orderItemData, error: itemError } = await supabase
+            // 2b. Insert Order Item
+            const { error: itemError } = await supabase
                 .from('order_items')
                 .insert([{
                     order_id: orderId,
                     product_id: productId,
                     quantity: item.quantity,
                     unit_price: item.unitPrice,
-                    shipped_quantity: item.shipped_quantity || 0
-                }])
-                .select()
-                .single();
+                    shipped_quantity: 0
+                }]);
 
             if (itemError) throw itemError;
 
@@ -69,8 +68,8 @@ export async function createSupabaseOrder(params: {
                 .insert([{
                     lot_number: lotNumber,
                     product_id: productId,
-                    quantity: item.quantity,
-                    order_item_id: orderItemData.id,
+                    total_quantity: item.quantity,
+                    order_id: orderId,
                     status: 'created'
                 }])
                 .select()

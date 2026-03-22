@@ -24,7 +24,7 @@ export default function InventoryPage() {
         try {
             setLoadingAction(true);
             await adjustInventory(adjustItem.id, Number(newQuantity), adjReason);
-            showToast("success", `在庫を ${adjustItem.quantity} → ${newQuantity} に修正しました`);
+            showToast("success", `在庫を ${adjustItem.total_quantity} → ${newQuantity} に修正しました`);
             setAdjustItem(null);
             setNewQuantity("");
             refresh();
@@ -59,7 +59,7 @@ export default function InventoryPage() {
         inventory.filter((i: SupabaseInventory) => i.item_type === "finished" || i.item_type === "parts").forEach((i: SupabaseInventory) => {
             const prodName = i.products?.name || "不明な製品";
             if (grouped[prodName]) {
-                grouped[prodName].quantity += i.quantity;
+                grouped[prodName].total_quantity += i.total_quantity;
             } else {
                 grouped[prodName] = { ...i };
             }
@@ -98,7 +98,7 @@ export default function InventoryPage() {
                             {stockItems.map((item, index) => (
                                 <tr key={item.id || index} className="hover:bg-slate-50/50 transition">
                                     <td className="px-4 py-3 font-bold text-slate-700">{item.products?.name}</td>
-                                    <td className="px-4 py-3 text-right font-black text-lg">{item.quantity}</td>
+                                    <td className="px-4 py-3 text-right font-black text-lg">{item.total_quantity}</td>
                                     <td className="px-4 py-3 text-xs text-slate-400 group cursor-pointer"
                                         onClick={() => {
                                             if (!canEdit) return;
@@ -131,7 +131,7 @@ export default function InventoryPage() {
                                 <div className="flex items-center gap-2 mb-3">
                                     <span className="font-mono text-sm font-bold text-blue-600">{lot.lot_number}</span>
                                     <span className="text-xs text-slate-500">{lot.products?.name}</span>
-                                    <span className="text-[10px] text-slate-400 font-bold ml-auto">受注数 {lot.quantity}個</span>
+                                    <span className="text-[10px] text-slate-400 font-bold ml-auto">受注数 {lot.total_quantity}個</span>
                                 </div>
                                 {/* 工程別テーブル */}
                                 <div className="bg-slate-50 rounded-xl overflow-hidden border border-slate-100">
@@ -178,7 +178,7 @@ export default function InventoryPage() {
                     <div className="space-y-5">
                         <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 flex items-center justify-between">
                             <span className="text-xs font-bold text-slate-400 uppercase">現在数</span>
-                            <span className="text-2xl font-black text-slate-800">{adjustItem.quantity}<span className="text-xs text-slate-400 ml-1">個</span></span>
+                            <span className="text-2xl font-black text-slate-800">{adjustItem.total_quantity}<span className="text-xs text-slate-400 ml-1">個</span></span>
                         </div>
                         <div>
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">修正後</label>

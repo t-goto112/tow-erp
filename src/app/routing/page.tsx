@@ -5,7 +5,7 @@ import { ArrowRight, ArrowLeft, AlertTriangle, Loader2, Check } from "lucide-rea
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { useSupabaseData, SupabaseLot, SupabaseLotProcess } from "@/lib/useSupabaseData";
-import { moveForward, registerWip, moveBack, moveToInventory, shipAndInvoice, confirmLoss } from "@/lib/services/routingService";
+import { moveForward, registerWip, moveBack, moveToInventory, shipAndInvoice, confirmLoss, mergeToMainPart } from "@/lib/services/routingService";
 
 export default function RoutingPage() {
     const { lots, processes, subcontractors, processRates, loading: dataLoading, profile, refresh } = useSupabaseData();
@@ -38,7 +38,7 @@ export default function RoutingPage() {
     const [loading, setLoading] = useState(false);
 
     // 最終工程の分岐
-    const [shipMode, setShipMode] = useState<"inventory" | "ship" | null>(null);
+    const [shipMode, setShipMode] = useState<"inventory" | "ship" | "merge" | null>(null);
     const [warehouseName, setWarehouseName] = useState("本社倉庫");
 
     const activeLots = lots.filter(l => l.status !== "completed");
@@ -46,7 +46,8 @@ export default function RoutingPage() {
     const selectedProc = selectedLot?.lot_processes?.find(p => p.id === selectedProcessId) || null;
     const selectedProcCurrentQty = selectedProc ? ((selectedProc.input_quantity || 0) - (selectedProc.completed_quantity || 0) - (selectedProc.loss_qty || 0)) : 0;
 
-    const needsWipRegistration = selectedProc?.status === "pending" || (selectedProc?.processes?.group_index === 0 && selectedProc?.processes?.sort_order === 1 && selectedProc?.status !== "completed");
+    const isFirstProcessForWip = selectedProc?.processes?.sort_order === 1;
+    const needsWipRegistration = selectedProc?.status === "pending" && isFirstProcessForWip;
 
     // 選択中工程の外注先
     const currentProcessSubs = useMemo(() => {
@@ -78,7 +79,7 @@ export default function RoutingPage() {
         if (selectedLot) {
             setFwdQty(""); setFwdCompletionDate(today); setFwdDeliveryDate(today); setFwdDueDate(today); setFwdOverride(""); setFwdNextSub("");
             setBackQty(""); setBackDate(today); setBackDueDate(today); setBackPrevSub("");
-            setWipQty(selectedLot.quantity.toString()); setWipDeliveryDate(today); setWipDueDate(today); setWipSub(""); setWipOverride("");
+            setWipQty(selectedLot.total_quantity.toString()); setWipDeliveryDate(today); setWipDueDate(today); setWipSub(""); setWipOverride("");
             setShipMode(null);
             // 外注先が1つしかない場合は固定
             if (nextProcessSubs.length === 1) setFwdNextSub(nextProcessSubs[0].name);
@@ -166,6 +167,22 @@ export default function RoutingPage() {
         }
     };
 
+    const handleMerge = async () => {
+        if (!canEdit || !selectedLot || !selectedProc) return;
+        setLoading(true);
+        try {
+            await mergeToMainPart(selectedLot.id, selectedProc.id, Number(fwdQty), fwdCompletionDate);
+            showToast("success", `${fwdQty}個をメインパーツに合流しました`);
+            setFwdQty("");
+            setShipMode(null);
+            refresh();
+        } catch (e: any) {
+            showToast("error", e.message || "エラー");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleConfirmLoss = async () => {
         if (!canEdit || !selectedLot || !selectedProc) return;
         try {
@@ -200,7 +217,7 @@ export default function RoutingPage() {
                         disabled={!canEdit}
                         className={`select-base ${!canEdit ? 'opacity-50 cursor-not-allowed bg-slate-100' : ''}`}>
                         <option value="">{canEdit ? '選択してください' : '閲覧のみ（選択不可）'}</option>
-                        {activeLots.map(l => <option key={l.id} value={l.id}>{l.lot_number} — {l.products?.name} ({l.quantity}個)</option>)}
+                        {activeLots.map(l => <option key={l.id} value={l.id}>{l.lot_number} — {l.products?.name} ({l.total_quantity}個)</option>)}
                     </select>
                 </div>
                 {selectedLot && (
@@ -218,7 +235,7 @@ export default function RoutingPage() {
                 )}
             </div>
 
-            {selectedProc && (needsWipRegistration || (selectedProc.processes?.group_index === 0 && selectedProc.processes?.sort_order === 1 && selectedProcCurrentQty > 0)) && (
+            {selectedProc && (needsWipRegistration || (isFirstProcessForWip && selectedProcCurrentQty > 0)) && (
                 <div className="bg-white rounded-2xl border border-blue-100 shadow-sm p-6 space-y-4 animate-in slide-in-from-top-4 duration-500">
                     <div className="flex items-center gap-3 border-b border-blue-50 pb-4">
                         <div className="bg-blue-600 p-2 rounded-lg text-white"><Loader2 className="w-5 h-5" /></div>
@@ -252,7 +269,7 @@ export default function RoutingPage() {
                 </div>
             )}
 
-            {selectedProc && (selectedProc.status !== "pending" || (selectedProc.processes?.group_index === 0 && selectedProc.processes?.sort_order === 1 && selectedProcCurrentQty > 0)) && (
+            {selectedProc && (selectedProc.status !== "pending" || (isFirstProcessForWip && selectedProcCurrentQty > 0)) && (
                 <>
                     {/* 現工程ステータス */}
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
@@ -298,6 +315,9 @@ export default function RoutingPage() {
                                         <button onClick={() => setShipMode("inventory")} className={`flex-1 py-3 rounded-xl text-xs font-bold border-2 transition-all ${shipMode === "inventory" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200"}`}>在庫へ移動</button>
                                         {selectedProc.processes?.group_index === 0 && (
                                             <button onClick={() => setShipMode("ship")} className={`flex-1 py-3 rounded-xl text-xs font-bold border-2 transition-all ${shipMode === "ship" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200"}`}>発送・納品</button>
+                                        )}
+                                        {selectedProc.processes?.group_index !== 0 && (
+                                            <button onClick={() => setShipMode("merge")} className={`flex-1 py-3 rounded-xl text-xs font-bold border-2 transition-all ${shipMode === "merge" ? "border-amber-500 bg-amber-50 text-amber-700" : "border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200"}`}>メインパーツへ合流</button>
                                         )}
                                     </div>
 

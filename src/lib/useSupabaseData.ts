@@ -37,9 +37,9 @@ export interface SupabaseLot {
     id: string;
     lot_number: string;
     product_id: string;
-    quantity: number;
+    total_quantity: number;
     status: string;
-    order_item_id: string | null;
+    order_id: string;
     created_at: string;
     products: { name: string } | null;
     lot_processes?: SupabaseLotProcess[];
@@ -62,8 +62,9 @@ export interface SupabaseLotProcess {
 
 export interface SupabaseLotProcessDelivery {
     id: string;
-    lot_process_id: string;
+    process_id: string;
     qty: number;
+    status: string;
     delivery_date: string | null;
     due_date: string | null;
     completion_date: string | null;
@@ -72,9 +73,8 @@ export interface SupabaseLotProcessDelivery {
 export interface SupabaseInventory {
     id: string;
     product_id: string;
-    quantity: number;
-    item_type: string;
-    warehouse_id: string | null;
+    total_quantity: number;
+    location: string;
     lot_id: string | null;
     products: { name: string; code: string } | null;
 }
