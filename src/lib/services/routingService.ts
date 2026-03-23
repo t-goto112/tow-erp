@@ -74,18 +74,18 @@ async function consumeWipPayments(lotProcessId: string, qty: number) {
     }
 }
 
-// ─── ロットステータス更新 ───
-async function updateLotStatus(lotId: string) {
+// ─── ロット・受注ステータス更新 (外部からも呼べるようにエクスポート) ───
+export async function syncLotAndOrderStatus(lotId: string) {
     const { data: procs } = await supabase.from('lot_processes').select('*').eq('lot_id', lotId);
     if (!procs) return;
 
     const { data: lot } = await supabase.from('lots').select('order_id, status').eq('id', lotId).single();
     if (!lot) return;
 
-    const allCompleted = procs.every((p: any) => p.status === 'completed');
+    const allCompleted = procs.length > 0 && procs.every((p: any) => p.status === 'completed');
     const anyInProgress = procs.some((p: any) => p.status === 'in_progress' || p.status === 'completed');
 
-    if (allCompleted && procs.length > 0) {
+    if (allCompleted) {
         if (lot.status !== 'completed') {
             await supabase.from('lots').update({ status: 'completed' }).eq('id', lotId);
         }
@@ -100,7 +100,11 @@ async function updateLotStatus(lotId: string) {
             await supabase.from('lots').update({ status: 'in_progress' }).eq('id', lotId);
         }
         if (lot.order_id) {
-            await supabase.from('orders').update({ status: 'in_progress' }).eq('id', lot.order_id);
+            // 受注も仕掛中に更新
+            const { data: ord } = await supabase.from('orders').select('status').eq('id', lot.order_id).single();
+            if (ord && (ord.status === 'pending' || ord.status === 'created')) {
+                await supabase.from('orders').update({ status: 'in_progress' }).eq('id', lot.order_id);
+            }
         }
     }
 }
@@ -111,7 +115,8 @@ async function createPaymentItem(
     qty: number,
     completionDate: string,
     overridePrice?: number | null,
-    paymentStatus: string = 'pre_payment'
+    paymentStatus: string = 'pre_payment',
+    deliveryId?: string // ← 明細IDを追加
 ) {
     if (!currentProc.subcontractor_id) return;
     const date = new Date(completionDate);
@@ -161,6 +166,7 @@ async function createPaymentItem(
     const { error: piErr } = await supabase.from('payment_items').insert([{
         payment_id: paymentId,
         lot_process_id: currentProc.id,
+        lot_process_delivery_id: deliveryId || null, // ← 紐付けを追加
         good_quantity: qty,
         unit_price: Number(unitPrice),
         amount: amount
@@ -181,7 +187,7 @@ export async function moveForward(
     nextSubcontractorId?: string,
     overridePrice?: number
 ) {
-    const { data: currentProc, error: cpErr } = await supabase.from('lot_processes').select('*').eq('id', currentProcessId).single();
+    const { data: currentProc, error: cpErr } = await supabase.from('lot_processes').select('*, processes(group_index)').eq('id', currentProcessId).single();
     if (cpErr) throw cpErr;
 
     // 1. 実績報告タイミングでのパーツ消費 (assembly_pointの場合)
@@ -196,8 +202,10 @@ export async function moveForward(
         .order('delivery_date', { ascending: true })
         .limit(1);
 
+    let deliveryId = null;
     if (deliveries && deliveries.length > 0) {
-        await supabase.from('lot_process_deliveries').update({ completion_date: completionDate }).eq('id', deliveries[0].id);
+        deliveryId = deliveries[0].id;
+        await supabase.from('lot_process_deliveries').update({ completion_date: completionDate }).eq('id', deliveryId);
     }
 
     // 3. プロセス数量の更新
@@ -209,7 +217,7 @@ export async function moveForward(
 
     // 4. WIP支払の消費 & 実績支払の作成
     await consumeWipPayments(currentProcessId, qty);
-    await createPaymentItem(currentProc, qty, completionDate, overridePrice ?? currentProc.unit_price_override, 'pre_payment');
+    await createPaymentItem(currentProc, qty, completionDate, overridePrice ?? currentProc.unit_price_override, 'pre_payment', deliveryId);
 
     // 5. 次工程へ
     if (nextProcessTemplateId) {
@@ -236,32 +244,34 @@ export async function moveForward(
             targetProc = newProcData;
         }
 
-        await supabase.from('lot_process_deliveries').insert([{
+        const { data: newDel, error: delErr } = await supabase.from('lot_process_deliveries').insert([{
             lot_process_id: nextProcId,
             qty: qty,
             delivery_date: nextDeliveryDate,
             due_date: nextDueDate
-        }]);
+        }]).select().single();
+        if (delErr) throw delErr;
 
         const nextProcForPayment = { id: nextProcId, process_id: nextProcessTemplateId, subcontractor_id: nextSubcontractorId || targetProc?.subcontractor_id };
-        await createPaymentItem(nextProcForPayment, qty, nextDeliveryDate, null, 'wip');
+        await createPaymentItem(nextProcForPayment, qty, nextDeliveryDate, null, 'wip', newDel.id);
     } else {
-        // グループ内最終工程の場合、パーツなら自動的に仕掛在庫へ
-        const { data: procTemplate } = await supabase.from('processes').select('group_index').eq('id', currentProc.process_id).single();
-        if (procTemplate && procTemplate.group_index > 0) {
-            const { data: lot } = await supabase.from('lots').select('product_id').eq('id', lotId).single();
-            if (lot) {
-                const { data: existingInv } = await supabase.from('inventory').select('*').eq('product_id', lot.product_id).eq('location', '仕掛パーツ置場').maybeSingle();
-                if (existingInv) {
-                    await supabase.from('inventory').update({ quantity: existingInv.quantity + qty }).eq('id', existingInv.id);
-                } else {
-                    await supabase.from('inventory').insert([{ product_id: lot.product_id, quantity: qty, location: '仕掛パーツ置場' }]);
-                }
+        // グループ内最終工程の場合の在庫連動
+        const groupIndex = (currentProc.processes as any)?.group_index;
+        const { data: lot } = await supabase.from('lots').select('product_id').eq('id', lotId).single();
+        if (lot) {
+            const isFinished = groupIndex === null || groupIndex === undefined || groupIndex === 0;
+            const targetLoc = isFinished ? '完成品倉庫' : '仕掛パーツ置場';
+            const itemType = isFinished ? 'finished' : 'parts';
+            const { data: existingInv } = await supabase.from('inventory').select('*').eq('product_id', lot.product_id).eq('location', targetLoc).maybeSingle();
+            if (existingInv) {
+                await supabase.from('inventory').update({ quantity: existingInv.quantity + qty }).eq('id', existingInv.id);
+            } else {
+                await supabase.from('inventory').insert([{ product_id: lot.product_id, quantity: qty, location: targetLoc, item_type: itemType }]);
             }
         }
     }
 
-    await updateLotStatus(lotId);
+    await syncLotAndOrderStatus(lotId);
     return { ok: true };
 }
 
@@ -289,16 +299,18 @@ export async function registerWip(
         await supabase.from('orders').update({ status: 'in_progress' }).eq('id', lotData.order_id);
     }
 
-    await supabase.from('lot_process_deliveries').insert([{
+    const { data: newDel, error: delErr } = await supabase.from('lot_process_deliveries').insert([{
         lot_process_id: processId,
         qty: qty,
         delivery_date: deliveryDate,
         due_date: dueDate
-    }]);
+    }]).select().single();
+    if (delErr) throw delErr;
 
     const updatedProc = { ...proc, subcontractor_id: subcontractorId, unit_price_override: overridePrice };
-    await createPaymentItem(updatedProc, qty, deliveryDate, overridePrice, 'wip');
+    await createPaymentItem(updatedProc, qty, deliveryDate, overridePrice, 'wip', newDel.id);
 
+    await syncLotAndOrderStatus(lotId);
     return { ok: true };
 }
 
@@ -311,7 +323,7 @@ export async function moveBack(
     prevProcessTemplateId: string,
     prevSubcontractorId?: string
 ) {
-    const { data: currentProc, error: cpErr } = await supabase.from('lot_processes').select('*').eq('id', currentProcessId).single();
+    const { data: currentProc, error: cpErr } = await supabase.from('lot_processes').select('*, processes(group_index)').eq('id', currentProcessId).single();
     if (cpErr) throw cpErr;
 
     await supabase.from('lot_processes').update({
@@ -320,14 +332,22 @@ export async function moveBack(
 
     await consumeWipPayments(currentProcessId, qty);
 
-    const { data: prevProcs } = await supabase.from('lot_processes').select('*').eq('lot_id', lotId).eq('process_id', prevProcessTemplateId);
-    let prevProc = prevProcs?.find((p: any) => prevSubcontractorId ? p.subcontractor_id === prevSubcontractorId : true) || prevProcs?.[0];
+    const { data: prevProcs } = await supabase.from('lot_processes').select('*, processes(group_index)').eq('lot_id', lotId).eq('process_id', prevProcessTemplateId);
+    // group_index が一致するものに絞る
+    let prevProc = prevProcs?.find((p: any) => {
+        const isSameGroup = (p.processes as any)?.group_index === (currentProc.processes as any)?.group_index;
+        return isSameGroup && (prevSubcontractorId ? p.subcontractor_id === prevSubcontractorId : true);
+    });
 
+    if (!prevProc) prevProc = prevProcs?.[0]; // 見つからない場合のフォールバック
+
+    let newDelId = null;
     if (prevProc) {
         const newCompleted = Math.max(0, (prevProc.completed_quantity || 0) - qty);
         await supabase.from('lot_processes').update({ completed_quantity: newCompleted, status: 'in_progress' }).eq('id', prevProc.id);
-        await supabase.from('lot_process_deliveries').insert([{ lot_process_id: prevProc.id, qty: qty, delivery_date: returnDate, due_date: prevDueDate }]);
-        await createPaymentItem(prevProc, qty, returnDate, null, 'wip');
+        const { data: d } = await supabase.from('lot_process_deliveries').insert([{ lot_process_id: prevProc.id, qty: qty, delivery_date: returnDate, due_date: prevDueDate }]).select().single();
+        newDelId = d?.id;
+        await createPaymentItem(prevProc, qty, returnDate, null, 'wip', newDelId);
     } else {
         const { data: newProcData, error: insErr } = await supabase.from('lot_processes').insert([{
             lot_id: lotId,
@@ -337,15 +357,12 @@ export async function moveBack(
             status: 'in_progress'
         }]).select().single();
         if (insErr) throw insErr;
-        await supabase.from('lot_process_deliveries').insert([{ lot_process_id: newProcData.id, qty: qty, delivery_date: returnDate, due_date: prevDueDate }]);
-        await createPaymentItem(newProcData, qty, returnDate, null, 'wip');
+        const { data: d } = await supabase.from('lot_process_deliveries').insert([{ lot_process_id: newProcData.id, qty: qty, delivery_date: returnDate, due_date: prevDueDate }]).select().single();
+        newDelId = d?.id;
+        await createPaymentItem(newProcData, qty, returnDate, null, 'wip', newDelId);
     }
 
-    await supabase.from('lots').update({ status: 'in_progress' }).eq('id', lotId);
-    const { data: lotData } = await supabase.from('lots').select('order_id').eq('id', lotId).single();
-    if (lotData?.order_id) {
-        await supabase.from('orders').update({ status: 'in_progress' }).eq('id', lotData.order_id);
-    }
+    await syncLotAndOrderStatus(lotId);
     return { ok: true };
 }
 
@@ -357,14 +374,16 @@ export async function moveToInventory(
     completionDate: string,
     productId: string
 ) {
-    const { data: currentProc, error: cpErr } = await supabase.from('lot_processes').select('*').eq('id', currentProcessId).single();
+    const { data: currentProc, error: cpErr } = await supabase.from('lot_processes').select('*, processes(group_index)').eq('id', currentProcessId).single();
     if (cpErr) throw cpErr;
 
     await consumePartsIfAssembly(currentProcessId, currentProc.process_id, qty, lotId, "在庫移動");
 
     const { data: deliveries } = await supabase.from('lot_process_deliveries').select('*').eq('lot_process_id', currentProcessId).is('completion_date', null).order('delivery_date', { ascending: true }).limit(1);
+    let delId = null;
     if (deliveries && deliveries.length > 0) {
-        await supabase.from('lot_process_deliveries').update({ completion_date: completionDate }).eq('id', deliveries[0].id);
+        delId = deliveries[0].id;
+        await supabase.from('lot_process_deliveries').update({ completion_date: completionDate }).eq('id', delId);
     }
 
     const newCompleted = (currentProc.completed_quantity || 0) + qty;
@@ -374,20 +393,21 @@ export async function moveToInventory(
     }).eq('id', currentProcessId);
 
     await consumeWipPayments(currentProcessId, qty);
-    await createPaymentItem(currentProc, qty, completionDate, currentProc.unit_price_override, 'pre_payment');
+    await createPaymentItem(currentProc, qty, completionDate, currentProc.unit_price_override, 'pre_payment', delId);
 
-    const { data: procTpl } = await supabase.from('processes').select('group_index').eq('id', currentProc.process_id).single();
-    const isPartsType = procTpl && procTpl.group_index > 0;
+    const groupIndex = (currentProc.processes as any)?.group_index;
+    const isPartsType = groupIndex > 0;
     const targetLocation = isPartsType ? '仕掛パーツ置場' : warehouseName;
 
+    // 在庫更新
     const { data: invs } = await supabase.from('inventory').select('*').eq('product_id', productId).eq('location', targetLocation);
     if (invs && invs.length > 0) {
         await supabase.from('inventory').update({ quantity: invs[0].quantity + qty }).eq('id', invs[0].id);
     } else {
-        await supabase.from('inventory').insert([{ product_id: productId, quantity: qty, location: targetLocation }]);
+        await supabase.from('inventory').insert([{ product_id: productId, quantity: qty, location: targetLocation, item_type: isPartsType ? 'parts' : 'finished' }]);
     }
 
-    await updateLotStatus(lotId);
+    await syncLotAndOrderStatus(lotId);
     return { ok: true };
 }
 
@@ -403,8 +423,10 @@ export async function shipAndInvoice(
     await consumePartsIfAssembly(currentProcessId, currentProc.process_id, qty, lotId, "出荷");
 
     const { data: deliveries } = await supabase.from('lot_process_deliveries').select('*').eq('lot_process_id', currentProcessId).is('completion_date', null).order('delivery_date', { ascending: true }).limit(1);
+    let delId = null;
     if (deliveries && deliveries.length > 0) {
-        await supabase.from('lot_process_deliveries').update({ completion_date: new Date().toISOString().split("T")[0] }).eq('id', deliveries[0].id);
+        delId = deliveries[0].id;
+        await supabase.from('lot_process_deliveries').update({ completion_date: new Date().toISOString().split("T")[0] }).eq('id', delId);
     }
 
     await consumeWipPayments(currentProcessId, qty);
@@ -415,7 +437,7 @@ export async function shipAndInvoice(
     }).eq('id', currentProcessId);
 
     const todayDate = new Date().toISOString().split("T")[0];
-    await createPaymentItem(currentProc, qty, todayDate, currentProc.unit_price_override, 'pre_payment');
+    await createPaymentItem(currentProc, qty, todayDate, currentProc.unit_price_override, 'pre_payment', delId);
 
     if (orderId) {
         const { data: lot } = await supabase.from('lots').select('product_id').eq('id', lotId).single();
@@ -431,7 +453,7 @@ export async function shipAndInvoice(
         }
     }
 
-    await updateLotStatus(lotId);
+    await syncLotAndOrderStatus(lotId);
     return { ok: true };
 }
 
@@ -441,6 +463,6 @@ export async function confirmLoss(lotId: string, processId: string) {
     const remaining = (currentProc.input_quantity || 0) - (currentProc.completed_quantity || 0) - (currentProc.loss_qty || 0);
     await consumeWipPayments(processId, remaining);
     await supabase.from('lot_processes').update({ loss_qty: (currentProc.loss_qty || 0) + remaining, loss_confirmed: true, status: 'completed' }).eq('id', processId);
-    await updateLotStatus(lotId);
+    await syncLotAndOrderStatus(lotId);
     return { ok: true, lossQty: remaining };
 }

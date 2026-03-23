@@ -30,8 +30,7 @@ export default function PaymentsPage() {
             processName: pi.lot_processes?.processes?.name || "不明",
             subcontractor: pi.payments?.subcontractors?.name || "不明",
             qty: pi.good_quantity,
-            unitPrice: pi.unit_price,
-            unitPriceOverride: pi.lot_processes?.unit_price_override || null,
+            unitPrice: pi.unit_price, // 支払レコードに保存された単価 (特値含む)
             amount: pi.amount,
             completionDate: pi.created_at.split('T')[0],
             status: (pi.payments?.status as any) || "wip"
@@ -49,26 +48,32 @@ export default function PaymentsPage() {
 
     const toggleFilter = (f: StatusFilter) => setStatusFilters(prev => prev.includes(f) ? prev.filter((x: any) => x !== f) : [...prev, f]);
 
-    // 範囲フィルタ適用
-    const filtered = useMemo(() => {
+    // サマリー計算用のデータ（ステータスフィルタを無視し、期間のみでフィルタ）
+    const summaryItems = useMemo(() => {
         let res = lines;
         if (dateFrom) res = res.filter((pl: any) => pl.completionDate >= dateFrom);
         if (dateTo) res = res.filter((pl: any) => pl.completionDate <= dateTo);
+        return res;
+    }, [lines, dateFrom, dateTo]);
+
+    // 一覧表示用のデータ（ステータスフィルタも適用）
+    const filtered = useMemo(() => {
+        let res = summaryItems;
         if (statusFilters.length > 0) res = res.filter((pl: any) => statusFilters.includes(pl.status));
         return res;
-    }, [lines, dateFrom, dateTo, statusFilters]);
+    }, [summaryItems, statusFilters]);
 
-    // サマリー計算 (フィルタ適用前ではなくFilteredに対して行うか、全体か？要件によるがFilteredで計算する)
+    // サマリー計算 (期間フィルタ後の全件)
     const summary = useMemo(() => {
         const s = { wip: { count: 0, total: 0 }, pre_payment: { count: 0, total: 0 }, paid: { count: 0, total: 0 }, confirmed: { count: 0, total: 0 } };
-        filtered.forEach((pl: any) => {
+        summaryItems.forEach((pl: any) => {
             if (s[pl.status as keyof typeof s]) {
                 s[pl.status as keyof typeof s].count += 1;
                 s[pl.status as keyof typeof s].total += pl.amount;
             }
         });
         return s;
-    }, [filtered]);
+    }, [summaryItems]);
 
     // 外注先グループ
     const groupedBySub = useMemo(() => {
@@ -134,10 +139,10 @@ export default function PaymentsPage() {
     const handleExportCSV = () => {
         const headers = ["外注先", "ロット番号", "工程", "数量", "単価", "金額", "完了日", "状態"];
         const rows = filtered.map((pl: any) =>
-            [pl.subcontractor, pl.lotNumber, pl.processName, pl.qty, pl.unitPriceOverride !== null ? pl.unitPriceOverride : pl.unitPrice, pl.amount, pl.completionDate, statusConfig[pl.status]?.label || ""]
+            [pl.subcontractor, pl.lotNumber, pl.processName, pl.qty, pl.unitPrice, pl.amount, pl.completionDate, statusConfig[pl.status]?.label || ""]
                 .map(v => `"${v}"`)
                 .join(",")
-        ); const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8;" });
+        ); const blob = new Blob([headers + "\n" + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `payments_${new Date().toISOString().split("T")[0]}.csv`; a.click(); URL.revokeObjectURL(url);
         showToast("success", "CSVをダウンロードしました");
     };

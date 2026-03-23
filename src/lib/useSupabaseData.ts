@@ -75,6 +75,7 @@ export interface SupabaseInventory {
     product_id: string;
     quantity: number;
     location: string;
+    item_type?: 'finished' | 'parts' | 'material';
     lot_id: string | null;
     products: { name: string; code: string } | null;
 }

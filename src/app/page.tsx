@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 import Modal from "@/components/Modal";
 import { useSupabaseData } from "@/lib/useSupabaseData";
+import { syncLotAndOrderStatus } from "@/lib/services/routingService";
 
 export default function Dashboard() {
     const [, setTick] = useState(0);
@@ -340,23 +341,25 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
                 const newInp = (proc.input_quantity || 0) + (del.completion_date ? 0 : diff);
                 await supabase.from('lot_processes').update({ completed_quantity: newComp, input_quantity: newInp }).eq('id', proc.id);
 
-                // 支払管理との同期 (重要)
-                const payLine = paymentItems.find(pl => pl.lot_process_id === proc.id);
+                // 支払管理との同期 (重要) - delivery_id で正確に特定
+                const payLine = paymentItems.find(pl => pl.lot_process_delivery_id === del.id);
                 if (payLine && (payLine.payments?.status === 'wip' || payLine.payments?.status === 'pre_payment')) {
-                    const unitPrice = proc.unit_price_override || (processRates.find(r => r.process_id === proc.process_id && r.subcontractor_id === proc.subcontractor_id)?.unit_price) || 0;
-                    const newAmount = newComp * unitPrice;
+                    const unitPrice = payLine.unit_price; // 保存されている単価を使用
+                    const newAmount = qty * unitPrice;
                     await supabase.from('payment_items').update({ 
-                        good_quantity: newComp,
+                        good_quantity: qty,
                         amount: newAmount
                     }).eq('id', payLine.id);
                 }
             } else {
                 // 移動 (前または後へ)
+                const currentGroup = proc.processes?.group_index || 0;
                 const targetStep = adjustMode === "move_prev" ? (proc.processes?.sort_order || 0) - 1 : (proc.processes?.sort_order || 0) + 1;
-                const targetProc = procs.find((p: any) => p.processes?.sort_order === targetStep);
+                // group_index が一致するものに限定
+                const targetProc = procs.find((p: any) => p.processes?.sort_order === targetStep && (p.processes?.group_index || 0) === currentGroup);
 
                 if (!targetProc) {
-                    showToast("error", "移動先の工程が見つかりません");
+                    showToast("error", "同ライン内の移動先工程が見つかりません");
                     setSaving(false);
                     return;
                 }
@@ -366,6 +369,16 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
                 if (e1) throw e1;
                 await supabase.from('lot_processes').update({ input_quantity: proc.input_quantity - qty }).eq('id', proc.id);
 
+                // 支払管理側の調整 (wipステータスのものを枚数減らす)
+                const payLine = paymentItems.find(pl => pl.lot_process_delivery_id === del.id);
+                if (payLine && payLine.payments?.status === 'wip') {
+                    const newPayQty = Math.max(0, payLine.good_quantity - qty);
+                    await supabase.from('payment_items').update({
+                        good_quantity: newPayQty,
+                        amount: newPayQty * payLine.unit_price
+                    }).eq('id', payLine.id);
+                }
+
                 // 次（または前）プロセスの数量を増やす
                 await supabase.from('lot_processes').update({
                     input_quantity: targetProc.input_quantity + qty,
@@ -373,14 +386,42 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
                     status: 'in_progress'
                 }).eq('id', targetProc.id);
 
-                // 新しい実績レコードを作成
-                await supabase.from('lot_process_deliveries').insert({
+                // 新しい実績・支払レコードを作成
+                const { data: newDel } = await supabase.from('lot_process_deliveries').insert({
                     lot_process_id: targetProc.id,
                     qty: qty,
                     delivery_date: new Date().toISOString().split('T')[0],
                     due_date: del.due_date
+                }).select().single();
+
+                // 新しい支払明細作成 (routingService のロジックに近しいものをここで実行)
+                const { data: routeRate } = await supabase.from('process_subcontractor_rates').select('unit_price').eq('process_id', targetProc.process_id).eq('subcontractor_id', targetSubId || targetProc.subcontractor_id).maybeSingle();
+                const targetUnitPrice = routeRate?.unit_price || 0;
+                
+                // payment_id を取得または作成
+                const { data: existingPay } = await supabase.from('payments').select('id, total_amount').eq('subcontractor_id', targetSubId || targetProc.subcontractor_id).eq('status', 'wip').limit(1).maybeSingle();
+                let paymentId = existingPay?.id;
+                if (!paymentId) {
+                    const { data: newPay } = await supabase.from('payments').insert({
+                        subcontractor_id: targetSubId || targetProc.subcontractor_id,
+                        status: 'wip',
+                        period_start: new Date().toISOString().split('T')[0].substring(0, 7) + "-01",
+                        total_amount: 0
+                    }).select().single();
+                    paymentId = newPay.id;
+                }
+                await supabase.from('payment_items').insert({
+                    payment_id: paymentId,
+                    lot_process_id: targetProc.id,
+                    lot_process_delivery_id: newDel.id,
+                    good_quantity: qty,
+                    unit_price: targetUnitPrice,
+                    amount: qty * targetUnitPrice
                 });
             }
+
+            // ロットと受注のステータスを同期
+            await syncLotAndOrderStatus(lot.id);
 
             showToast("success", "調整を保存しました");
             setEditId(null);
@@ -419,13 +460,14 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
                         <div className="space-y-1.5">
                             {(proc.lot_process_deliveries || []).length > 0 ? (proc.lot_process_deliveries || []).map((del: any) => {
                                 const isEd = editId === del.id;
-                                // ターゲット工程の選択肢
+                                // ターゲット工程の選択肢 (同 group_index に限定)
+                                const currentGroup = proc.processes?.group_index || 0;
                                 const targetStep = adjustMode === "move_prev" ? (proc.processes?.sort_order || 0) - 1 : (proc.processes?.sort_order || 0) + 1;
-                                const targetProc = procs.find((p: any) => p.processes?.sort_order === targetStep);
+                                const targetProc = procs.find((p: any) => p.processes?.sort_order === targetStep && (p.processes?.group_index || 0) === currentGroup);
                                 const subOptions = targetProc ? processRates.filter(r => r.process_id === targetProc.process_id) : [];
 
                                 // 支払ステータス取得
-                                const payLine = paymentItems.find(pl => pl.lot_process_id === proc.id);
+                                const payLine = paymentItems.find(pl => pl.lot_process_delivery_id === del.id);
                                 const isSyncedStatus = !payLine || payLine.payments?.status === "wip" || payLine.payments?.status === "pre_payment";
 
                                 return (

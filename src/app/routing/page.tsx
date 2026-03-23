@@ -90,10 +90,16 @@ export default function RoutingPage() {
 
     const handleForward = async () => {
         if (!canEdit || !selectedLot || !selectedProc) return;
+        
+        const nextSubId = fwdNextSub ? nextProcessSubs.find(s => s.name === fwdNextSub)?.id : undefined;
+        // 外注先が複数ある場合のバリデーション
+        if (nextProcessSubs.length > 1 && !fwdNextSub) {
+            showToast("error", "次工程の外注先を選択してください");
+            return;
+        }
+
         setLoading(true);
         try {
-            // Convert subcontractor name to ID
-            const nextSubId = fwdNextSub ? nextProcessSubs.find(s => s.name === fwdNextSub)?.id : undefined;
             await moveForward(selectedLot.id, selectedProc.id, Number(fwdQty), fwdCompletionDate, fwdDeliveryDate, fwdDueDate, nextProcessSubs[0]?.process_id, nextSubId, fwdOverride ? Number(fwdOverride) : undefined);
             showToast("success", `${fwdQty}個を次工程へ送りました`);
             setFwdQty("");
@@ -123,9 +129,16 @@ export default function RoutingPage() {
 
     const handleBack = async () => {
         if (!canEdit || !selectedLot || !selectedProc || prevProcessSubs.length === 0) return;
+        
+        const subId = prevProcessSubs.find(s => s.name === backPrevSub)?.id;
+        // 外注先が複数ある場合のバリデーション
+        if (prevProcessSubs.length > 1 && !backPrevSub) {
+            showToast("error", "戻り先の外注先を選択してください");
+            return;
+        }
+
         setLoading(true);
         try {
-            const subId = prevProcessSubs.find(s => s.name === backPrevSub)?.id;
             await moveBack(selectedLot.id, selectedProc.id, Number(backQty), backDate, backDueDate, prevProcessSubs[0].process_id, subId);
             showToast("warning", `${backQty}個を前工程へ差戻しました`);
             setBackQty(""); setBackDate(""); setBackDueDate("");
