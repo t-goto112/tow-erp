@@ -43,7 +43,7 @@ export default function Dashboard() {
         return lots.filter(l => l.status !== "completed").map(lot => {
             const wipQty = (lot.lot_processes || []).reduce((s: number, p: any) => s + (p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0), 0);
             return { ...lot, wipQty };
-        }).filter(l => l.wipQty > 0 || l.status === "created");
+        }).filter(l => l.wipQty > 0 || l.status === "created" || l.status === "pending");
     }, [lots]);
 
     const alerts = useMemo(() => {
@@ -275,7 +275,7 @@ export default function Dashboard() {
                                             <span className="text-xs text-slate-500">{lot.products?.name || ""}</span>
                                         </div>
                                         <div className="flex gap-3 text-[10px] text-slate-400 font-bold">
-                                            <span>受注数: {lot.total_quantity}</span>
+                                            <span>受注数: {lot.quantity}</span>
                                             <span>仕掛: {lot.wipQty}</span>
                                             {currentProc && <span className="text-blue-600">{currentProc.processes?.name || ""}</span>}
                                         </div>
@@ -324,7 +324,6 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
     const [saving, setSaving] = useState(false);
 
     if (!lot) return null;
-
     const procs = [...(lot.lot_processes || [])].sort((a: any, b: any) => (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0));
 
     const handleDeliveryAdjust = async (proc: any, del: any) => {
@@ -340,6 +339,17 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
                 const newComp = (proc.completed_quantity || 0) + (del.completion_date ? diff : 0);
                 const newInp = (proc.input_quantity || 0) + (del.completion_date ? 0 : diff);
                 await supabase.from('lot_processes').update({ completed_quantity: newComp, input_quantity: newInp }).eq('id', proc.id);
+
+                // 支払管理との同期 (重要)
+                const payLine = paymentItems.find(pl => pl.lot_process_id === proc.id);
+                if (payLine && (payLine.payments?.status === 'wip' || payLine.payments?.status === 'pre_payment')) {
+                    const unitPrice = proc.unit_price_override || (processRates.find(r => r.process_id === proc.process_id && r.subcontractor_id === proc.subcontractor_id)?.unit_price) || 0;
+                    const newAmount = newComp * unitPrice;
+                    await supabase.from('payment_items').update({ 
+                        good_quantity: newComp,
+                        amount: newAmount
+                    }).eq('id', payLine.id);
+                }
             } else {
                 // 移動 (前または後へ)
                 const targetStep = adjustMode === "move_prev" ? (proc.processes?.sort_order || 0) - 1 : (proc.processes?.sort_order || 0) + 1;
@@ -384,7 +394,7 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
     };
 
     return (
-        <Modal open={!!lot} onClose={onClose} title={lot ? `${lot.lot_number} — ${lot.products?.name || ""}` : ""} subtitle={lot ? `総数量: ${lot.total_quantity}個` : ""} width="max-w-2xl">
+        <Modal open={!!lot} onClose={onClose} title={lot ? `${lot.lot_number} — ${lot.products?.name || ""}` : ""} subtitle={lot ? `総数量: ${lot.quantity}個` : ""} width="max-w-2xl">
             <div className="space-y-4 max-h-[70vh] overflow-y-auto px-1 text-slate-800">
                 {procs.map((proc: any) => (
                     <div key={proc.id} className="bg-slate-50/50 rounded-2xl p-4 border border-slate-100 mb-4">

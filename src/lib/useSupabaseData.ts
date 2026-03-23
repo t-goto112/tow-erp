@@ -37,7 +37,7 @@ export interface SupabaseLot {
     id: string;
     lot_number: string;
     product_id: string;
-    total_quantity: number;
+    quantity: number;
     status: string;
     order_id: string;
     created_at: string;
@@ -73,7 +73,7 @@ export interface SupabaseLotProcessDelivery {
 export interface SupabaseInventory {
     id: string;
     product_id: string;
-    total_quantity: number;
+    quantity: number;
     location: string;
     lot_id: string | null;
     products: { name: string; code: string } | null;
