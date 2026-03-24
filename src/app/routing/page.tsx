@@ -52,7 +52,14 @@ export default function RoutingPage() {
     // 選択中工程の外注先
     const currentProcessSubs = useMemo(() => {
         if (!selectedLot || !selectedProc || !selectedProc.process_id) return [];
-        return processRates.filter(r => r.process_id === selectedProc.process_id).map(r => ({ ...r.subcontractors, unitPrice: r.unit_price, id: r.subcontractor_id }));
+        const result: any[] = [];
+        const seen = new Set();
+        processRates.filter(r => r.process_id === selectedProc.process_id).forEach(r => {
+            if (!r.subcontractors || seen.has(r.subcontractor_id)) return;
+            seen.add(r.subcontractor_id);
+            result.push({ ...r.subcontractors, unitPrice: r.unit_price, id: r.subcontractor_id });
+        });
+        return result;
     }, [selectedLot, selectedProc, processRates]);
 
     // 次工程の外注先候補
@@ -61,7 +68,14 @@ export default function RoutingPage() {
         const productProcs = processes.filter(p => p.product_id === selectedLot.product_id && p.group_index === selectedProc.processes!.group_index).sort((a, b) => a.sort_order - b.sort_order);
         const nextTpl = productProcs.find(t => t.sort_order > selectedProc.processes!.sort_order);
         if (!nextTpl) return [];
-        return processRates.filter(r => r.process_id === nextTpl.id).map(r => ({ ...r.subcontractors, unitPrice: r.unit_price, id: r.subcontractor_id, process_id: nextTpl.id }));
+        const result: any[] = [];
+        const seen = new Set();
+        processRates.filter(r => r.process_id === nextTpl.id).forEach(r => {
+            if (!r.subcontractors || seen.has(r.subcontractor_id)) return;
+            seen.add(r.subcontractor_id);
+            result.push({ ...r.subcontractors, unitPrice: r.unit_price, id: r.subcontractor_id, process_id: nextTpl.id });
+        });
+        return result;
     }, [selectedLot, selectedProc, processes, processRates]);
 
     // 前工程の外注先候補
@@ -70,7 +84,14 @@ export default function RoutingPage() {
         const productProcs = processes.filter(p => p.product_id === selectedLot.product_id && p.group_index === selectedProc.processes!.group_index).sort((a, b) => b.sort_order - a.sort_order);
         const prevTpl = productProcs.find(t => t.sort_order < selectedProc.processes!.sort_order);
         if (!prevTpl) return [];
-        return processRates.filter(r => r.process_id === prevTpl.id).map(r => ({ ...r.subcontractors, unitPrice: r.unit_price, id: r.subcontractor_id, process_id: prevTpl.id }));
+        const result: any[] = [];
+        const seen = new Set();
+        processRates.filter(r => r.process_id === prevTpl.id).forEach(r => {
+            if (!r.subcontractors || seen.has(r.subcontractor_id)) return;
+            seen.add(r.subcontractor_id);
+            result.push({ ...r.subcontractors, unitPrice: r.unit_price, id: r.subcontractor_id, process_id: prevTpl.id });
+        });
+        return result;
     }, [selectedLot, selectedProc, processes, processRates]);
 
     // ロット選択時に初期化
@@ -112,7 +133,11 @@ export default function RoutingPage() {
     };
 
     const handleRegisterWip = async () => {
-        if (!canEdit || !selectedLot || !selectedProc || !wipSub) return;
+        if (!canEdit || !selectedLot || !selectedProc) return;
+        if (currentProcessSubs.length > 0 && !wipSub) {
+            showToast("error", "外注先を選択してください");
+            return;
+        }
         setLoading(true);
         try {
             // Find subcontractor ID by name

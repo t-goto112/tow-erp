@@ -30,7 +30,8 @@ export default function PaymentsPage() {
             processName: pi.lot_processes?.processes?.name || "不明",
             subcontractor: pi.payments?.subcontractors?.name || "不明",
             qty: pi.good_quantity,
-            unitPrice: pi.unit_price, // 支払レコードに保存された単価 (特値含む)
+            unitPrice: pi.unit_price,
+            unitPriceOverride: pi.lot_processes?.unit_price_override, // 元の特値情報があれば保持
             amount: pi.amount,
             completionDate: pi.created_at.split('T')[0],
             status: (pi.payments?.status as any) || "wip"
@@ -225,7 +226,7 @@ export default function PaymentsPage() {
                                                     {isEditing ? <input type="number" value={editQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditQty(e.target.value)} className="w-16 px-1 py-0.5 border border-slate-200 rounded text-xs text-right" /> : <span className="font-bold">{pl.qty}</span>}
                                                 </td>
                                                 <td className="px-4 py-2 text-right">
-                                                    {isEditing ? <input type="number" value={editPrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditPrice(e.target.value)} placeholder={String(pl.unitPrice)} className="w-16 px-1 py-0.5 border border-slate-200 rounded text-xs text-right" /> : <span className={pl.unitPriceOverride !== null ? "text-amber-600 font-bold" : "text-slate-500"}>¥{(pl.unitPriceOverride !== null ? pl.unitPriceOverride : pl.unitPrice).toLocaleString()}</span>}
+                                                    {isEditing ? <input type="number" value={editPrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditPrice(e.target.value)} placeholder={String(pl.unitPrice)} className="w-16 px-1 py-0.5 border border-slate-200 rounded text-xs text-right" /> : <span className={pl.unitPriceOverride ? "text-amber-600 font-bold" : "text-slate-500"}>¥{(pl.unitPrice || 0).toLocaleString()}</span>}
                                                 </td>
                                                 <td className="px-4 py-2 text-right font-bold">¥{pl.amount.toLocaleString()}</td>
                                                 <td className="px-4 py-2 text-xs text-slate-400">{pl.completionDate}</td>

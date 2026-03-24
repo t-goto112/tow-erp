@@ -190,6 +190,11 @@ export async function moveForward(
     const { data: currentProc, error: cpErr } = await supabase.from('lot_processes').select('*, processes(group_index)').eq('id', currentProcessId).single();
     if (cpErr) throw cpErr;
 
+    // 特値が指定されている場合は DB に保存
+    if (overridePrice !== undefined) {
+        await supabase.from('lot_processes').update({ unit_price_override: overridePrice }).eq('id', currentProcessId);
+    }
+
     // 1. 実績報告タイミングでのパーツ消費 (assembly_pointの場合)
     await consumePartsIfAssembly(currentProcessId, currentProc.process_id, qty, lotId, "完了報告");
 
@@ -290,6 +295,7 @@ export async function registerWip(
     await supabase.from('lot_processes').update({
         input_quantity: (proc.input_quantity || 0) + qty,
         subcontractor_id: subcontractorId,
+        unit_price_override: overridePrice,
         status: 'in_progress'
     }).eq('id', processId);
 

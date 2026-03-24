@@ -58,10 +58,11 @@ export default function InventoryPage() {
         const grouped: Record<string, SupabaseInventory> = {};
         inventory.filter((i: SupabaseInventory) => i.item_type === "finished" || i.item_type === "parts").forEach((i: SupabaseInventory) => {
             const prodName = i.products?.name || "不明な製品";
-            if (grouped[prodName]) {
-                grouped[prodName].quantity += i.quantity;
+            const key = `${prodName}-${i.item_type}`; // 名前とタイプでグループ化
+            if (grouped[key]) {
+                grouped[key].quantity += i.quantity;
             } else {
-                grouped[prodName] = { ...i };
+                grouped[key] = { ...i };
             }
         });
         return Object.values(grouped);
@@ -92,13 +93,30 @@ export default function InventoryPage() {
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <table className="w-full text-sm">
                         <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest font-bold">
-                            <tr><th className="px-4 py-3 text-left">商品</th><th className="px-4 py-3 text-right">数量</th><th className="px-4 py-3 text-left">倉庫</th><th className="px-4 py-3"></th></tr>
+                            <tr><th className="px-4 py-3 text-left">商品コード</th><th className="px-4 py-3 text-left">商品</th><th className="px-4 py-3 text-right">数量</th><th className="px-4 py-3 text-left">倉庫</th><th className="px-4 py-3"></th></tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100/60">
                             {stockItems.map((item, index) => (
-                                <tr key={item.id || index} className="hover:bg-slate-50/50 transition">
-                                    <td className="px-4 py-3 font-bold text-slate-700">{item.products?.name}</td>
-                                    <td className="px-4 py-3 text-right font-black text-lg">{item.quantity}</td>
+                                <tr key={item.id || index} className="border-b border-slate-50 hover:bg-slate-50 transition-all group">
+                                    <td className="px-4 py-3 font-mono text-xs text-slate-400">{item.products?.product_code}</td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-bold text-slate-700">{item.products?.name}</span>
+                                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${item.item_type === 'finished' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
+                                                {item.item_type === 'finished' ? '完成品' : '仕掛パーツ'}
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-black text-lg">
+                                        <div className="flex items-center justify-end gap-1">
+                                            {item.quantity}
+                                            {canEdit && (
+                                                <button onClick={() => { setAdjustItem(item); setNewQuantity(String(item.quantity)); }} className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-blue-600">
+                                                    <Edit2 size={10} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </td>
                                     <td className="px-4 py-3 text-xs text-slate-400 group cursor-pointer"
                                         onClick={() => {
                                             if (!canEdit) return;
@@ -106,15 +124,16 @@ export default function InventoryPage() {
                                             setNewWarehouse(item.location || "");
                                         }}>
                                         <div className="flex items-center gap-1 hover:text-blue-600 transition">
-                                            {item.location || <span className="text-slate-300 italic">未設定</span>}
-                                            {canEdit && <Edit2 size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                            <MapPin size={10} className="text-slate-300" />
+                                            <span>{item.location || "未設定"}</span>
+                                            {canEdit && <Edit2 size={8} className="opacity-0 group-hover:opacity-100 ml-1" />}
                                         </div>
                                     </td>
                                     <td className="px-4 py-3 text-right">
                                     </td>
                                 </tr>
                             ))}
-                            {stockItems.length === 0 && <tr><td colSpan={4} className="px-4 py-10 text-center text-slate-400">完成品在庫はありません</td></tr>}
+                            {stockItems.length === 0 && <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-400">完成品在庫はありません</td></tr>}
                         </tbody>
                     </table>
                 </div>

@@ -41,11 +41,15 @@ export default function Dashboard() {
 
     // 仕掛品をロットで集計
     const wipByLot = useMemo(() => {
-        return lots.filter(l => l.status !== "completed").map(lot => {
-            const wipQty = (lot.lot_processes || []).reduce((s: number, p: any) => s + (p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0), 0);
-            return { ...lot, wipQty };
-        }).filter(l => l.wipQty > 0 || l.status === "created" || l.status === "pending");
+       return (lots || []).filter(l => l.status !== "completed").map(lot => {
+        // メイン工程 (group_index === 0) の仕掛品のみを集計
+        const mainProcesses = (lot.lot_processes || []).filter(p => p.processes?.group_index === 0);
+        const wipQty = mainProcesses.reduce((s, p) => s + ((p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0)), 0);
+        return { ...lot, wipQty, mainProcesses };
+    }).filter(l => l.wipQty > 0 || l.status === "pending");
     }, [lots]);
+
+    const totalWipCount = useMemo(() => wipByLot.reduce((s, l) => s + l.wipQty, 0), [wipByLot]);
 
     const alerts = useMemo(() => {
         const todayStr = new Date().toISOString().split("T")[0];
@@ -129,7 +133,7 @@ export default function Dashboard() {
             {/* サマリーカード */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <SummaryCard icon={<Wallet className="w-5 h-5" />} label="受注残高" value={`¥${orderBacklog.toLocaleString()}`} sub={`${activeOrderCount}件`} color="bg-blue-50 text-blue-600" />
-                <SummaryCard icon={<Layers className="w-5 h-5" />} label="仕掛品" value={`${wipByLot.reduce((s, l) => s + l.wipQty, 0)}`} sub={`${wipByLot.length}ロット`} color="bg-amber-50 text-amber-600" />
+                <SummaryCard icon={<Layers className="w-5 h-5" />} label="仕掛品" value={`${totalWipCount}`} sub={`${wipByLot.length}ロット`} color="bg-amber-50 text-amber-600" />
                 <SummaryCard icon={<TrendingUp className="w-5 h-5" />} label="支払予定" value={`¥${paymentDue.toLocaleString()}`} sub="未払額" color="bg-emerald-50 text-emerald-600" />
             </div>
 
@@ -284,9 +288,9 @@ export default function Dashboard() {
                                     <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition" />
                                 </div>
                                 <div className="mt-3 bg-slate-50 rounded-lg p-2 overflow-x-auto flex gap-2 text-[10px] text-slate-400 font-bold border border-slate-100">
-                                    {(lot.lot_processes || []).map((p: any) => (
+                                    {(lot as any).mainProcesses?.map((p: any) => (
                                         <div key={p.id} className={`flex items-center gap-1 py-0.5 px-2 rounded-md shrink-0 ${p.status === "completed" ? "bg-emerald-100 text-emerald-700" : p.status === "in_progress" ? "bg-blue-100 text-blue-700" : "bg-white border border-slate-200"}`}>
-                                            <span className="font-black text-[9px] whitespace-nowrap">{p.processes?.name || ""}</span>
+                                            <span className="font-black text-[9px] whitespace-nowrap">{p.processes?.name}</span>
                                             <span className="opacity-70 whitespace-nowrap">: 仕掛{(p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0)}/完了{p.completed_quantity || 0}</span>
                                         </div>
                                     ))}
@@ -298,7 +302,14 @@ export default function Dashboard() {
             </section>
 
             {/* ロット詳細（カード編集） */}
-            <LotDetailModal lot={selectedLot} onClose={() => setSelectedLotId(null)} refresh={refresh} paymentItems={paymentItems} processRates={processRates} />
+            <LotDetailModal 
+                lot={selectedLot} 
+                onClose={() => setSelectedLotId(null)} 
+                refresh={refresh} 
+                paymentItems={paymentItems} 
+                processRates={processRates} 
+                processes={processes} 
+            />
         </div>
     );
 }
@@ -317,7 +328,14 @@ function SummaryCard({ icon, label, value, sub, color }: { icon: React.ReactNode
 }
 
 // ロット詳細モーダル (e8d3afe UI 完全復元 + Supabase接続)
-function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: { lot: any | null; onClose: () => void; refresh: () => void; paymentItems: any[]; processRates: any[] }) {
+function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates, processes }: { 
+    lot: any | null; 
+    onClose: () => void; 
+    refresh: () => void; 
+    paymentItems: any[]; 
+    processRates: any[]; 
+    processes: any[];
+}) {
     const [editId, setEditId] = useState<string | null>(null);
     const [editQty, setEditQty] = useState("");
     const [adjustMode, setAdjustMode] = useState<"correct" | "move_prev" | "move_next">("correct");
@@ -346,22 +364,61 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
                 if (payLine && (payLine.payments?.status === 'wip' || payLine.payments?.status === 'pre_payment')) {
                     const unitPrice = payLine.unit_price; // 保存されている単価を使用
                     const newAmount = qty * unitPrice;
+                    const diffAmount = newAmount - payLine.amount;
+                    
+                    // 明細更新
                     await supabase.from('payment_items').update({ 
                         good_quantity: qty,
                         amount: newAmount
                     }).eq('id', payLine.id);
+
+                    // 親の支払合計を更新
+                    if (payLine.payment_id) {
+                        const { data: pay } = await supabase.from('payments').select('total_amount').eq('id', payLine.payment_id).single();
+                        if (pay) {
+                            await supabase.from('payments').update({ 
+                                total_amount: Number(pay.total_amount) + diffAmount 
+                            }).eq('id', payLine.payment_id);
+                        }
+                    }
                 }
             } else {
                 // 移動 (前または後へ)
                 const currentGroup = proc.processes?.group_index || 0;
-                const targetStep = adjustMode === "move_prev" ? (proc.processes?.sort_order || 0) - 1 : (proc.processes?.sort_order || 0) + 1;
-                // group_index が一致するものに限定
-                const targetProc = procs.find((p: any) => p.processes?.sort_order === targetStep && (p.processes?.group_index || 0) === currentGroup);
-
-                if (!targetProc) {
-                    showToast("error", "同ライン内の移動先工程が見つかりません");
+                
+                // 同じグループの全工程テンプレートを取得 (マスタから)
+                const groupTemplates = processes
+                    .filter(t => (t.group_index || 0) === currentGroup)
+                    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+                
+                const currentTplIdx = groupTemplates.findIndex(t => t.id === proc.process_id);
+                if (currentTplIdx < 0) {
+                    showToast("error", "現在の工程テンプレートが見つかりません");
                     setSaving(false);
                     return;
+                }
+
+                const targetTplIdx = adjustMode === "move_prev" ? currentTplIdx - 1 : currentTplIdx + 1;
+                if (targetTplIdx < 0 || targetTplIdx >= groupTemplates.length) {
+                    showToast("error", `${adjustMode === "move_prev" ? "前" : "次"}の工程が存在しません`);
+                    setSaving(false);
+                    return;
+                }
+
+                const targetTemplate = groupTemplates[targetTplIdx];
+                // ロット内の既存レコードを探す
+                let targetProc = procs.find((p: any) => p.process_id === targetTemplate.id);
+
+                if (!targetProc) {
+                    // もしロット内にレコードがなければ新規作成
+                    const { data: newProc, error: insErr } = await supabase.from('lot_processes').insert({
+                        lot_id: lot.id,
+                        process_id: targetTemplate.id,
+                        status: 'pending',
+                        input_quantity: 0
+                    }).select().single();
+                    if (insErr) throw insErr;
+                    targetProc = newProc;
                 }
 
                 // 現プロセスの数量を減らす
@@ -373,10 +430,23 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
                 const payLine = paymentItems.find(pl => pl.lot_process_delivery_id === del.id);
                 if (payLine && payLine.payments?.status === 'wip') {
                     const newPayQty = Math.max(0, payLine.good_quantity - qty);
+                    const newAmount = newPayQty * payLine.unit_price;
+                    const diffAmount = newAmount - payLine.amount;
+
                     await supabase.from('payment_items').update({
                         good_quantity: newPayQty,
-                        amount: newPayQty * payLine.unit_price
+                        amount: newAmount
                     }).eq('id', payLine.id);
+
+                    // 親の支払合計を更新
+                    if (payLine.payment_id) {
+                        const { data: pay } = await supabase.from('payments').select('total_amount').eq('id', payLine.payment_id).single();
+                        if (pay) {
+                            await supabase.from('payments').update({ 
+                                total_amount: Number(pay.total_amount) + diffAmount 
+                            }).eq('id', payLine.payment_id);
+                        }
+                    }
                 }
 
                 // 次（または前）プロセスの数量を増やす
@@ -409,6 +479,11 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates }: {
                         total_amount: 0
                     }).select().single();
                     paymentId = newPay.id;
+                } else {
+                    // 既存の支払額を更新
+                    await supabase.from('payments').update({
+                        total_amount: Number(existingPay.total_amount) + (qty * targetUnitPrice)
+                    }).eq('id', paymentId);
                 }
                 await supabase.from('payment_items').insert({
                     payment_id: paymentId,
