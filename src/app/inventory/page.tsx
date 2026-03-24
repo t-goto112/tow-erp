@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Box, Layers, Edit2, Check, Loader2 } from "lucide-react";
+import { Box, Layers, Edit2, Check, Loader2, MapPin } from "lucide-react";
 import { showToast } from "@/components/Toast";
 import Modal from "@/components/Modal";
 import { useSupabaseData, SupabaseInventory, SupabaseLot } from "@/lib/useSupabaseData";
@@ -143,7 +143,7 @@ export default function InventoryPage() {
             {tab === "wip" && (
                 <div className="space-y-3">
                     {wipByLot.map(lot => {
-                        const processList = lot.lot_processes ? [...lot.lot_processes].sort((a: any, b: any) => (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0)) : [];
+                        const processList = lot.lot_processes ? [...lot.lot_processes].sort((a: any, b: any) => (a.processes?.group_index || 0) - (b.processes?.group_index || 0) || (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0)) : [];
 
                         return (
                             <div key={lot.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">

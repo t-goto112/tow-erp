@@ -43,7 +43,7 @@ export default function Dashboard() {
     const wipByLot = useMemo(() => {
        return (lots || []).filter(l => l.status !== "completed").map(lot => {
         // メイン工程 (group_index === 0) の仕掛品のみを集計
-        const mainProcesses = (lot.lot_processes || []).filter(p => p.processes?.group_index === 0);
+        const mainProcesses = (lot.lot_processes || []).filter(p => p.processes?.group_index === 0).sort((a, b) => (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0));
         const wipQty = mainProcesses.reduce((s, p) => s + ((p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0)), 0);
         return { ...lot, wipQty, mainProcesses };
     }).filter(l => l.wipQty > 0 || l.status === "pending");
@@ -343,7 +343,7 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates, pro
     const [saving, setSaving] = useState(false);
 
     if (!lot) return null;
-    const procs = [...(lot.lot_processes || [])].sort((a: any, b: any) => (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0));
+    const procs = [...(lot.lot_processes || [])].sort((a: any, b: any) => (a.processes?.group_index || 0) - (b.processes?.group_index || 0) || (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0));
 
     const handleDeliveryAdjust = async (proc: any, del: any) => {
         setSaving(true);

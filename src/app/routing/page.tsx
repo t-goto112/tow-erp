@@ -252,7 +252,10 @@ export default function RoutingPage() {
                         <select value={selectedProcessId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedProcessId(e.target.value)}
                             className="select-base">
                             <option value="">選択してください</option>
-                            {selectedLot.lot_processes?.map((p) => {
+                            {[...(selectedLot.lot_processes || [])].sort((a, b) => 
+                                (a.processes?.group_index || 0) - (b.processes?.group_index || 0) || 
+                                (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0)
+                            ).map((p) => {
                                 const pCurrentQty = (p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0);
                                 return <option key={p.id} value={p.id}>{p.processes?.name} — {p.subcontractors?.name || '未定'} (現在:{pCurrentQty})</option>;
                             })}
