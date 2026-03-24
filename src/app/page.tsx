@@ -15,7 +15,7 @@ export default function Dashboard() {
     const [customFrom, setCustomFrom] = useState("");
     const [customTo, setCustomTo] = useState("");
 
-    const { lots, orders, paymentItems, products, profile, refresh, subcontractors, processRates } = useSupabaseData();
+    const { lots, orders, paymentItems, products, profile, refresh, subcontractors, processRates, processes, inventory } = useSupabaseData();
 
     // Keep selectedLot in sync with refreshed lots data for real-time modal update
     const selectedLot = selectedLotId ? lots.find(l => l.id === selectedLotId) || null : null;
