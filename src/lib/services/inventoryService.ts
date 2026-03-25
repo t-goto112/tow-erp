@@ -56,6 +56,7 @@ export async function adjustInventory(itemId: string, adjustment: number, reason
         } else if (adjustment > 0) {
             // 【返品】在庫増加分を最新の受注から出荷済みを減算して受注残へ復元 (LIFO)
             let remaining = adjustment;
+            let totalAmountRestored = 0;
             const { data: items } = await supabase
                 .from('order_items')
                 .select('*, orders!inner(status, created_at)')
@@ -73,24 +74,61 @@ export async function adjustInventory(itemId: string, adjustment: number, reason
                         const newShipped = item.shipped_quantity - restore;
                         await supabase.from('order_items').update({ shipped_quantity: newShipped }).eq('id', item.id);
                         remaining -= restore;
+                        totalAmountRestored += (restore * (item.unit_price || 0));
 
                         // 完了していた受注を仕掛中に戻す
                         if (item.orders.status === 'completed') {
                             await supabase.from('orders').update({ status: 'in_progress' }).eq('id', item.order_id);
                         }
+
+                        // 関連するロットも仕掛中に戻す
+                        const { data: relatedLots } = await supabase
+                            .from('lots')
+                            .select('id, status')
+                            .eq('order_id', item.order_id)
+                            .eq('product_id', item.product_id)
+                            .eq('status', 'completed');
+                        
+                        if (relatedLots && relatedLots.length > 0) {
+                            for (const lot of relatedLots) {
+                                await supabase.from('lots').update({ status: 'in_progress' }).eq('id', lot.id);
+                            }
+                        }
                     }
                 }
             }
+            return { ok: true, amount: totalAmountRestored };
         }
     }
 
-    // 4. 履歴に記録 (オプションだが、ユーザー要望にある「バックエンドにも反映」のニュアンス)
-    // スケルトンがあればここに insert
-    
-    return true;
+    return { ok: true };
 }
 
 export async function updateWarehouse(itemId: string, newWarehouse: string) {
+    // 1. 現在のアイテム情報を取得
+    const { data: current } = await supabase.from('inventory').select('*').eq('id', itemId).single();
+    if (!current) throw new Error("アイテムが見つかりません");
+
+    if (newWarehouse) {
+        // 2. 移動先に同じ商品がないかチェック (マージ処理)
+        const { data: existing } = await supabase
+            .from('inventory')
+            .select('*')
+            .eq('product_id', current.product_id)
+            .eq('location', newWarehouse)
+            .eq('item_type', current.item_type || 'finished')
+            .neq('id', itemId) // 自分自身以外
+            .maybeSingle();
+
+        if (existing) {
+            // 合算して今のレコードを削除
+            await supabase.from('inventory').update({ quantity: existing.quantity + current.quantity }).eq('id', existing.id);
+            await supabase.from('inventory').delete().eq('id', itemId);
+            return true;
+        }
+    }
+
+    // 3. マージ先がない場合は普通に更新
     const { error } = await supabase
         .from('inventory')
         .update({ location: newWarehouse || null })

@@ -41,7 +41,7 @@ export default function RoutingPage() {
     const [shipMode, setShipMode] = useState<"inventory" | "ship" | null>(null);
     const [warehouseName, setWarehouseName] = useState("本社倉庫");
 
-    const activeLots = lots.filter(l => l.status !== "completed" && l.orders?.status !== "completed");
+    const activeLots = lots.filter(l => l.orders?.status !== "completed" || l.status !== "completed");
     const selectedLot = activeLots.find(l => l.id === selectedLotId) || null;
     
     // Group lot_processes by process_id + subcontractor_id to handle mismatch

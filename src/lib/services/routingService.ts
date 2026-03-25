@@ -219,10 +219,6 @@ export async function moveForward(
         const toMove = Math.min(remainingQty, available);
         remainingQty -= toMove;
 
-        if (overridePrice !== undefined) {
-             await supabase.from('lot_processes').update({ unit_price_override: overridePrice }).eq('id', proc.id);
-        }
-
         const { data: deliveries } = await supabase
             .from('lot_process_deliveries')
             .select('*')
@@ -247,7 +243,7 @@ export async function moveForward(
         }).eq('id', proc.id);
 
         await consumeWipPayments(proc.id, toMove);
-        await createPaymentItem(proc, toMove, completionDate, overridePrice ?? proc.unit_price_override, 'pre_payment', lastDeliveryId);
+        await createPaymentItem(proc, toMove, completionDate, overridePrice ?? null, 'pre_payment', lastDeliveryId);
     }
 
     if (nextProcessTemplateId) {
@@ -451,7 +447,7 @@ export async function moveToInventory(
         }).eq('id', proc.id);
 
         await consumeWipPayments(proc.id, toMove);
-        await createPaymentItem(proc, toMove, completionDate, proc.unit_price_override, 'pre_payment', lastDelId);
+        await createPaymentItem(proc, toMove, completionDate, null, 'pre_payment', lastDelId);
     }
 
     const groupIndex = (leadProc.processes as any)?.group_index;
@@ -512,7 +508,7 @@ export async function shipAndInvoice(
         }).eq('id', proc.id);
 
         await consumeWipPayments(proc.id, toMove);
-        await createPaymentItem(proc, toMove, todayDate, proc.unit_price_override, 'pre_payment', lastDelId);
+        await createPaymentItem(proc, toMove, todayDate, null, 'pre_payment', lastDelId);
     }
 
     if (orderId) {

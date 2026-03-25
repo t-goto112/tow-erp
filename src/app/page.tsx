@@ -41,7 +41,7 @@ export default function Dashboard() {
 
     // 仕掛品をロットで集計
     const wipByLot = useMemo(() => {
-       return (lots || []).filter(l => l.status !== "completed").map(lot => {
+       return (lots || []).filter(l => l.status !== "completed" || l.orders?.status !== "completed").map(lot => {
         // メイン工程 (group_index === 0) の仕掛品のみを集計
         const mainProcesses = (lot.lot_processes || []).filter(p => p.processes?.group_index === 0).sort((a, b) => (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0));
         const wipQty = mainProcesses.reduce((s, p) => s + ((p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0)), 0);
@@ -98,7 +98,7 @@ export default function Dashboard() {
 
     // ガントチャートのロットグループ用データ
     const ganttLots = useMemo(() => {
-        return lots.filter(l => l.status !== "completed").map(lot => {
+        return lots.filter(l => l.status !== "completed" || l.orders?.status !== "completed").map(lot => {
             const bars: { name: string; sub: string; start: string; end: string; color: string; isCurrent: boolean; total: number; wip: number; comp: number; }[] = [];
             (lot.lot_processes || []).forEach((proc: any) => {
                 const devs = proc.lot_process_deliveries || [];

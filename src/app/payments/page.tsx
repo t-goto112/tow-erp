@@ -143,7 +143,9 @@ export default function PaymentsPage() {
             [pl.subcontractor, pl.lotNumber, pl.processName, pl.qty, pl.unitPrice, pl.amount, pl.completionDate, statusConfig[pl.status]?.label || ""]
                 .map(v => `"${v}"`)
                 .join(",")
-        ); const blob = new Blob([headers + "\n" + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+        ); 
+        const csvContent = headers.join(",") + "\n" + rows.join("\n");
+        const blob = new Blob(["\uFEFF", csvContent], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `payments_${new Date().toISOString().split("T")[0]}.csv`; a.click(); URL.revokeObjectURL(url);
         showToast("success", "CSVをダウンロードしました");
     };

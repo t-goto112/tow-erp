@@ -30,8 +30,13 @@ export default function InventoryPage() {
 
             setLoadingAction(true);
             const amount = Number(adjAmount) * (adjMode === "plus" ? 1 : -1);
-            await adjustInventory(adjustItem.id, amount, adjReason, adjustItem.product_id);
-            showToast("success", `在庫を ${amount > 0 ? '+' : ''}${amount} 修正しました`);
+            const result = await adjustInventory(adjustItem.id, amount, adjReason, adjustItem.product_id) as any;
+            
+            let message = `在庫を ${amount > 0 ? '+' : ''}${amount} 修正しました`;
+            if (result.amount > 0) {
+                message += ` (受注残 ¥${result.amount.toLocaleString()} 分が復元されました)`;
+            }
+            showToast("success", message);
             setAdjustItem(null);
             setAdjAmount("");
             refresh();
@@ -65,7 +70,8 @@ export default function InventoryPage() {
         const grouped: Record<string, SupabaseInventory> = {};
         inventory.filter((i: SupabaseInventory) => i.item_type === "finished" || i.item_type === "parts").forEach((i: SupabaseInventory) => {
             const prodName = i.products?.name || "不明な製品";
-            const key = `${prodName}-${i.item_type}`; // 名前とタイプでグループ化
+            const location = i.location || "未設定";
+            const key = `${prodName}-${i.item_type}-${location}`; // 名前、タイプ、倉庫でグループ化
             if (grouped[key]) {
                 grouped[key].quantity += i.quantity;
             } else {
@@ -77,7 +83,8 @@ export default function InventoryPage() {
 
     // 仕掛品: ロットごとにどの工程にいくつあるか
     const wipByLot = useMemo(() => {
-        return lots.filter(l => l.status !== "completed" && l.orders?.status !== "completed");
+        // ロット自体が完了していても、受注が完了していない（または仕掛中に戻った）場合は表示する
+        return lots.filter(l => l.orders?.status !== "completed" || l.status !== "completed");
     }, [lots]);
 
     if (loading) {
