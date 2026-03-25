@@ -20,35 +20,64 @@ export async function adjustInventory(itemId: string, adjustment: number, reason
 
     if (updErr) throw updErr;
 
-    // 3. 売上連動 (理由が「販売・発送」かつ数量減少の場合)
-    if (reason === "販売・発送" && adjustment < 0 && productId) {
-        const qtyToReduce = Math.abs(adjustment);
-        
-        // 未完了の受注明細を取得 (最古のものから)
-        const { data: items } = await supabase
-            .from('order_items')
-            .select('*, orders!inner(status, created_at)')
-            .eq('product_id', productId)
-            .neq('orders.status', 'completed')
-            .neq('orders.status', 'cancelled')
-            .order('orders(created_at)', { ascending: true });
+    // 3. 売上連動 (理由が「販売・発送」の場合)
+    if (reason === "販売・発送" && productId) {
+        if (adjustment < 0) {
+            // 【出荷】在庫減少分を最古の受注から出荷済みに計上
+            const qtyToReduce = Math.abs(adjustment);
+            const { data: items } = await supabase
+                .from('order_items')
+                .select('*, orders!inner(status, created_at)')
+                .eq('product_id', productId)
+                .neq('orders.status', 'completed')
+                .neq('orders.status', 'cancelled')
+                .order('orders(created_at)', { ascending: true });
 
-        if (items && items.length > 0) {
-            let remaining = qtyToReduce;
-            for (const item of items) {
-                if (remaining <= 0) break;
-                const backlog = Math.max(0, item.quantity - (item.shipped_quantity || 0));
-                const reduce = Math.min(backlog, remaining);
-                
-                if (reduce > 0) {
-                    const newShipped = (item.shipped_quantity || 0) + reduce;
-                    await supabase.from('order_items').update({ shipped_quantity: newShipped }).eq('id', item.id);
-                    remaining -= reduce;
+            if (items && items.length > 0) {
+                let remaining = qtyToReduce;
+                for (const item of items) {
+                    if (remaining <= 0) break;
+                    const backlog = Math.max(0, item.quantity - (item.shipped_quantity || 0));
+                    const reduce = Math.min(backlog, remaining);
+                    
+                    if (reduce > 0) {
+                        const newShipped = (item.shipped_quantity || 0) + reduce;
+                        await supabase.from('order_items').update({ shipped_quantity: newShipped }).eq('id', item.id);
+                        remaining -= reduce;
 
-                    // 受注全体のステータスチェック
-                    const { data: allItems } = await supabase.from('order_items').select('quantity, shipped_quantity').eq('order_id', item.order_id);
-                    if (allItems && allItems.every(ai => (ai.shipped_quantity || 0) >= ai.quantity)) {
-                        await supabase.from('orders').update({ status: 'completed' }).eq('id', item.order_id);
+                        // 受注全体のステータスチェック（全数出荷なら完了へ）
+                        const { data: allItems } = await supabase.from('order_items').select('quantity, shipped_quantity').eq('order_id', item.order_id);
+                        if (allItems && allItems.every(ai => (ai.shipped_quantity || 0) >= ai.quantity)) {
+                            await supabase.from('orders').update({ status: 'completed' }).eq('id', item.order_id);
+                        }
+                    }
+                }
+            }
+        } else if (adjustment > 0) {
+            // 【返品】在庫増加分を最新の受注から出荷済みを減算して受注残へ復元 (LIFO)
+            let remaining = adjustment;
+            const { data: items } = await supabase
+                .from('order_items')
+                .select('*, orders!inner(status, created_at)')
+                .eq('product_id', productId)
+                .gt('shipped_quantity', 0)
+                .neq('orders.status', 'cancelled')
+                .order('orders(created_at)', { ascending: false }); // 最新のものから戻す
+
+            if (items && items.length > 0) {
+                for (const item of items) {
+                    if (remaining <= 0) break;
+                    const restore = Math.min(item.shipped_quantity, remaining);
+                    
+                    if (restore > 0) {
+                        const newShipped = item.shipped_quantity - restore;
+                        await supabase.from('order_items').update({ shipped_quantity: newShipped }).eq('id', item.id);
+                        remaining -= restore;
+
+                        // 完了していた受注を仕掛中に戻す
+                        if (item.orders.status === 'completed') {
+                            await supabase.from('orders').update({ status: 'in_progress' }).eq('id', item.order_id);
+                        }
                     }
                 }
             }

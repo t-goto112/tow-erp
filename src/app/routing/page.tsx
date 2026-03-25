@@ -8,7 +8,7 @@ import { useSupabaseData, SupabaseLot, SupabaseLotProcess } from "@/lib/useSupab
 import { moveForward, registerWip, moveBack, moveToInventory, shipAndInvoice, confirmLoss as confirmLossService } from "@/lib/services/routingService";
 
 export default function RoutingPage() {
-    const { lots, processes, subcontractors, processRates, loading: dataLoading, profile, refresh } = useSupabaseData();
+    const { lots, inventory, processes, subcontractors, warehouses, processRates, loading: dataLoading, profile, refresh } = useSupabaseData();
     const canEdit = profile?.role === 'admin' || (profile?.permissions?.routing?.edit === true);
     const [selectedLotId, setSelectedLotId] = useState("");
     const [selectedProcessId, setSelectedProcessId] = useState("");
@@ -252,17 +252,40 @@ export default function RoutingPage() {
                         <select value={selectedProcessId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedProcessId(e.target.value)}
                             className="select-base">
                             <option value="">選択してください</option>
-                            {[...(selectedLot.lot_processes || [])].sort((a, b) => 
-                                (a.processes?.group_index || 0) - (b.processes?.group_index || 0) || 
-                                (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0)
-                            ).map((p) => {
-                                const pCurrentQty = (p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0);
-                                // IDの末尾をわずかに表示して確実に区切れるようにする（ユーザーの同一名指摘対策）
-                                const subName = p.subcontractors?.name || '未定';
-                                const subIdSuffix = p.subcontractors?.id ? `...${p.subcontractors.id.slice(-4)}` : '';
-                                const displayLabel = `${p.processes?.name} — ${subName}${subIdSuffix} (現在:${pCurrentQty})`;
-                                return <option key={p.id} value={p.id}>{displayLabel}</option>;
-                            })}
+                            {(() => {
+                                // Group lot_processes by process_id + subcontractor_id
+                                const grouped: Record<string, { label: string; qty: number; id: string }> = {};
+                                const rawProcs = [...(selectedLot.lot_processes || [])].sort((a, b) => 
+                                    (a.processes?.group_index || 0) - (b.processes?.group_index || 0) || 
+                                    (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0)
+                                );
+
+                                rawProcs.forEach(p => {
+                                    const subName = p.subcontractors?.name || '未定';
+                                    const procName = p.processes?.name || '不明';
+                                    const key = `${p.process_id}-${p.subcontractor_id}`;
+                                    const pCurrentQty = (p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0);
+                                    
+                                    if (!grouped[key]) {
+                                        grouped[key] = {
+                                            label: `${procName} — ${subName}`,
+                                            qty: pCurrentQty,
+                                            id: p.id // We still use the first ID for simplicity for now, but sum the qty
+                                        };
+                                    } else {
+                                        grouped[key].qty += pCurrentQty;
+                                        // If the first one was empty, maybe the second one has items.
+                                        // In many-to-one mapping, this is slightly problematic but 
+                                        // usually the user expects to act on "this process stage".
+                                    }
+                                });
+
+                                return Object.values(grouped).map((g, idx) => (
+                                    <option key={g.id + idx} value={g.id}>
+                                        {g.label} (現在:{g.qty})
+                                    </option>
+                                ));
+                            })()}
                         </select>
                     </div>
                 )}

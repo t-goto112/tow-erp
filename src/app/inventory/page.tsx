@@ -9,21 +9,27 @@ import { adjustInventory, updateWarehouse } from "@/lib/services/inventoryServic
 
 export default function InventoryPage() {
     const [tab, setTab] = useState<"stock" | "wip">("stock");
-    const { inventory, lots, loading, profile, refresh } = useSupabaseData();
+    const { inventory, lots, loading, profile, refresh, warehouses } = useSupabaseData();
     const canEdit = profile?.role === 'admin' || (profile?.permissions?.inventory?.edit === true);
 
     const [adjustItem, setAdjustItem] = useState<SupabaseInventory | null>(null);
     const [warehouseEditItem, setWarehouseEditItem] = useState<SupabaseInventory | null>(null);
     const [newWarehouse, setNewWarehouse] = useState("");
     const [adjAmount, setAdjAmount] = useState("");
+    const [adjMode, setAdjMode] = useState<"plus" | "minus">("minus");
     const [adjReason, setAdjReason] = useState("棚卸による差異修正");
     const [loadingAction, setLoadingAction] = useState(false);
 
     const handleAdjust = async () => {
         if (!adjustItem || !adjAmount) return;
         try {
+            if (adjMode === "plus" && adjReason === "販売・発送") {
+                const confirmed = window.confirm("指定の数分だけ計上されていた売り上げが減り、受注残が増えますがよろしいですか？");
+                if (!confirmed) return;
+            }
+
             setLoadingAction(true);
-            const amount = Number(adjAmount);
+            const amount = Number(adjAmount) * (adjMode === "plus" ? 1 : -1);
             await adjustInventory(adjustItem.id, amount, adjReason, adjustItem.product_id);
             showToast("success", `在庫を ${amount > 0 ? '+' : ''}${amount} 修正しました`);
             setAdjustItem(null);
@@ -201,11 +207,20 @@ export default function InventoryPage() {
                             <span className="text-2xl font-black text-slate-800">{adjustItem.quantity}<span className="text-xs text-slate-400 ml-1">個</span></span>
                         </div>
                         <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">増減量（例: -5, +2）</label>
-                            <input type="number" value={adjAmount} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAdjAmount(e.target.value)} placeholder="0" className="input-base text-xl font-black text-blue-600" />
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">増減量（数値は正の数で入力）</label>
+                            <input type="number" value={adjAmount} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAdjAmount(e.target.value)} placeholder="0" className="input-base text-xl font-black text-blue-600 mb-3" />
+                            
+                            <div className="flex gap-2">
+                                <button onClick={() => setAdjMode("plus")} className={`flex-1 py-3 rounded-xl font-bold border-2 transition-all flex items-center justify-center gap-1.5 ${adjMode === "plus" ? "bg-blue-600 text-white border-blue-600 shadow-md" : "bg-white text-blue-600 border-blue-100 hover:border-blue-200"}`}>
+                                    増やす
+                                </button>
+                                <button onClick={() => setAdjMode("minus")} className={`flex-1 py-3 rounded-xl font-bold border-2 transition-all flex items-center justify-center gap-1.5 ${adjMode === "minus" ? "bg-red-600 text-white border-red-600 shadow-md" : "bg-white text-red-600 border-red-100 hover:border-red-200"}`}>
+                                    減らす
+                                </button>
+                            </div>
                         </div>
                         <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">理由</label>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">理由物</label>
                             <select value={adjReason} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAdjReason(e.target.value)} className="select-base">
                                 <option>棚卸による差異修正</option>
                                 <option>販売・発送</option>
@@ -229,7 +244,10 @@ export default function InventoryPage() {
                     <div className="space-y-5">
                         <div>
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">倉庫名</label>
-                            <input type="text" value={newWarehouse} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewWarehouse(e.target.value)} placeholder="例：第1倉庫 A列" className="input-base text-sm" />
+                            <input type="text" list="wh-list-inventory" value={newWarehouse} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewWarehouse(e.target.value)} placeholder="例：第1倉庫 A列" className="input-base text-sm" />
+                            <datalist id="wh-list-inventory">
+                                {warehouses.map(w => <option key={w.id} value={w.name} />)}
+                            </datalist>
                         </div>
                         <button onClick={handleUpdateWarehouse} disabled={loadingAction}
                             className="w-full bg-blue-600 text-white font-black py-3 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2">
