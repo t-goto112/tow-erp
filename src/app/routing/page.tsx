@@ -41,13 +41,48 @@ export default function RoutingPage() {
     const [shipMode, setShipMode] = useState<"inventory" | "ship" | null>(null);
     const [warehouseName, setWarehouseName] = useState("本社倉庫");
 
-    const activeLots = lots.filter(l => l.status !== "completed");
+    const activeLots = lots.filter(l => l.status !== "completed" && l.orders?.status !== "completed");
     const selectedLot = activeLots.find(l => l.id === selectedLotId) || null;
-    const selectedProc = selectedLot?.lot_processes?.find(p => p.id === selectedProcessId) || null;
-    const selectedProcCurrentQty = selectedProc ? ((selectedProc.input_quantity || 0) - (selectedProc.completed_quantity || 0) - (selectedProc.loss_qty || 0)) : 0;
+    
+    // Group lot_processes by process_id + subcontractor_id to handle mismatch
+    const lotGroupedProcs = useMemo(() => {
+        if (!selectedLot) return [];
+        const grouped: Record<string, { id: string; process_id: string; subcontractor_id: string; input_quantity: number; completed_quantity: number; loss_qty: number; label: string; records: any[] }> = {};
+        const rawProcs = [...(selectedLot.lot_processes || [])].sort((a, b) => 
+            (a.processes?.group_index || 0) - (b.processes?.group_index || 0) || 
+            (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0)
+        );
+
+        rawProcs.forEach(p => {
+            const key = `${p.process_id}-${p.subcontractor_id}`;
+            if (!grouped[key]) {
+                grouped[key] = {
+                    id: p.id,
+                    process_id: p.process_id,
+                    subcontractor_id: p.subcontractor_id,
+                    input_quantity: p.input_quantity || 0,
+                    completed_quantity: p.completed_quantity || 0,
+                    loss_qty: p.loss_qty || 0,
+                    label: `${p.processes?.name || "不明"} — ${p.subcontractors?.name || "未定"}`,
+                    records: [p]
+                };
+            } else {
+                grouped[key].input_quantity += (p.input_quantity || 0);
+                grouped[key].completed_quantity += (p.completed_quantity || 0);
+                grouped[key].loss_qty += (p.loss_qty || 0);
+                grouped[key].records.push(p);
+            }
+        });
+        return Object.values(grouped);
+    }, [selectedLot]);
+
+    // Use a grouping-based selection instead of a single record ID
+    const selectedGroup = lotGroupedProcs.find(g => g.id === selectedProcessId) || null;
+    const selectedProc = selectedGroup?.records[0] || null; // For templates/metadata
+    const selectedProcCurrentQty = selectedGroup ? (selectedGroup.input_quantity - selectedGroup.completed_quantity - selectedGroup.loss_qty) : 0;
 
     const isFirstProcessForWip = selectedProc?.processes?.sort_order === 1;
-    const needsWipRegistration = selectedProc?.status === "pending" && isFirstProcessForWip;
+    const needsWipRegistration = (selectedGroup?.records.some(r => r.status === "pending") ?? false) && isFirstProcessForWip;
 
     // 選択中工程の外注先
     const currentProcessSubs = useMemo(() => {
@@ -252,40 +287,11 @@ export default function RoutingPage() {
                         <select value={selectedProcessId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedProcessId(e.target.value)}
                             className="select-base">
                             <option value="">選択してください</option>
-                            {(() => {
-                                // Group lot_processes by process_id + subcontractor_id
-                                const grouped: Record<string, { label: string; qty: number; id: string }> = {};
-                                const rawProcs = [...(selectedLot.lot_processes || [])].sort((a, b) => 
-                                    (a.processes?.group_index || 0) - (b.processes?.group_index || 0) || 
-                                    (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0)
-                                );
-
-                                rawProcs.forEach(p => {
-                                    const subName = p.subcontractors?.name || '未定';
-                                    const procName = p.processes?.name || '不明';
-                                    const key = `${p.process_id}-${p.subcontractor_id}`;
-                                    const pCurrentQty = (p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0);
-                                    
-                                    if (!grouped[key]) {
-                                        grouped[key] = {
-                                            label: `${procName} — ${subName}`,
-                                            qty: pCurrentQty,
-                                            id: p.id // We still use the first ID for simplicity for now, but sum the qty
-                                        };
-                                    } else {
-                                        grouped[key].qty += pCurrentQty;
-                                        // If the first one was empty, maybe the second one has items.
-                                        // In many-to-one mapping, this is slightly problematic but 
-                                        // usually the user expects to act on "this process stage".
-                                    }
-                                });
-
-                                return Object.values(grouped).map((g, idx) => (
-                                    <option key={g.id + idx} value={g.id}>
-                                        {g.label} (現在:{g.qty})
-                                    </option>
-                                ));
-                            })()}
+                            {lotGroupedProcs.map((g) => (
+                                <option key={g.id} value={g.id}>
+                                    {g.label} (現在:{g.input_quantity - g.completed_quantity - g.loss_qty})
+                                </option>
+                            ))}
                         </select>
                     </div>
                 )}
@@ -331,8 +337,8 @@ export default function RoutingPage() {
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
                         <div className="grid grid-cols-4 gap-4 text-center">
                             <div><p className="text-[10px] font-bold text-slate-400">現在数</p><p className="text-2xl font-black text-slate-800">{selectedProcCurrentQty}</p></div>
-                            <div><p className="text-[10px] font-bold text-slate-400">完了数</p><p className="text-2xl font-black text-emerald-600">{selectedProc.completed_quantity || 0}</p></div>
-                            <div><p className="text-[10px] font-bold text-slate-400">ロス</p><p className="text-2xl font-black text-red-500">{selectedProc.loss_qty || 0}</p></div>
+                            <div><p className="text-[10px] font-bold text-slate-400">完了数</p><p className="text-2xl font-black text-emerald-600">{selectedGroup?.completed_quantity || 0}</p></div>
+                            <div><p className="text-[10px] font-bold text-slate-400">ロス</p><p className="text-2xl font-black text-red-500">{selectedGroup?.loss_qty || 0}</p></div>
                             <div><p className="text-[10px] font-bold text-slate-400">単価</p><p className="text-2xl font-black"><span className="text-slate-600">¥{(selectedProc as any).unit_price_override || currentProcessSubs.find(s => s.id === selectedProc.subcontractor_id)?.unitPrice || 0}</span></p></div>
                         </div>
                     </div>

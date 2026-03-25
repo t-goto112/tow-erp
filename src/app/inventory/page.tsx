@@ -77,7 +77,7 @@ export default function InventoryPage() {
 
     // 仕掛品: ロットごとにどの工程にいくつあるか
     const wipByLot = useMemo(() => {
-        return lots.filter(l => l.status !== "completed");
+        return lots.filter(l => l.status !== "completed" && l.orders?.status !== "completed");
     }, [lots]);
 
     if (loading) {

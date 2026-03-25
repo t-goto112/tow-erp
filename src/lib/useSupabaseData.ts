@@ -40,6 +40,7 @@ export interface SupabaseLot {
     quantity: number;
     status: string;
     order_id: string;
+    orders?: { status: string; order_number: string } | null;
     created_at: string;
     products: { name: string } | null;
     lot_processes?: SupabaseLotProcess[];
@@ -176,7 +177,7 @@ export function useSupabaseData() {
             // 3. Fetch Lots with nested processes, process definitions, and deliveries
             const { data: lData, error: lErr } = await supabase
                 .from('lots')
-                .select('*, products(name, product_code:code), lot_processes(*, processes(name, sort_order, group_index), subcontractors(id, name), lot_process_deliveries(*))')
+                .select('*, orders(status, order_number), products(name, product_code:code), lot_processes(*, processes(name, sort_order, group_index), subcontractors(id, name), lot_process_deliveries(*))')
                 .order('created_at', { ascending: false });
             if (lErr) throw lErr;
             setLots(lData || []);
