@@ -15,18 +15,19 @@ export default function InventoryPage() {
     const [adjustItem, setAdjustItem] = useState<SupabaseInventory | null>(null);
     const [warehouseEditItem, setWarehouseEditItem] = useState<SupabaseInventory | null>(null);
     const [newWarehouse, setNewWarehouse] = useState("");
-    const [newQuantity, setNewQuantity] = useState("");
+    const [adjAmount, setAdjAmount] = useState("");
     const [adjReason, setAdjReason] = useState("棚卸による差異修正");
     const [loadingAction, setLoadingAction] = useState(false);
 
     const handleAdjust = async () => {
-        if (!adjustItem || !newQuantity) return;
+        if (!adjustItem || !adjAmount) return;
         try {
             setLoadingAction(true);
-            await adjustInventory(adjustItem.id, Number(newQuantity), adjReason);
-            showToast("success", `在庫を ${adjustItem.quantity} → ${newQuantity} に修正しました`);
+            const amount = Number(adjAmount);
+            await adjustInventory(adjustItem.id, amount, adjReason, adjustItem.product_id);
+            showToast("success", `在庫を ${amount > 0 ? '+' : ''}${amount} 修正しました`);
             setAdjustItem(null);
-            setNewQuantity("");
+            setAdjAmount("");
             refresh();
         } catch (err: any) {
             console.error(err);
@@ -111,7 +112,7 @@ export default function InventoryPage() {
                                         <div className="flex items-center justify-end gap-1">
                                             {item.quantity}
                                             {canEdit && (
-                                                <button onClick={() => { setAdjustItem(item); setNewQuantity(String(item.quantity)); }} className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-blue-600">
+                                                <button onClick={() => { setAdjustItem(item); setAdjAmount(""); }} className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-blue-600">
                                                     <Edit2 size={10} />
                                                 </button>
                                             )}
@@ -192,31 +193,31 @@ export default function InventoryPage() {
             )}
 
             {/* 在庫修正モーダル */}
-            <Modal open={!!adjustItem} onClose={() => setAdjustItem(null)} title="在庫数量を修正" subtitle={adjustItem?.products?.name} width="max-w-xl">
+            <Modal open={!!adjustItem} onClose={() => setAdjustItem(null)} title="在庫数量の調整" subtitle={`${adjustItem?.products?.product_code} — ${adjustItem?.products?.name}`} width="max-w-xl">
                 {adjustItem && (
                     <div className="space-y-5">
                         <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 flex items-center justify-between">
-                            <span className="text-xs font-bold text-slate-400 uppercase">現在数</span>
+                            <span className="text-xs font-bold text-slate-400 uppercase">現在の在庫</span>
                             <span className="text-2xl font-black text-slate-800">{adjustItem.quantity}<span className="text-xs text-slate-400 ml-1">個</span></span>
                         </div>
                         <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">修正後</label>
-                            <input type="number" value={newQuantity} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewQuantity(e.target.value)} className="input-base text-xl font-black text-blue-600" />
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">増減量（例: -5, +2）</label>
+                            <input type="number" value={adjAmount} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAdjAmount(e.target.value)} placeholder="0" className="input-base text-xl font-black text-blue-600" />
                         </div>
                         <div>
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">理由</label>
                             <select value={adjReason} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAdjReason(e.target.value)} className="select-base">
                                 <option>棚卸による差異修正</option>
+                                <option>販売・発送</option>
                                 <option>返品による加減</option>
                                 <option>破損・廃棄</option>
-                                <option>販売・発送</option>
                                 <option>入力ミスの訂正</option>
                                 <option>その他</option>
                             </select>
                         </div>
-                        <button onClick={handleAdjust} disabled={loadingAction || !newQuantity}
+                        <button onClick={handleAdjust} disabled={loadingAction || !adjAmount}
                             className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2">
-                            {loadingAction ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5" /> 在庫を修正する</>}
+                            {loadingAction ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5" /> 修正を確定する</>}
                         </button>
                     </div>
                 )}

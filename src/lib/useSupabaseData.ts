@@ -94,6 +94,12 @@ export interface SupabaseSubcontractor {
     name: string;
 }
 
+export interface SupabaseWarehouse {
+    id: string;
+    name: string;
+    location: string;
+}
+
 export interface SupabaseProcessSubcontractorRate {
     id: string;
     process_id: string;
@@ -131,6 +137,7 @@ export function useSupabaseData() {
     // Master data for routing
     const [processes, setProcesses] = useState<SupabaseProcess[]>([]);
     const [subcontractors, setSubcontractors] = useState<SupabaseSubcontractor[]>([]);
+    const [warehouses, setWarehouses] = useState<SupabaseWarehouse[]>([]);
     const [processRates, setProcessRates] = useState<SupabaseProcessSubcontractorRate[]>([]);
 
     const [paymentItems, setPaymentItems] = useState<SupabasePaymentItem[]>([]);
@@ -161,7 +168,7 @@ export function useSupabaseData() {
             // 2. Fetch Orders with Items
             const { data: oData, error: oErr } = await supabase
                 .from('orders')
-                .select('*, order_items(*, products(name, code))')
+                .select('*, order_items(*, products(name, product_code:code))')
                 .order('created_at', { ascending: false });
             if (oErr) throw oErr;
             setOrders(oData || []);
@@ -169,7 +176,7 @@ export function useSupabaseData() {
             // 3. Fetch Lots with nested processes, process definitions, and deliveries
             const { data: lData, error: lErr } = await supabase
                 .from('lots')
-                .select('*, products(name), lot_processes(*, processes(name, sort_order, group_index), subcontractors(name), lot_process_deliveries(*))')
+                .select('*, products(name, product_code:code), lot_processes(*, processes(name, sort_order, group_index), subcontractors(id, name), lot_process_deliveries(*))')
                 .order('created_at', { ascending: false });
             if (lErr) throw lErr;
             setLots(lData || []);
@@ -189,7 +196,7 @@ export function useSupabaseData() {
             // 4. Fetch Inventory
             const { data: iData, error: iErr } = await supabase
                 .from('inventory')
-                .select('*, products(name, code)');
+                .select('*, products(name, product_code:code)');
             if (iErr) throw iErr;
             setInventory(iData || []);
 
@@ -199,6 +206,9 @@ export function useSupabaseData() {
 
             const { data: subData } = await supabase.from('subcontractors').select('*');
             setSubcontractors(subData || []);
+
+            const { data: whData } = await supabase.from('warehouses').select('*');
+            setWarehouses(whData || []);
 
             const { data: ratesData } = await supabase.from('process_subcontractor_rates').select('*, subcontractors(id, name)');
             setProcessRates(ratesData || []);
@@ -215,5 +225,5 @@ export function useSupabaseData() {
         fetchData(true);
     }, [fetchData]);
 
-    return { products, orders, lots, inventory, processes, subcontractors, processRates, paymentItems, loading, profile, refresh: () => fetchData(false) };
+    return { products, orders, lots, inventory, processes, subcontractors, warehouses, processRates, paymentItems, loading, profile, refresh: () => fetchData(false) };
 }

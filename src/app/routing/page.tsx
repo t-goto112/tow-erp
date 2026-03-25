@@ -110,7 +110,7 @@ export default function RoutingPage() {
     }, [selectedLotId, selectedProcessId, nextProcessSubs, prevProcessSubs, currentProcessSubs, selectedLot]);
 
     const handleForward = async () => {
-        if (!canEdit || !selectedLot || !selectedProc) return;
+        if (!canEdit || !selectedLot || !selectedProc || !fwdQty) return;
         
         const nextSubId = fwdNextSub ? nextProcessSubs.find(s => s.name === fwdNextSub)?.id : undefined;
         // 外注先が複数ある場合のバリデーション
@@ -257,7 +257,11 @@ export default function RoutingPage() {
                                 (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0)
                             ).map((p) => {
                                 const pCurrentQty = (p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0);
-                                return <option key={p.id} value={p.id}>{p.processes?.name} — {p.subcontractors?.name || '未定'} (現在:{pCurrentQty})</option>;
+                                // IDの末尾をわずかに表示して確実に区切れるようにする（ユーザーの同一名指摘対策）
+                                const subName = p.subcontractors?.name || '未定';
+                                const subIdSuffix = p.subcontractors?.id ? `...${p.subcontractors.id.slice(-4)}` : '';
+                                const displayLabel = `${p.processes?.name} — ${subName}${subIdSuffix} (現在:${pCurrentQty})`;
+                                return <option key={p.id} value={p.id}>{displayLabel}</option>;
                             })}
                         </select>
                     </div>
@@ -349,14 +353,26 @@ export default function RoutingPage() {
 
                                     {shipMode === "inventory" && (
                                         <div className="animate-in slide-in-from-top-2 duration-200">
-                                            <label className="block text-[10px] font-black text-slate-400 mb-1">保管倉庫</label>
-                                            <input type="text" value={warehouseName} onChange={(e) => setWarehouseName(e.target.value)} placeholder="例：本社倉庫" className="input-base mb-3" />
-                                            {canEdit && (
-                                                <button onClick={handleMoveToInventory} disabled={loading || !fwdQty || !fwdCompletionDate}
-                                                    className="w-full bg-blue-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
-                                                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4" /> 在庫へ移動を確定</>}
-                                                </button>
-                                            )}
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">保管倉庫 / 場所</label>
+                                                    <input list="warehouse-list" value={warehouseName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWarehouseName(e.target.value)} placeholder="倉庫名または保管場所を入力" className="input-base" />
+                                                    <datalist id="warehouse-list">
+                                                        {/* マスタの倉庫名 */}
+                                                        {warehouses.map(w => <option key={w.id} value={w.name} />)}
+                                                        {/* 既存在庫の場所をサジェスト */}
+                                                        {Array.from(new Set(inventory.map(i => i.location).filter(Boolean))).map(loc => (
+                                                            <option key={loc} value={loc || ""} />
+                                                        ))}
+                                                    </datalist>
+                                                </div>
+                                                {canEdit && (
+                                                    <button onClick={handleMoveToInventory} disabled={loading || !fwdQty || !fwdCompletionDate}
+                                                        className="w-full bg-blue-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
+                                                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4" /> 在庫へ移動を確定</>}
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
 

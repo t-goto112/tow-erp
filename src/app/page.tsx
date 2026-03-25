@@ -51,6 +51,14 @@ export default function Dashboard() {
 
     const totalWipCount = useMemo(() => wipByLot.reduce((s, l) => s + l.wipQty, 0), [wipByLot]);
 
+    const finishedGoodsInventory = useMemo(() => {
+        return inventory.filter(i => i.item_type === 'product').reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+    }, [inventory]);
+
+    const partsInventory = useMemo(() => {
+        return inventory.filter(i => i.item_type === 'parts').reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+    }, [inventory]);
+
     const alerts = useMemo(() => {
         const todayStr = new Date().toISOString().split("T")[0];
         const a: any[] = [];
@@ -131,10 +139,12 @@ export default function Dashboard() {
     return (
         <div className="space-y-6 animate-in fade-in duration-300">
             {/* サマリーカード */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 <SummaryCard icon={<Wallet className="w-5 h-5" />} label="受注残高" value={`¥${orderBacklog.toLocaleString()}`} sub={`${activeOrderCount}件`} color="bg-blue-50 text-blue-600" />
-                <SummaryCard icon={<Layers className="w-5 h-5" />} label="仕掛品" value={`${totalWipCount}`} sub={`${wipByLot.length}ロット`} color="bg-amber-50 text-amber-600" />
-                <SummaryCard icon={<TrendingUp className="w-5 h-5" />} label="支払予定" value={`¥${paymentDue.toLocaleString()}`} sub="未払額" color="bg-emerald-50 text-emerald-600" />
+                <SummaryCard icon={<Package className="w-5 h-5" />} label="完成品在庫" value={`${finishedGoodsInventory.toLocaleString()}`} sub="個" color="bg-emerald-50 text-emerald-600" />
+                <SummaryCard icon={<Layers className="w-5 h-5" />} label="仕掛品" value={`${totalWipCount.toLocaleString()}`} sub={`${wipByLot.length}ロット`} color="bg-amber-50 text-amber-600" />
+                <SummaryCard icon={<Boxes className="w-5 h-5" />} label="パーツ在庫" value={`${partsInventory.toLocaleString()}`} sub="個" color="bg-indigo-50 text-indigo-600" />
+                <SummaryCard icon={<TrendingUp className="w-5 h-5" />} label="支払予定" value={`¥${paymentDue.toLocaleString()}`} sub="未払額" color="bg-slate-50 text-slate-600" />
             </div>
 
             {/* ガントチャート */}
