@@ -46,7 +46,7 @@ export default function Dashboard() {
         const mainProcesses = (lot.lot_processes || []).filter(p => p.processes?.group_index === 0).sort((a, b) => (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0));
         const wipQty = mainProcesses.reduce((s, p) => s + ((p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0)), 0);
         return { ...lot, wipQty, mainProcesses };
-    }).filter(l => l.wipQty > 0 || l.status === "pending");
+    }).filter(l => l.wipQty > 0 || l.status === "pending" || l.status === "in_progress");
     }, [lots]);
 
     const totalWipCount = useMemo(() => wipByLot.reduce((s, l) => s + l.wipQty, 0), [wipByLot]);

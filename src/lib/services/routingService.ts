@@ -92,16 +92,19 @@ export async function syncLotAndOrderStatus(lotId: string) {
         if (lot.order_id) {
             const { data: siblingLots } = await supabase.from('lots').select('status').eq('order_id', lot.order_id);
             if (siblingLots && siblingLots.every((l: any) => l.status === 'completed')) {
-                await supabase.from('orders').update({ status: 'completed' }).eq('id', lot.order_id);
+                const { data: ord } = await supabase.from('orders').select('status').eq('id', lot.order_id).single();
+                if (ord && ord.status !== 'completed') {
+                    await supabase.from('orders').update({ status: 'completed' }).eq('id', lot.order_id);
+                }
             }
         }
     } else if (anyInProgress) {
-        if (lot.status === 'created' || lot.status === 'pending') {
+        if (lot.status === 'created' || lot.status === 'pending' || lot.status === 'completed') {
             await supabase.from('lots').update({ status: 'in_progress' }).eq('id', lotId);
         }
         if (lot.order_id) {
             const { data: ord } = await supabase.from('orders').select('status').eq('id', lot.order_id).single();
-            if (ord && (ord.status === 'pending' || ord.status === 'created')) {
+            if (ord && (ord.status === 'pending' || ord.status === 'created' || ord.status === 'completed')) {
                 await supabase.from('orders').update({ status: 'in_progress' }).eq('id', lot.order_id);
             }
         }

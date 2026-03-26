@@ -18,6 +18,7 @@ export default function InventoryPage() {
     const [adjAmount, setAdjAmount] = useState("");
     const [adjMode, setAdjMode] = useState<"plus" | "minus">("minus");
     const [adjReason, setAdjReason] = useState("棚卸による差異修正");
+    const [adjTargetWarehouse, setAdjTargetWarehouse] = useState("");
     const [loadingAction, setLoadingAction] = useState(false);
 
     const handleAdjust = async () => {
@@ -30,7 +31,14 @@ export default function InventoryPage() {
 
             setLoadingAction(true);
             const amount = Number(adjAmount) * (adjMode === "plus" ? 1 : -1);
-            const result = await adjustInventory(adjustItem.id, amount, adjReason, adjustItem.product_id) as any;
+            
+            if (adjReason === "倉庫の移動" && !adjTargetWarehouse) {
+                showToast("error", "移動先の倉庫を指定してください");
+                setLoadingAction(false);
+                return;
+            }
+
+            const result = await adjustInventory(adjustItem.id, amount, adjReason, adjustItem.product_id, adjTargetWarehouse) as any;
             
             let message = `在庫を ${amount > 0 ? '+' : ''}${amount} 修正しました`;
             if (result.amount > 0) {
@@ -39,6 +47,7 @@ export default function InventoryPage() {
             showToast("success", message);
             setAdjustItem(null);
             setAdjAmount("");
+            setAdjTargetWarehouse("");
             refresh();
         } catch (err: any) {
             console.error(err);
@@ -65,10 +74,10 @@ export default function InventoryPage() {
         }
     };
 
-    // 完成品在庫（ロット記載なし、同製品を集約）
+    // 完成品在庫（ロット記載なし、同製品を集約、数量0は非表示）
     const stockItems = useMemo(() => {
         const grouped: Record<string, SupabaseInventory> = {};
-        inventory.filter((i: SupabaseInventory) => i.item_type === "finished" || i.item_type === "parts").forEach((i: SupabaseInventory) => {
+        inventory.filter((i: SupabaseInventory) => (i.item_type === "finished" || i.item_type === "parts") && i.quantity > 0).forEach((i: SupabaseInventory) => {
             const prodName = i.products?.name || "不明な製品";
             const location = i.location || "未設定";
             const key = `${prodName}-${i.item_type}-${location}`; // 名前、タイプ、倉庫でグループ化
@@ -78,7 +87,25 @@ export default function InventoryPage() {
                 grouped[key] = { ...i };
             }
         });
-        return Object.values(grouped);
+        
+        // 数量0を除外し、商品コード＞商品名＞倉庫名＞数量の優先順位で昇順にソート
+        return Object.values(grouped)
+            .filter(i => i.quantity > 0)
+            .sort((a, b) => {
+                const codeA = a.products?.product_code || "";
+                const codeB = b.products?.product_code || "";
+                if (codeA !== codeB) return codeA.localeCompare(codeB);
+                
+                const nameA = a.products?.name || "";
+                const nameB = b.products?.name || "";
+                if (nameA !== nameB) return nameA.localeCompare(nameB);
+                
+                const locA = a.location || "";
+                const locB = b.location || "";
+                if (locA !== locB) return locA.localeCompare(locB);
+                
+                return a.quantity - b.quantity;
+            });
     }, [inventory]);
 
     // 仕掛品: ロットごとにどの工程にいくつあるか
@@ -230,14 +257,26 @@ export default function InventoryPage() {
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">理由物</label>
                             <select value={adjReason} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAdjReason(e.target.value)} className="select-base">
                                 <option>棚卸による差異修正</option>
-                                <option>販売・発送</option>
-                                <option>返品による加減</option>
+                                <option>販売・発送・返品</option>
+                                <option>倉庫の移動</option>
                                 <option>破損・廃棄</option>
                                 <option>入力ミスの訂正</option>
                                 <option>その他</option>
                             </select>
                         </div>
-                        <button onClick={handleAdjust} disabled={loadingAction || !adjAmount}
+                        
+                        {adjReason === "倉庫の移動" && (
+                            <div className="animate-in slide-in-from-top-2 duration-200">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">移動先 倉庫名 / 場所 <span className="text-red-500">*</span></label>
+                                <input type="text" list="wh-list-transfer" value={adjTargetWarehouse} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAdjTargetWarehouse(e.target.value)} placeholder="例：第2倉庫 B列" className="input-base text-sm border-blue-200 focus:border-blue-500 bg-blue-50/30" />
+                                <datalist id="wh-list-transfer">
+                                    {warehouses.map(w => <option key={w.id} value={w.name} />)}
+                                </datalist>
+                                <p className="text-[10px] text-slate-500 mt-1.5 ml-1">※自動的に元の場所から減算し、移動先へ反映（合算・新規登録）されます。</p>
+                            </div>
+                        )}
+
+                        <button onClick={handleAdjust} disabled={loadingAction || !adjAmount || (adjReason === "倉庫の移動" && !adjTargetWarehouse)}
                             className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2">
                             {loadingAction ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5" /> 修正を確定する</>}
                         </button>

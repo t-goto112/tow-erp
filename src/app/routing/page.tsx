@@ -82,7 +82,7 @@ export default function RoutingPage() {
     const selectedProcCurrentQty = selectedGroup ? (selectedGroup.input_quantity - selectedGroup.completed_quantity - selectedGroup.loss_qty) : 0;
 
     const isFirstProcessForWip = selectedProc?.processes?.sort_order === 1;
-    const needsWipRegistration = (selectedGroup?.records.some(r => r.status === "pending") ?? false) && isFirstProcessForWip;
+    const needsWipRegistration = isFirstProcessForWip;
 
     // 選択中工程の外注先
     const currentProcessSubs = useMemo(() => {
@@ -364,7 +364,7 @@ export default function RoutingPage() {
                                     ) : (
                                         <select value={fwdNextSub} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFwdNextSub(e.target.value)} className="select-base">
                                             <option value="">選択</option>
-                                            {nextProcessSubs.map(s => <option key={s.name} value={s.name}>{s.name} (¥{s.unitPrice})</option>)}
+                                            {nextProcessSubs.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
                                         </select>
                                     )}
                                 </div>

@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
 
-export async function adjustInventory(itemId: string, adjustment: number, reason: string, productId?: string) {
+export async function adjustInventory(itemId: string, adjustment: number, reason: string, productId?: string, targetWarehouse?: string) {
     // 1. 現在の在庫を取得
     const { data: current, error: getErr } = await supabase
         .from('inventory')
@@ -20,8 +20,40 @@ export async function adjustInventory(itemId: string, adjustment: number, reason
 
     if (updErr) throw updErr;
 
-    // 3. 売上連動 (理由が「販売・発送」の場合)
-    if (reason === "販売・発送" && productId) {
+    // 2.5 倉庫の移動 (理由が「倉庫の移動」の場合)
+    if (reason === "倉庫の移動" && targetWarehouse) {
+        if (adjustment >= 0) {
+            throw new Error("倉庫の移動時は減算（マイナス）してください");
+        }
+        const moveQty = Math.abs(adjustment);
+        
+        // 移動先に同じ商品があるかチェック
+        const { data: existing } = await supabase
+            .from('inventory')
+            .select('*')
+            .eq('product_id', current.product_id)
+            .eq('location', targetWarehouse)
+            .eq('item_type', 'finished')
+            .neq('id', itemId)
+            .maybeSingle();
+
+        if (existing) {
+            // 合算
+            await supabase.from('inventory').update({ quantity: existing.quantity + moveQty }).eq('id', existing.id);
+        } else {
+            // 新規作成
+            await supabase.from('inventory').insert({
+                product_id: current.product_id,
+                quantity: moveQty,
+                location: targetWarehouse,
+                item_type: 'finished'
+            });
+        }
+        return { ok: true };
+    }
+
+    // 3. 売上連動 (理由が「販売・発送・返品」の場合)
+    if (reason === "販売・発送・返品" && productId) {
         if (adjustment < 0) {
             // 【出荷】在庫減少分を最古の受注から出荷済みに計上
             const qtyToReduce = Math.abs(adjustment);
