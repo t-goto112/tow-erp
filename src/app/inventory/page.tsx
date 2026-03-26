@@ -78,9 +78,10 @@ export default function InventoryPage() {
     const stockItems = useMemo(() => {
         const grouped: Record<string, SupabaseInventory> = {};
         inventory.filter((i: SupabaseInventory) => (i.item_type === "finished" || i.item_type === "parts") && i.quantity > 0).forEach((i: SupabaseInventory) => {
+            const prodCode = i.products?.product_code || "";
             const prodName = i.products?.name || "不明な製品";
             const location = i.location || "未設定";
-            const key = `${prodName}-${i.item_type}-${location}`; // 名前、タイプ、倉庫でグループ化
+            const key = `${prodCode}-${prodName}-${i.item_type}-${location}`; // コード、名前、タイプ、倉庫でグループ化
             if (grouped[key]) {
                 grouped[key].quantity += i.quantity;
             } else {
@@ -88,21 +89,24 @@ export default function InventoryPage() {
             }
         });
         
-        // 数量0を除外し、商品コード＞商品名＞倉庫名＞数量の優先順位で昇順にソート
+        // 数量0を除外し、商品コード＞商品名＞倉庫名＞数量の優先順位で昇順にソート(自然順)
         return Object.values(grouped)
             .filter(i => i.quantity > 0)
             .sort((a, b) => {
                 const codeA = a.products?.product_code || "";
                 const codeB = b.products?.product_code || "";
-                if (codeA !== codeB) return codeA.localeCompare(codeB);
+                const codeCmp = codeA.localeCompare(codeB, undefined, { numeric: true });
+                if (codeCmp !== 0) return codeCmp;
                 
                 const nameA = a.products?.name || "";
                 const nameB = b.products?.name || "";
-                if (nameA !== nameB) return nameA.localeCompare(nameB);
+                const nameCmp = nameA.localeCompare(nameB, undefined, { numeric: true });
+                if (nameCmp !== 0) return nameCmp;
                 
                 const locA = a.location || "";
                 const locB = b.location || "";
-                if (locA !== locB) return locA.localeCompare(locB);
+                const locCmp = locA.localeCompare(locB, undefined, { numeric: true });
+                if (locCmp !== 0) return locCmp;
                 
                 return a.quantity - b.quantity;
             });
