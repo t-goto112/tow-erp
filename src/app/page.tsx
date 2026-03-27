@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 import Modal from "@/components/Modal";
 import { useSupabaseData } from "@/lib/useSupabaseData";
-import { syncLotAndOrderStatus } from "@/lib/services/routingService";
+import { syncLotAndOrderStatus, moveForward, moveBack, moveToInventory } from "@/lib/services/routingService";
 
 export default function Dashboard() {
     const [, setTick] = useState(0);
@@ -387,151 +387,79 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates, pro
             const diff = qty - del.qty;
 
             if (adjustMode === "correct") {
-                // 直接修正
+                // 支払確定済みかチェック
+                const payLine = paymentItems.find((pl: any) => pl.lot_process_delivery_id === del.id);
+                if (payLine) {
+                    const payStatus = payLine.payments?.status;
+                    if (payStatus && payStatus !== 'wip' && payStatus !== 'pre_payment') {
+                        throw new Error(`支払管理側が確定済み（${payStatus}）のため修正できません。`);
+                    }
+                }
+
+                // 最終工程で完了済み(在庫移動済)の場合はアラートを出す（ユーザー要望）
+                if ((proc.processes?.group_index === 0 || proc.processes?.group_index === null) && del.completion_date) {
+                    alert("完成在庫については変動しないため在庫管理で修正してください。");
+                }
+
+                // 1. 直近の実績の数を修正
                 await supabase.from('lot_process_deliveries').update({ qty }).eq('id', del.id);
-                // プロセスの集計値を更新
+
+                // 2. lot_processes の集計数を修正
                 const newComp = (proc.completed_quantity || 0) + (del.completion_date ? diff : 0);
                 const newInp = (proc.input_quantity || 0) + (del.completion_date ? 0 : diff);
-                await supabase.from('lot_processes').update({ completed_quantity: newComp, input_quantity: newInp }).eq('id', proc.id);
+                await supabase.from('lot_processes').update({ completed_quantity: Math.max(0, newComp), input_quantity: Math.max(0, newInp) }).eq('id', proc.id);
 
-                // 支払管理との同期 (重要) - delivery_id で正確に特定
-                const payLine = paymentItems.find(pl => pl.lot_process_delivery_id === del.id);
-                if (payLine && (payLine.payments?.status === 'wip' || payLine.payments?.status === 'pre_payment')) {
-                    const unitPrice = payLine.unit_price; // 保存されている単価を使用
+                // 3. 支払明細と親データを修正
+                if (payLine) {
+                    const unitPrice = payLine.unit_price;
                     const newAmount = qty * unitPrice;
                     const diffAmount = newAmount - payLine.amount;
                     
-                    // 明細更新
                     await supabase.from('payment_items').update({ 
-                        good_quantity: qty,
-                        amount: newAmount
+                        good_quantity: qty, amount: newAmount
                     }).eq('id', payLine.id);
 
-                    // 親の支払合計を更新
                     if (payLine.payment_id) {
                         const { data: pay } = await supabase.from('payments').select('total_amount').eq('id', payLine.payment_id).single();
                         if (pay) {
                             await supabase.from('payments').update({ 
-                                total_amount: Number(pay.total_amount) + diffAmount 
+                                total_amount: Math.max(0, Number(pay.total_amount) + diffAmount)
                             }).eq('id', payLine.payment_id);
                         }
                     }
                 }
-            } else {
-                // 移動 (前または後へ)
+            } else if (adjustMode === "move_next") {
                 const currentGroup = proc.processes?.group_index || 0;
-                
-                // 同じグループの全工程テンプレートを取得 (マスタから)
-                const groupTemplates = processes
-                    .filter(t => (t.group_index || 0) === currentGroup)
-                    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-                
-                const currentTplIdx = groupTemplates.findIndex(t => t.id === proc.process_id);
-                if (currentTplIdx < 0) {
-                    showToast("error", "現在の工程テンプレートが見つかりません");
-                    setSaving(false);
-                    return;
-                }
+                const groupTemplates = processes.filter((t: any) => (t.group_index || 0) === currentGroup).sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0));
+                const currentTplIdx = groupTemplates.findIndex((t: any) => t.id === proc.process_id);
+                if (currentTplIdx < 0) throw new Error("現在の工程テンプレートが見つかりません");
 
-                const targetTplIdx = adjustMode === "move_prev" ? currentTplIdx - 1 : currentTplIdx + 1;
-                if (targetTplIdx < 0 || targetTplIdx >= groupTemplates.length) {
-                    showToast("error", `${adjustMode === "move_prev" ? "前" : "次"}の工程が存在しません`);
-                    setSaving(false);
-                    return;
-                }
-
-                const targetTemplate = groupTemplates[targetTplIdx];
-                // ロット内の既存レコードを探す
-                let targetProc = procs.find((p: any) => p.process_id === targetTemplate.id);
-
-                if (!targetProc) {
-                    // もしロット内にレコードがなければ新規作成
-                    const { data: newProc, error: insErr } = await supabase.from('lot_processes').insert({
-                        lot_id: lot.id,
-                        process_id: targetTemplate.id,
-                        status: 'pending',
-                        input_quantity: 0
-                    }).select().single();
-                    if (insErr) throw insErr;
-                    targetProc = newProc;
-                }
-
-                // 現プロセスの数量を減らす
-                const { error: e1 } = await supabase.from('lot_process_deliveries').update({ qty: del.qty - qty }).eq('id', del.id);
-                if (e1) throw e1;
-                await supabase.from('lot_processes').update({ input_quantity: proc.input_quantity - qty }).eq('id', proc.id);
-
-                // 支払管理側の調整 (wipステータスのものを枚数減らす)
-                const payLine = paymentItems.find(pl => pl.lot_process_delivery_id === del.id);
-                if (payLine && payLine.payments?.status === 'wip') {
-                    const newPayQty = Math.max(0, payLine.good_quantity - qty);
-                    const newAmount = newPayQty * payLine.unit_price;
-                    const diffAmount = newAmount - payLine.amount;
-
-                    await supabase.from('payment_items').update({
-                        good_quantity: newPayQty,
-                        amount: newAmount
-                    }).eq('id', payLine.id);
-
-                    // 親の支払合計を更新
-                    if (payLine.payment_id) {
-                        const { data: pay } = await supabase.from('payments').select('total_amount').eq('id', payLine.payment_id).single();
-                        if (pay) {
-                            await supabase.from('payments').update({ 
-                                total_amount: Number(pay.total_amount) + diffAmount 
-                            }).eq('id', payLine.payment_id);
-                        }
-                    }
-                }
-
-                // 次（または前）プロセスの数量を増やす
-                await supabase.from('lot_processes').update({
-                    input_quantity: targetProc.input_quantity + qty,
-                    subcontractor_id: targetSubId || targetProc.subcontractor_id,
-                    status: 'in_progress'
-                }).eq('id', targetProc.id);
-
-                // 新しい実績・支払レコードを作成
-                const { data: newDel } = await supabase.from('lot_process_deliveries').insert({
-                    lot_process_id: targetProc.id,
-                    qty: qty,
-                    delivery_date: new Date().toISOString().split('T')[0],
-                    due_date: del.due_date
-                }).select().single();
-
-                // 新しい支払明細作成 (routingService のロジックに近しいものをここで実行)
-                const { data: routeRate } = await supabase.from('process_subcontractor_rates').select('unit_price').eq('process_id', targetProc.process_id).eq('subcontractor_id', targetSubId || targetProc.subcontractor_id).maybeSingle();
-                const targetUnitPrice = routeRate?.unit_price || 0;
-                
-                // payment_id を取得または作成
-                const { data: existingPay } = await supabase.from('payments').select('id, total_amount').eq('subcontractor_id', targetSubId || targetProc.subcontractor_id).eq('status', 'wip').limit(1).maybeSingle();
-                let paymentId = existingPay?.id;
-                if (!paymentId) {
-                    const { data: newPay } = await supabase.from('payments').insert({
-                        subcontractor_id: targetSubId || targetProc.subcontractor_id,
-                        status: 'wip',
-                        period_start: new Date().toISOString().split('T')[0].substring(0, 7) + "-01",
-                        total_amount: 0
-                    }).select().single();
-                    paymentId = newPay.id;
+                const today = new Date().toISOString().split('T')[0];
+                if (currentTplIdx === groupTemplates.length - 1) {
+                    // 最終工程 => 在庫移動
+                    await moveToInventory(lot.id, proc.id, qty, "本社倉庫", today, lot.product_id);
                 } else {
-                    // 既存の支払額を更新
-                    await supabase.from('payments').update({
-                        total_amount: Number(existingPay.total_amount) + (qty * targetUnitPrice)
-                    }).eq('id', paymentId);
+                    const targetTemplate = groupTemplates[currentTplIdx + 1];
+                    const nextSubId = targetSubId || undefined;
+                    await moveForward(lot.id, proc.id, qty, today, today, del.due_date || today, targetTemplate.id, nextSubId);
                 }
-                await supabase.from('payment_items').insert({
-                    payment_id: paymentId,
-                    lot_process_id: targetProc.id,
-                    lot_process_delivery_id: newDel.id,
-                    good_quantity: qty,
-                    unit_price: targetUnitPrice,
-                    amount: qty * targetUnitPrice
-                });
+            } else if (adjustMode === "move_prev") {
+                const currentGroup = proc.processes?.group_index || 0;
+                const groupTemplates = processes.filter((t: any) => (t.group_index || 0) === currentGroup).sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0));
+                const currentTplIdx = groupTemplates.findIndex((t: any) => t.id === proc.process_id);
+                if (currentTplIdx <= 0) throw new Error("前工程が存在しません");
+
+                const today = new Date().toISOString().split('T')[0];
+                const prevTemplate = groupTemplates[currentTplIdx - 1];
+                const prevProcs = procs.filter((p: any) => p.process_id === prevTemplate.id);
+                const prevSubId = prevProcs.length > 0 ? prevProcs[0].subcontractor_id : undefined;
+
+                await moveBack(lot.id, proc.id, qty, today, del.due_date || today, prevTemplate.id, prevSubId);
             }
 
-            // ロットと受注のステータスを同期
-            await syncLotAndOrderStatus(lot.id);
+            if (adjustMode === "correct") {
+                await syncLotAndOrderStatus(lot.id);
+            }
 
             showToast("success", "調整を保存しました");
             setEditId(null);

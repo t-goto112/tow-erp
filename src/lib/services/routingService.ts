@@ -6,22 +6,34 @@ async function consumePartsIfAssembly(processId: string, templateId: string, qty
     if (tpl?.is_assembly_point) {
         const { data: lot } = await supabase.from('lots').select('product_id').eq('id', lotId).single();
         if (lot) {
-            const { data: partsInv } = await supabase
+            // 全ての「パーツ」在庫を取得（場所を問わず）
+            const { data: partsInvs } = await supabase
                 .from('inventory')
                 .select('*')
                 .eq('product_id', lot.product_id)
-                .eq('location', '仕掛パーツ置場')
-                .maybeSingle();
+                .eq('item_type', 'parts');
 
-            if (!partsInv || partsInv.quantity < qty) {
-                throw new Error(`パーツ在庫が不足しています (在庫: ${partsInv?.quantity || 0}, 必要: ${qty})。不足しているため${errorPrefix}できません。`);
+            const totalAvailable = (partsInvs || []).reduce((sum: number, inv: any) => sum + Number(inv.quantity), 0);
+
+            if (totalAvailable < qty) {
+                throw new Error(`パーツ在庫が不足しています (在庫: ${totalAvailable}, 必要: ${qty})。不足しているため${errorPrefix}できません。`);
             }
 
-            const newPartsQty = partsInv.quantity - qty;
-            if (newPartsQty <= 0) {
-                await supabase.from('inventory').delete().eq('id', partsInv.id);
-            } else {
-                await supabase.from('inventory').update({ quantity: newPartsQty }).eq('id', partsInv.id);
+            // 在庫を消費（数量の多いレコードから順に引く）
+            let remainingToConsume = qty;
+            const sortedInvs = [...(partsInvs || [])].sort((a: any, b: any) => Number(b.quantity) - Number(a.quantity));
+
+            for (const inv of sortedInvs) {
+                if (remainingToConsume <= 0) break;
+                const toSubtract = Math.min(remainingToConsume, Number(inv.quantity));
+                const newQty = Number(inv.quantity) - toSubtract;
+                remainingToConsume -= toSubtract;
+
+                if (newQty <= 0) {
+                    await supabase.from('inventory').delete().eq('id', inv.id);
+                } else {
+                    await supabase.from('inventory').update({ quantity: newQty }).eq('id', inv.id);
+                }
             }
         }
     }
@@ -296,7 +308,7 @@ export async function moveForward(
                 if (!wh) await supabase.from('warehouses').insert([{ name: targetLoc }]);
             }
 
-            const { data: existingInv } = await supabase.from('inventory').select('*').eq('product_id', lot.product_id).eq('location', targetLoc).maybeSingle();
+            const { data: existingInv } = await supabase.from('inventory').select('*').eq('product_id', lot.product_id).eq('location', targetLoc).eq('item_type', itemType).maybeSingle();
             if (existingInv) {
                 await supabase.from('inventory').update({ quantity: existingInv.quantity + qty }).eq('id', existingInv.id);
             } else {
@@ -462,7 +474,7 @@ export async function moveToInventory(
         if (!wh) await supabase.from('warehouses').insert([{ name: targetLocation }]);
     }
 
-    const { data: existingInvs } = await supabase.from('inventory').select('*').eq('product_id', productId).eq('location', targetLocation);
+    const { data: existingInvs } = await supabase.from('inventory').select('*').eq('product_id', productId).eq('location', targetLocation).eq('item_type', isPartsType ? 'parts' : 'finished');
     if (existingInvs && existingInvs.length > 0) {
         await supabase.from('inventory').update({ quantity: existingInvs[0].quantity + qty }).eq('id', existingInvs[0].id);
     } else {
