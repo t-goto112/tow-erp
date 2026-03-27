@@ -471,9 +471,34 @@ export default function RoutingPage() {
                     {/* 操作履歴 */}
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
                         <h4 className="font-bold text-sm text-slate-800 mb-3">操作履歴</h4>
-                        <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                            {/* History is currently disabled while transitioning to Supabase */}
-                            <p className="text-xs text-slate-400">開発中: 履歴は今後実装予定です。</p>
+                        <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                            {(() => {
+                                const deliveries = selectedProc?.lot_process_deliveries || [];
+                                if (deliveries.length === 0) {
+                                    return <p className="text-xs text-slate-400">履歴はありません</p>;
+                                }
+                                return [...deliveries].sort((a: any, b: any) => new Date(b.created_at || b.delivery_date || 0).getTime() - new Date(a.created_at || a.delivery_date || 0).getTime()).map((d: any, idx: number) => (
+                                    <div key={d.id || idx} className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex items-center justify-between">
+                                        <div>
+                                            <p className="text-xs font-bold text-slate-700">
+                                                {d.completion_date ? "納入 (完了)" : "投入 (発注/着手)"}
+                                            </p>
+                                            <p className="text-[10px] text-slate-500 mt-0.5">
+                                                {d.delivery_date} {d.due_date ? `(納期: ${d.due_date})` : ""}
+                                            </p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="font-bold text-sm text-blue-600">{d.qty}</span>
+                                            <span className="text-[10px] text-slate-500 ml-1">個</span>
+                                            {d.completion_date && (
+                                                <p className="text-[10px] text-emerald-600 mt-0.5 font-medium">
+                                                    {d.completion_date} 完了
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                ));
+                            })()}
                         </div>
                     </div>
                 </>

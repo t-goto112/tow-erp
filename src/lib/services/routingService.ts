@@ -455,7 +455,7 @@ export async function moveToInventory(
 
     const groupIndex = (leadProc.processes as any)?.group_index;
     const isPartsType = groupIndex > 0;
-    const targetLocation = isPartsType ? '仕掛パーツ置場' : warehouseName;
+    const targetLocation = warehouseName || (isPartsType ? '仕掛パーツ置場' : '未設定の倉庫');
 
     if (!isPartsType) {
         const { data: wh } = await supabase.from('warehouses').select('id').eq('name', targetLocation).maybeSingle();

@@ -43,8 +43,26 @@ export default function Dashboard() {
     const wipByLot = useMemo(() => {
        return (lots || []).filter(l => l.status !== "completed" || l.orders?.status !== "completed").map(lot => {
         // メイン工程 (group_index === 0) の仕掛品のみを集計
-        const mainProcesses = (lot.lot_processes || []).filter(p => p.processes?.group_index === 0).sort((a, b) => (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0));
+        const mainProcessesRaw = (lot.lot_processes || []).filter(p => p.processes?.group_index === 0);
+        
+        // 同じ工程・外注先でグループ化
+        const groupedProcs = new Map();
+        mainProcessesRaw.forEach(p => {
+            const key = `${p.process_id}-${p.subcontractor_id || 'none'}`;
+            if (!groupedProcs.has(key)) {
+                groupedProcs.set(key, { ...p, input_quantity: 0, completed_quantity: 0, loss_qty: 0, status: p.status });
+            }
+            const g = groupedProcs.get(key);
+            g.input_quantity += (p.input_quantity || 0);
+            g.completed_quantity += (p.completed_quantity || 0);
+            g.loss_qty += (p.loss_qty || 0);
+            if (p.status === 'in_progress') g.status = 'in_progress';
+            else if (p.status === 'pending' && g.status !== 'in_progress') g.status = 'pending';
+        });
+
+        const mainProcesses = Array.from(groupedProcs.values()).sort((a, b) => (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0));
         const wipQty = mainProcesses.reduce((s, p) => s + ((p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0)), 0);
+        
         return { ...lot, wipQty, mainProcesses };
     }).filter(l => l.wipQty > 0 || l.status === "pending" || l.status === "in_progress");
     }, [lots]);
@@ -99,7 +117,7 @@ export default function Dashboard() {
     // ガントチャートのロットグループ用データ
     const ganttLots = useMemo(() => {
         return lots.filter(l => l.status !== "completed" || l.orders?.status !== "completed").map(lot => {
-            const bars: { name: string; sub: string; start: string; end: string; color: string; isCurrent: boolean; total: number; wip: number; comp: number; }[] = [];
+            const groupedProcMap = new Map();
             (lot.lot_processes || []).forEach((proc: any) => {
                 const devs = proc.lot_process_deliveries || [];
                 if (devs.length === 0 && proc.status === "pending") return;
@@ -109,20 +127,36 @@ export default function Dashboard() {
                 const barEnd = ends[ends.length - 1] || "";
                 const isOverdue = barEnd && barEnd < todayStr && proc.status !== "completed";
                 const color = proc.status === "completed" ? "bg-emerald-400" : isOverdue ? "bg-red-400" : "bg-blue-400";
-
+                
                 const currQty = (proc.input_quantity || 0) - (proc.completed_quantity || 0) - (proc.loss_qty || 0);
-                bars.push({
-                    name: proc.processes?.name || "",
-                    sub: proc.subcontractors?.name || "",
-                    start: barStart,
-                    end: barEnd,
-                    color,
-                    isCurrent: proc.status === "in_progress",
-                    total: (proc.input_quantity || 0),
-                    wip: currQty,
-                    comp: (proc.completed_quantity || 0)
-                });
+                const key = `${proc.process_id}-${proc.subcontractor_id || 'none'}`;
+
+                if (!groupedProcMap.has(key)) {
+                    groupedProcMap.set(key, {
+                        name: proc.processes?.name || "",
+                        sub: proc.subcontractors?.name || "",
+                        start: barStart,
+                        end: barEnd,
+                        color,
+                        isCurrent: proc.status === "in_progress",
+                        total: (proc.input_quantity || 0),
+                        wip: currQty,
+                        comp: (proc.completed_quantity || 0),
+                        sort_order: proc.processes?.sort_order || 0
+                    });
+                } else {
+                    const g = groupedProcMap.get(key);
+                    if (barStart && barStart < g.start) g.start = barStart;
+                    if (barEnd && barEnd > g.end) g.end = barEnd;
+                    if (proc.status === 'in_progress') g.isCurrent = true;
+                    if (isOverdue) g.color = "bg-red-400";
+                    else if (proc.status === 'in_progress' && g.color !== "bg-red-400") g.color = "bg-blue-400";
+                    g.total += (proc.input_quantity || 0);
+                    g.wip += currQty;
+                    g.comp += (proc.completed_quantity || 0);
+                }
             });
+            const bars = Array.from(groupedProcMap.values()).sort((a, b) => a.sort_order - b.sort_order);
             return { lot, bars };
         });
     }, [lots, todayStr]);

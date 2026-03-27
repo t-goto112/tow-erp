@@ -93,8 +93,8 @@ export default function InventoryPage() {
         return Object.values(grouped)
             .filter(i => i.quantity > 0)
             .sort((a, b) => {
-                const codeA = a.products?.product_code || "";
-                const codeB = b.products?.product_code || "";
+                const codeA = (a.products as any)?.code || (a.products as any)?.product_code || "";
+                const codeB = (b.products as any)?.code || (b.products as any)?.product_code || "";
                 const codeCmp = codeA.localeCompare(codeB, undefined, { numeric: true });
                 if (codeCmp !== 0) return codeCmp;
                 
