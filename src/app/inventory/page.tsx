@@ -103,6 +103,12 @@ export default function InventoryPage() {
                 const nameCmp = nameA.localeCompare(nameB, undefined, { numeric: true });
                 if (nameCmp !== 0) return nameCmp;
                 
+                // 種別（完成品 / パーツ）でまとまるようにソート条件を追加
+                const typeA = a.item_type || "";
+                const typeB = b.item_type || "";
+                const typeCmp = typeA.localeCompare(typeB, undefined, { numeric: true });
+                if (typeCmp !== 0) return typeCmp;
+                
                 const locA = a.location || "";
                 const locB = b.location || "";
                 const locCmp = locA.localeCompare(locB, undefined, { numeric: true });

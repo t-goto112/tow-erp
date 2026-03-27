@@ -113,6 +113,7 @@ export interface SupabasePaymentItem {
     id: string;
     payment_id: string;
     lot_process_id: string;
+    lot_process_delivery_id: string | null;
     good_quantity: number;
     unit_price: number;
     amount: number;
@@ -186,7 +187,7 @@ export function useSupabaseData() {
             const { data: piData, error: piErr } = await supabase
                 .from('payment_items')
                 .select(`
-                    id, payment_id, lot_process_id, good_quantity, unit_price, amount, created_at,
+                    id, payment_id, lot_process_id, lot_process_delivery_id, good_quantity, unit_price, amount, created_at,
                     payments(status, period_start, subcontractors(name, id)),
                     lot_processes(unit_price_override, lots(lot_number), processes(name))
                 `)
