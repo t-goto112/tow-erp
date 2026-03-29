@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { User, Lock, Palette, BellRing, Loader2, LogOut } from "lucide-react";
+import { User, Palette, BellRing, Loader2, LogOut } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 
@@ -116,37 +116,6 @@ export default function MyPage() {
                 </div>
             </section>
 
-            {/* Password */}
-            <section className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden opacity-50">
-                <div className="p-6 border-b border-slate-100">
-                    <h5 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                        <Lock className="w-4 h-4 text-amber-500" />
-                        パスワード変更 (将来のアップデートで有効化)
-                    </h5>
-                </div>
-                <div className="p-6 space-y-5">
-                    <div>
-                        <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">
-                            現在のパスワード
-                        </label>
-                        <input type="password" placeholder="••••••••" disabled className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition" />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <div>
-                            <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">
-                                新しいパスワード
-                            </label>
-                            <input type="password" placeholder="最小8文字" disabled className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition" />
-                        </div>
-                        <div>
-                            <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">
-                                パスワード確認
-                            </label>
-                            <input type="password" placeholder="もう一度入力" disabled className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition" />
-                        </div>
-                    </div>
-                </div>
-            </section>
 
             {/* Notification */}
             <section className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden">
