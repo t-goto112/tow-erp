@@ -321,19 +321,19 @@ export default function RoutingPage() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div><label className="block text-[10px] font-black text-slate-400 mb-1">追加投入数量</label><input type="number" value={wipQty} onChange={e => setWipQty(e.target.value)} className="input-base" /></div>
-                        <div><label className="block text-[10px] font-black text-slate-400 mb-1">受注日 (参考)</label><input type="date" value={selectedLot?.created_at?.split('T')[0]} disabled className="input-base bg-slate-50 text-slate-400" /></div>
-                        <div><label className="block text-[10px] font-black text-slate-400 mb-1">着手日 *</label><input type="date" value={wipDeliveryDate} onChange={e => setWipDeliveryDate(e.target.value)} className="input-base" /></div>
-                        <div><label className="block text-[10px] font-black text-slate-400 mb-1">工程完了予定日 *</label><input type="date" value={wipDueDate} onChange={e => setWipDueDate(e.target.value)} className="input-base" /></div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+                        <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">追加投入数量</label><input type="number" value={wipQty} onChange={e => setWipQty(e.target.value)} className="input-base" /></div>
+                        <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">受注日 (参考)</label><input type="date" value={selectedLot?.created_at?.split('T')[0]} disabled className="input-base bg-slate-50 text-slate-400" /></div>
+                        <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">着手日 *</label><input type="date" value={wipDeliveryDate} onChange={e => setWipDeliveryDate(e.target.value)} className="input-base" /></div>
+                        <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">工程完了予定日 *</label><input type="date" value={wipDueDate} onChange={e => setWipDueDate(e.target.value)} className="input-base" /></div>
                         <div>
-                            <label className="block text-[10px] font-black text-slate-400 mb-1">外注先</label>
+                            <label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">外注先</label>
                             <select value={wipSub} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setWipSub(e.target.value)} className="select-base">
                                 <option value="">選択してください</option>
                                 {currentProcessSubs.map((s: any) => <option key={s.name} value={s.name}>{s.name} (標準:¥{s.unitPrice})</option>)}
                             </select>
                         </div>
-                        <div><label className="block text-[10px] font-black text-slate-400 mb-1">特値 (任意)</label><input type="number" value={wipOverride} onChange={e => setWipOverride(e.target.value)} placeholder="空欄=標準単価" className="input-base" /></div>
+                        <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">特値 (任意)</label><input type="number" value={wipOverride} onChange={e => setWipOverride(e.target.value)} placeholder="空欄=標準単価" className="input-base" /></div>
                     </div>
 
                     {canEdit && (
@@ -361,18 +361,18 @@ export default function RoutingPage() {
                         {/* 次工程へ送る */}
                         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
                             <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2"><ArrowRight className="w-4 h-4 text-blue-500" /> 次工程へ送る</h4>
-                            <div><label className="block text-[10px] font-black text-slate-400 mb-1">数量</label><input type="number" value={fwdQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdQty(e.target.value)} max={selectedProcCurrentQty} className="input-base" placeholder={`最大 ${selectedProcCurrentQty}`} /></div>
-                            <div><label className="block text-[10px] font-black text-slate-400 mb-1">現工程完了日 *</label><input type="date" value={fwdCompletionDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdCompletionDate(e.target.value)} className="input-base" /></div>
+                            <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">数量</label><input type="number" value={fwdQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdQty(e.target.value)} max={selectedProcCurrentQty} className="input-base" placeholder={`最大 ${selectedProcCurrentQty}`} /></div>
+                            <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">現工程完了日 *</label><input type="date" value={fwdCompletionDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdCompletionDate(e.target.value)} className="input-base" /></div>
                             {!isLastProcess && (
                                 <>
-                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1">次工程搬入日 *</label><input type="date" value={fwdDeliveryDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdDeliveryDate(e.target.value)} className="input-base" /></div>
-                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1">次工程完了予定日 *</label><input type="date" value={fwdDueDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdDueDate(e.target.value)} className="input-base" /></div>
+                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">次工程搬入日 *</label><input type="date" value={fwdDeliveryDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdDeliveryDate(e.target.value)} className="input-base" /></div>
+                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">次工程完了予定日 *</label><input type="date" value={fwdDueDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdDueDate(e.target.value)} className="input-base" /></div>
                                 </>
                             )}
                             {/* 外注先選択 */}
                             {!isLastProcess && nextProcessSubs.length > 0 && (
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 mb-1">次工程 外注先</label>
+                                    <label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">次工程 外注先</label>
                                     {nextProcessSubs.length === 1 ? (
                                         <input type="text" value={nextProcessSubs[0].name} disabled className="input-base bg-slate-50 text-slate-500" />
                                     ) : (
@@ -383,7 +383,7 @@ export default function RoutingPage() {
                                     )}
                                 </div>
                             )}
-                            <div><label className="block text-[10px] font-black text-slate-400 mb-1">特値 (任意)</label><input type="number" value={fwdOverride} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdOverride(e.target.value)} placeholder="空欄=標準単価" className="input-base" /></div>
+                            <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">特値 (任意)</label><input type="number" value={fwdOverride} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdOverride(e.target.value)} placeholder="空欄=標準単価" className="input-base" /></div>
 
                             {isLastProcess ? (
                                 <div className="pt-2 space-y-3 border-t border-slate-100 mt-2">
@@ -444,13 +444,13 @@ export default function RoutingPage() {
                             {selectedLot.lot_processes && selectedLot.lot_processes.findIndex((p: any) => p.id === selectedProcessId) > 0 && (
                                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
                                     <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2"><ArrowLeft className="w-4 h-4 text-amber-500" /> 差戻し</h4>
-                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1">数量</label><input type="number" value={backQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackQty(e.target.value)} max={selectedProcCurrentQty} className="input-base" /></div>
-                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1">差戻し日 *</label><input type="date" value={backDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackDate(e.target.value)} className="input-base" /></div>
-                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1">前工程完了予定日 *</label><input type="date" value={backDueDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackDueDate(e.target.value)} className="input-base" /></div>
+                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">数量</label><input type="number" value={backQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackQty(e.target.value)} max={selectedProcCurrentQty} className="input-base" /></div>
+                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">差戻し日 *</label><input type="date" value={backDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackDate(e.target.value)} className="input-base" /></div>
+                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">前工程完了予定日 *</label><input type="date" value={backDueDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackDueDate(e.target.value)} className="input-base" /></div>
                                     {/* 前工程 外注先選択 */}
                                     {prevProcessSubs.length > 0 && (
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 mb-1">前工程 外注先</label>
+                                            <label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">前工程 外注先</label>
                                             {prevProcessSubs.length === 1 ? (
                                                 <input type="text" value={prevProcessSubs[0].name} disabled className="input-base bg-slate-50 text-slate-500" />
                                             ) : (

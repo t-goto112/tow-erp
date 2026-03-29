@@ -172,17 +172,17 @@ export default function PaymentsPage() {
                 </div>
             )}
             {/* サマリー (範囲連動) */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3">
                 {(Object.keys(statusConfig) as StatusFilter[]).map(s => {
                     const cfg = statusConfig[s];
                     const Icon = cfg.icon;
                     const isActive = statusFilters.includes(s);
                     return (
                         <button key={s} onClick={() => toggleFilter(s)}
-                            className={`bg-white rounded-2xl border shadow-sm p-4 text-left transition-all ${isActive ? "border-blue-200 ring-2 ring-blue-100" : "border-slate-200 opacity-50"}`}>
-                            <div className="flex items-center gap-2 mb-2"><Icon className="w-4 h-4" /><span className="text-[10px] font-bold uppercase tracking-widest">{cfg.label}</span></div>
-                            <p className="text-xl font-black text-slate-800">{summary[s].count}<span className="text-xs text-slate-400 ml-1">件</span></p>
-                            <p className="text-xs text-slate-400 font-bold">¥{summary[s].total.toLocaleString()}</p>
+                            className={`bg-white rounded-xl md:rounded-2xl border shadow-sm p-3 md:p-4 text-left transition-all ${isActive ? "border-blue-200 ring-2 ring-blue-100" : "border-slate-200 opacity-50"}`}>
+                            <div className="flex items-center gap-1.5 md:gap-2 mb-1 md:mb-2"><Icon className="w-3.5 h-3.5 md:w-4 h-4" /><span className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest">{cfg.label}</span></div>
+                            <p className="text-lg md:text-xl font-black text-slate-800">{summary[s].count}<span className="text-[10px] md:text-xs text-slate-400 ml-1 font-normal">件</span></p>
+                            <p className="text-[10px] md:text-xs text-slate-400 font-bold">¥{summary[s].total.toLocaleString()}</p>
                         </button>
                     );
                 })}
@@ -218,16 +218,16 @@ export default function PaymentsPage() {
                         {isOpen && (
                             <div className="overflow-x-auto">
                             <table className="w-full text-sm min-w-[640px]">
-                                <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest font-bold">
+                                <thead className="bg-slate-50 text-[9px] md:text-[10px] text-slate-400 uppercase tracking-widest font-bold">
                                     <tr>
-                                        <th className="px-4 py-2 text-left">ロット</th>
-                                        <th className="px-4 py-2 text-left">工程</th>
-                                        <th className="px-4 py-2 text-right">数量</th>
-                                        <th className="px-4 py-2 text-right">単価</th>
-                                        <th className="px-4 py-2 text-right">金額</th>
-                                        <th className="px-4 py-2 text-left">完了日</th>
-                                        <th className="px-4 py-2 text-center">状態</th>
-                                        <th className="px-4 py-2"></th>
+                                        <th className="px-3 md:px-4 py-2 text-left">ロット</th>
+                                        <th className="px-3 md:px-4 py-2 text-left">工程</th>
+                                        <th className="px-3 md:px-4 py-2 text-right">数量</th>
+                                        <th className="px-3 md:px-4 py-2 text-right">単価</th>
+                                        <th className="px-3 md:px-4 py-2 text-right">金額</th>
+                                        <th className="px-3 md:px-4 py-2 text-left">完了日</th>
+                                        <th className="px-3 md:px-4 py-2 text-center">状態</th>
+                                        <th className="px-3 md:px-4 py-2"></th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100/60">
@@ -237,17 +237,17 @@ export default function PaymentsPage() {
                                         const canEditItem = pl.status === "wip" || pl.status === "pre_payment";
                                         return (
                                             <tr key={pl.id} className="hover:bg-slate-50/50 transition">
-                                                <td className="px-4 py-2 font-mono text-xs font-bold text-blue-600">{pl.lotNumber}</td>
-                                                <td className="px-4 py-2 text-slate-600">{pl.processName}</td>
-                                                <td className="px-4 py-2 text-right">
-                                                    {isEditing ? <input type="number" value={editQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditQty(e.target.value)} className="w-16 px-1 py-0.5 border border-slate-200 rounded text-xs text-right" /> : <span className="font-bold">{pl.qty}</span>}
+                                                <td className="px-3 md:px-4 py-2 font-mono text-[11px] md:text-xs font-bold text-blue-600 shrink-0">{pl.lotNumber}</td>
+                                                <td className="px-3 md:px-4 py-2 text-[11px] md:text-sm text-slate-600">{pl.processName}</td>
+                                                <td className="px-3 md:px-4 py-2 text-right">
+                                                    {isEditing ? <input type="number" value={editQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditQty(e.target.value)} className="w-16 px-1 py-0.5 border border-slate-200 rounded text-xs text-right" /> : <span className="font-bold text-[11px] md:text-sm">{pl.qty}</span>}
                                                 </td>
-                                                <td className="px-4 py-2 text-right">
-                                                    {isEditing ? <input type="number" value={editPrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditPrice(e.target.value)} placeholder={String(pl.unitPrice)} className="w-16 px-1 py-0.5 border border-slate-200 rounded text-xs text-right" /> : <span className={pl.unitPriceOverride ? "text-amber-600 font-bold" : "text-slate-500"}>¥{(pl.unitPrice || 0).toLocaleString()}</span>}
+                                                <td className="px-3 md:px-4 py-2 text-right">
+                                                    {isEditing ? <input type="number" value={editPrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditPrice(e.target.value)} placeholder={String(pl.unitPrice)} className="w-16 px-1 py-0.5 border border-slate-200 rounded text-xs text-right" /> : <span className={`text-[11px] md:text-sm ${pl.unitPriceOverride ? "text-amber-600 font-bold" : "text-slate-500"}`}>¥{(pl.unitPrice || 0).toLocaleString()}</span>}
                                                 </td>
-                                                <td className="px-4 py-2 text-right font-bold">¥{pl.amount.toLocaleString()}</td>
-                                                <td className="px-4 py-2 text-xs text-slate-400">{pl.completionDate}</td>
-                                                <td className="px-4 py-2 text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${st.color}`}>{st.label}</span></td>
+                                                <td className="px-3 md:px-4 py-2 text-right font-bold text-[11px] md:text-sm">¥{pl.amount.toLocaleString()}</td>
+                                                <td className="px-3 md:px-4 py-2 text-[10px] md:text-xs text-slate-400">{pl.completionDate}</td>
+                                                <td className="px-3 md:px-4 py-2 text-center"><span className={`px-2 py-0.5 rounded text-[9px] md:text-[10px] font-bold ${st.color}`}>{st.label}</span></td>
                                                 <td className="px-4 py-2">
                                                     <div className="flex items-center gap-1 justify-end">
                                                         {isEditing ? (

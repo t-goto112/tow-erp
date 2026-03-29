@@ -219,9 +219,9 @@ export default function MasterPage() {
                         <div key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition">
                             <div className="flex items-start justify-between mb-3">
                                 <div>
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className="font-mono text-xs font-bold text-blue-600">{p.code}</span>
-                                        <span className="font-bold text-slate-800">{p.name}</span>
+                                    <div className="flex items-center gap-2 mb-1 min-w-0">
+                                        <span className="font-mono text-xs font-bold text-blue-600 shrink-0">{p.code}</span>
+                                        <span className="font-bold text-slate-800 truncate">{p.name}</span>
                                     </div>
                                     <p className="text-xs text-slate-400">{groups.length}グループ | {groups.reduce((s: number, g: any) => s + g.templates.length, 0)}工程</p>
                                 </div>

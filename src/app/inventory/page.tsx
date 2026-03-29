@@ -164,10 +164,10 @@ export default function InventoryPage() {
                             {stockItems.map((item, index) => (
                                 <tr key={item.id || index} className="border-b border-slate-50 hover:bg-slate-50 transition-all group">
                                     <td className="px-4 py-3 font-mono text-xs text-slate-400">{item.products?.product_code}</td>
-                                    <td className="px-4 py-3">
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-bold text-slate-700">{item.products?.name}</span>
-                                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${item.item_type === 'finished' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
+                                    <td className="px-4 py-3 min-w-0">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <span className="font-bold text-slate-700 truncate">{item.products?.name}</span>
+                                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 ${item.item_type === 'finished' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
                                                 {item.item_type === 'finished' ? '完成品' : '仕掛パーツ'}
                                             </span>
                                         </div>
@@ -213,14 +213,14 @@ export default function InventoryPage() {
 
                         return (
                             <div key={lot.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-                                <div className="flex items-center gap-2 mb-3">
-                                    <span className="font-mono text-sm font-bold text-blue-600">{lot.lot_number}</span>
-                                    <span className="text-xs text-slate-500">{lot.products?.name}</span>
-                                    <span className="text-[10px] text-slate-400 font-bold ml-auto">受注数 {lot.quantity}個</span>
+                                <div className="flex flex-wrap items-center gap-2 mb-3">
+                                    <span className="font-mono text-xs md:text-sm font-bold text-blue-600 shrink-0">{lot.lot_number}</span>
+                                    <span className="text-[10px] md:text-xs text-slate-500 truncate max-w-[150px] md:max-w-none">{lot.products?.name}</span>
+                                    <span className="text-[9px] md:text-[10px] text-slate-400 font-bold ml-auto shrink-0">受注数 {lot.quantity}個</span>
                                 </div>
                                 {/* 工程別テーブル */}
-                                <div className="bg-slate-50 rounded-xl overflow-hidden border border-slate-100">
-                                    <table className="w-full text-xs">
+                                <div className="bg-slate-50 rounded-xl overflow-x-auto border border-slate-100">
+                                    <table className="w-full text-xs min-w-[500px]">
                                         <thead>
                                             <tr className="text-[9px] text-slate-400 uppercase font-bold">
                                                 <th className="px-3 py-2 text-left">工程</th>

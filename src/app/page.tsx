@@ -213,7 +213,7 @@ export default function Dashboard() {
 
                         {/* 日付ヘッダー */}
                         <div className="flex border-b border-slate-100 sticky top-0 bg-white z-20">
-                            <div className="w-[200px] shrink-0 px-4 py-2 text-[10px] font-bold text-slate-400 uppercase bg-white z-30 sticky left-0 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">ロット / 工程</div>
+                            <div className="w-[140px] md:w-[200px] shrink-0 px-3 md:px-4 py-2 text-[10px] font-bold text-slate-400 uppercase bg-white z-30 sticky left-0 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">ロット / 工程</div>
                             <div className="flex relative">
                                 {ganttDates.days.map((d: string, i: number) => {
                                     const dt = new Date(d);
@@ -235,10 +235,10 @@ export default function Dashboard() {
                         {ganttLots.map(({ lot, bars }) => (
                             <div key={lot.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition">
                                 <div className="flex items-center cursor-pointer sticky left-0 z-10 bg-white hover:bg-slate-50" onClick={() => setSelectedLotId(lot.id)}>
-                                    <div className="w-[200px] shrink-0 px-4 py-2 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="font-mono text-xs font-bold text-blue-600">{lot.lot_number}</span>
-                                            <span className="text-[10px] text-slate-500 truncate" title={lot.products?.name || ""}>{lot.products?.name || ""}</span>
+                                    <div className="w-[140px] md:w-[200px] shrink-0 px-3 md:px-4 py-2 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                                        <div className="flex items-center gap-1.5 overflow-hidden">
+                                            <span className="font-mono text-[10px] md:text-xs font-bold text-blue-600 shrink-0">{lot.lot_number}</span>
+                                            <span className="text-[9px] md:text-[10px] text-slate-500 truncate" title={lot.products?.name || ""}>{lot.products?.name || ""}</span>
                                             <ChevronRight className="w-3 h-3 text-slate-300 shrink-0 ml-auto" />
                                         </div>
                                     </div>
@@ -270,9 +270,9 @@ export default function Dashboard() {
                                             bar.color === "bg-blue-400" ? "from-blue-400 to-blue-500" :
                                                 "from-slate-300 to-slate-400";
                                     return (
-                                        <div key={bi} className="flex items-center">
-                                            <div className="w-[200px] shrink-0 px-4 pl-8 border-r border-slate-100 sticky left-0 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10">
-                                                <span className="text-[10px] text-slate-400 truncate block" title={bar.name}>{bar.name}</span>
+                                    <div className="flex items-center">
+                                            <div className="w-[140px] md:w-[200px] shrink-0 px-3 md:px-4 pl-4 md:pl-8 border-r border-slate-100 sticky left-0 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10">
+                                                <span className="text-[9px] md:text-[10px] text-slate-400 truncate block" title={bar.name}>{bar.name}</span>
                                             </div>
                                             <div className="relative h-7 flex-1 border-b border-transparent z-10">
                                                 <div className={`absolute top-1 rounded-full h-5 bg-gradient-to-r ${gradient} shadow-sm cursor-pointer hover:scale-[1.02] hover:brightness-110 transition-all z-10 flex items-center shadow-md`}
@@ -290,8 +290,8 @@ export default function Dashboard() {
                         ))}
 
                         {ganttDates.days.includes(todayStr) && (
-                            <div className="absolute top-0 bottom-0 border-l-2 border-red-400 z-20"
-                                style={{ left: 200 + ganttDates.days.indexOf(todayStr) * dayWidth }} />
+                            <div className="absolute top-0 bottom-0 border-l-2 border-red-400 z-20 pointer-events-none"
+                                style={{ left: (typeof window !== 'undefined' && window.innerWidth < 768 ? 140 : 200) + ganttDates.days.indexOf(todayStr) * dayWidth }} />
                         )}
                     </div>
                 </div>
@@ -310,9 +310,9 @@ export default function Dashboard() {
                                 className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hover:shadow-md hover:border-blue-200 transition cursor-pointer group">
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="font-mono text-sm font-bold text-blue-600">{lot.lot_number}</span>
-                                            <span className="text-xs text-slate-500">{lot.products?.name || ""}</span>
+                                        <div className="flex items-center gap-2 mb-1 min-w-0">
+                                            <span className="font-mono text-sm font-bold text-blue-600 shrink-0">{lot.lot_number}</span>
+                                            <span className="text-xs text-slate-500 truncate">{lot.products?.name || ""}</span>
                                         </div>
                                         <div className="flex gap-3 text-[10px] text-slate-400 font-bold">
                                             <span>受注数: {lot.quantity}</span>
@@ -352,12 +352,12 @@ export default function Dashboard() {
 
 function SummaryCard({ icon, label, value, sub, color }: { icon: React.ReactNode; label: string; value: string; sub: string; color: string }) {
     return (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex items-start gap-4">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${color}`}>{icon}</div>
-            <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
-                <p className="text-2xl font-black text-slate-800">{value}</p>
-                <p className="text-xs text-slate-400">{sub}</p>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 flex items-center md:items-start gap-3 md:gap-4">
+            <div className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-xl md:rounded-2xl flex items-center justify-center ${color}`}>{icon}</div>
+            <div className="min-w-0">
+                <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">{label}</p>
+                <p className="text-xl md:text-2xl font-black text-slate-800 truncate">{value}</p>
+                <p className="text-[10px] md:text-xs text-slate-400 truncate">{sub}</p>
             </div>
         </div>
     );
