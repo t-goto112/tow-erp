@@ -155,7 +155,8 @@ export default function InventoryPage() {
             {/* 完成品在庫（ロット記載なし） */}
             {tab === "stock" && (
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <table className="w-full text-sm">
+                    <div className="overflow-x-auto">
+                    <table className="w-full text-sm min-w-[600px]">
                         <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest font-bold">
                             <tr><th className="px-4 py-3 text-left">商品コード</th><th className="px-4 py-3 text-left">商品</th><th className="px-4 py-3 text-right">数量</th><th className="px-4 py-3 text-left">倉庫</th><th className="px-4 py-3"></th></tr>
                         </thead>
@@ -200,6 +201,7 @@ export default function InventoryPage() {
                             {stockItems.length === 0 && <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-400">完成品在庫はありません</td></tr>}
                         </tbody>
                     </table>
+                    </div>
                 </div>
             )}
 

@@ -216,7 +216,8 @@ export default function PaymentsPage() {
                             <span className="text-sm font-black text-slate-600">¥{subTotal.toLocaleString()}</span>
                         </button>
                         {isOpen && (
-                            <table className="w-full text-sm">
+                            <div className="overflow-x-auto">
+                            <table className="w-full text-sm min-w-[640px]">
                                 <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest font-bold">
                                     <tr>
                                         <th className="px-4 py-2 text-left">ロット</th>
@@ -269,6 +270,7 @@ export default function PaymentsPage() {
                                     })}
                                 </tbody>
                             </table>
+                            </div>
                         )}
                     </div>
                 );

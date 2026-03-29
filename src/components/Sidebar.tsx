@@ -13,6 +13,7 @@ import {
     User,
     Shield,
     Loader2,
+    X,
 } from "lucide-react";
 import { useSupabaseData } from "@/lib/useSupabaseData";
 
@@ -58,7 +59,12 @@ function UserProfileFooter({ profile, loading }: { profile: any; loading: boolea
     );
 }
 
-export default function Sidebar() {
+interface SidebarProps {
+    mobileOpen?: boolean;
+    onMobileClose?: () => void;
+}
+
+export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
     const pathname = usePathname();
     const { profile, loading } = useSupabaseData();
 
@@ -83,10 +89,15 @@ export default function Sidebar() {
         return isVisible(item.href);
     });
 
-    return (
-        <aside className="hidden md:flex w-64 flex-col bg-white border-r border-slate-200 shrink-0 z-10 h-full">
+    // Close mobile menu on route change
+    useEffect(() => {
+        if (onMobileClose) onMobileClose();
+    }, [pathname]);
+
+    const sidebarContent = (
+        <>
             <div className="p-6">
-                <Link href="/" className="flex items-center gap-3 group">
+                <Link href="/" className="flex items-center gap-3 group" onClick={onMobileClose}>
                     <div className="w-8 h-8 flex items-center justify-center border-2 border-blue-600 rounded-bl-xl rounded-tr-xl transform rotate-3 group-hover:scale-105 transition">
                         <span className="font-bold text-blue-600 text-lg tracking-tighter leading-none italic pr-0.5">
                             T
@@ -105,6 +116,7 @@ export default function Sidebar() {
                         <Link
                             key={item.href}
                             href={item.href}
+                            onClick={onMobileClose}
                             className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition ${active
                                 ? "bg-slate-100 text-blue-600 font-semibold"
                                 : "text-slate-500 hover:bg-slate-50"
@@ -127,6 +139,7 @@ export default function Sidebar() {
                         <Link
                             key={item.href}
                             href={item.href}
+                            onClick={onMobileClose}
                             className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition ${active
                                 ? "bg-slate-100 text-blue-600 font-semibold"
                                 : "text-slate-500 hover:bg-slate-50"
@@ -145,6 +158,36 @@ export default function Sidebar() {
             <div className="border-t border-slate-100 p-4">
                 <UserProfileFooter profile={profile} loading={loading} />
             </div>
-        </aside>
+        </>
+    );
+
+    return (
+        <>
+            {/* Desktop sidebar */}
+            <aside className="hidden md:flex w-64 flex-col bg-white border-r border-slate-200 shrink-0 z-10 h-full">
+                {sidebarContent}
+            </aside>
+
+            {/* Mobile drawer overlay */}
+            {mobileOpen && (
+                <div className="fixed inset-0 z-[100] md:hidden">
+                    {/* Backdrop */}
+                    <div
+                        className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+                        onClick={onMobileClose}
+                    />
+                    {/* Drawer */}
+                    <aside className="absolute left-0 top-0 bottom-0 w-72 flex flex-col bg-white shadow-2xl animate-in slide-in-from-left duration-200">
+                        <button
+                            onClick={onMobileClose}
+                            className="absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 rounded-full transition z-10"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+                        {sidebarContent}
+                    </aside>
+                </div>
+            )}
+        </>
     );
 }
