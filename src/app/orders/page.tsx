@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, ChevronRight, Loader2, Trash2 } from "lucide-react";
 import { showToast } from "@/components/Toast";
 import Modal from "@/components/Modal";
@@ -18,7 +19,19 @@ const statusLabels: Record<string, { label: string; color: string }> = {
 
 export default function OrdersPage() {
     const { orders, products, loading: dataLoading, profile, refresh } = useSupabaseData();
+    const router = useRouter();
     const canEdit = profile?.role === 'admin' || (profile?.permissions?.orders?.edit === true);
+
+    // 閲覧権限がない場合はアクセスブロック
+    useEffect(() => {
+        if (!dataLoading && profile && profile.role !== 'admin' && profile.permissions?.orders?.view === false) {
+            router.replace("/");
+        }
+    }, [dataLoading, profile, router]);
+
+    if (!dataLoading && profile && profile.role !== 'admin' && profile.permissions?.orders?.view === false) {
+        return null;
+    }
 
     const [isNewOpen, setIsNewOpen] = useState(false);
     const [detailOrder, setDetailOrder] = useState<SupabaseOrder | null>(null);

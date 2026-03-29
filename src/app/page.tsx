@@ -344,6 +344,7 @@ export default function Dashboard() {
                 paymentItems={paymentItems} 
                 processRates={processRates} 
                 processes={processes} 
+                profile={profile}
             />
         </div>
     );
@@ -363,14 +364,16 @@ function SummaryCard({ icon, label, value, sub, color }: { icon: React.ReactNode
 }
 
 // ロット詳細モーダル (e8d3afe UI 完全復元 + Supabase接続)
-function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates, processes }: { 
+function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates, processes, profile }: { 
     lot: any | null; 
     onClose: () => void; 
     refresh: () => void; 
     paymentItems: any[]; 
     processRates: any[]; 
     processes: any[];
+    profile: any;
 }) {
+    const canEdit = profile?.role === 'admin' || (profile?.permissions?.dashboard?.edit === true);
     const [editId, setEditId] = useState<string | null>(null);
     const [editQty, setEditQty] = useState("");
     const [adjustMode, setAdjustMode] = useState<"move_prev" | "move_next">("move_next");
@@ -472,7 +475,7 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates, pro
                                                 <span className="text-slate-400">納入:{del.delivery_date}</span>
                                                 {del.completion_date && <span className="text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">完了:{del.completion_date}</span>}
                                             </div>
-                                            {!isEd && (
+                                            {!isEd && canEdit && (
                                                 <button onClick={() => { setEditId(del.id); setEditQty(String(del.qty)); setAdjustMode("move_next"); setTargetSubId(""); }}
                                                     className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-blue-600">
                                                     <Edit2 size={12} />

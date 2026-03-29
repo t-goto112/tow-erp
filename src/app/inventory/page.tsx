@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Box, Layers, Edit2, Check, Loader2, MapPin } from "lucide-react";
 import { showToast } from "@/components/Toast";
 import Modal from "@/components/Modal";
@@ -10,7 +11,19 @@ import { adjustInventory, updateWarehouse } from "@/lib/services/inventoryServic
 export default function InventoryPage() {
     const [tab, setTab] = useState<"stock" | "wip">("stock");
     const { inventory, lots, loading, profile, refresh, warehouses } = useSupabaseData();
+    const router = useRouter();
     const canEdit = profile?.role === 'admin' || (profile?.permissions?.inventory?.edit === true);
+
+    // 閲覧権限がない場合はアクセスブロック
+    useEffect(() => {
+        if (!loading && profile && profile.role !== 'admin' && profile.permissions?.inventory?.view === false) {
+            router.replace("/");
+        }
+    }, [loading, profile, router]);
+
+    if (!loading && profile && profile.role !== 'admin' && profile.permissions?.inventory?.view === false) {
+        return null;
+    }
 
     const [adjustItem, setAdjustItem] = useState<SupabaseInventory | null>(null);
     const [warehouseEditItem, setWarehouseEditItem] = useState<SupabaseInventory | null>(null);

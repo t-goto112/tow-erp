@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { User, Palette, BellRing, Loader2, LogOut } from "lucide-react";
+import { User, Loader2, LogOut } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 
@@ -116,37 +116,6 @@ export default function MyPage() {
                 </div>
             </section>
 
-
-            {/* Notification */}
-            <section className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-100">
-                    <h5 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                        <BellRing className="w-4 h-4 text-emerald-500" />
-                        通知設定
-                    </h5>
-                </div>
-                <div className="p-6 space-y-5">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                <BellRing className="w-4 h-4 text-indigo-400" />
-                                納期アラート通知
-                            </p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">
-                                受注納期が近づいた際にメールで通知を受け取ります
-                            </p>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                defaultChecked
-                            />
-                            <div className="w-11 h-6 bg-slate-200 rounded-full peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all" />
-                        </label>
-                    </div>
-                </div>
-            </section>
 
             <button
                 onClick={handleSave}

@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Plus, Trash2, Edit2, Check, Loader2, ChevronRight, ArrowUp, ArrowDown, X, Package, Copy } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Plus, Trash2, Edit2, Check, Loader2, ChevronRight, ArrowUp, ArrowDown, X, Package, Copy, Database } from "lucide-react";
 import { showToast } from "@/components/Toast";
 import Modal from "@/components/Modal";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -22,8 +23,21 @@ export default function MasterPage() {
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const [step, setStep] = useState<1 | 2>(1);
     const [loading, setLoading] = useState(false);
-    const { profile } = useSupabaseData();
+    const { profile, loading: authLoading } = useSupabaseData();
+    const router = useRouter();
     const canEdit = profile?.role === 'admin' || (profile?.permissions?.master?.edit === true);
+
+    // 閲覧権限がない場合はアクセスブロック
+    useEffect(() => {
+        if (!authLoading && profile && profile.role !== 'admin' && profile.permissions?.master?.view === false) {
+            router.replace("/");
+        }
+    }, [authLoading, profile, router]);
+
+    if (!authLoading && profile && profile.role !== 'admin' && profile.permissions?.master?.view === false) {
+        return null;
+    }
+
     const [fetching, setFetching] = useState(true);
 
     // 商品フォーム

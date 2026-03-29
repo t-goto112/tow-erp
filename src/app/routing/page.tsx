@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { ArrowRight, ArrowLeft, AlertTriangle, Loader2, Check } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, ArrowLeft, AlertTriangle, Loader2, Check, ClipboardList } from "lucide-react";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { useSupabaseData, SupabaseLot, SupabaseLotProcess } from "@/lib/useSupabaseData";
@@ -9,7 +10,20 @@ import { moveForward, registerWip, moveBack, moveToInventory, shipAndInvoice, co
 
 export default function RoutingPage() {
     const { lots, inventory, processes, subcontractors, warehouses, processRates, loading: dataLoading, profile, refresh } = useSupabaseData();
+    const router = useRouter();
     const canEdit = profile?.role === 'admin' || (profile?.permissions?.routing?.edit === true);
+
+    // 閲覧権限がない場合はアクセスブロック
+    useEffect(() => {
+        if (!dataLoading && profile && profile.role !== 'admin' && profile.permissions?.routing?.view === false) {
+            router.replace("/");
+        }
+    }, [dataLoading, profile, router]);
+
+    if (!dataLoading && profile && profile.role !== 'admin' && profile.permissions?.routing?.view === false) {
+        return null;
+    }
+
     const [selectedLotId, setSelectedLotId] = useState("");
     const [selectedProcessId, setSelectedProcessId] = useState("");
 

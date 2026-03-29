@@ -1,9 +1,9 @@
-"use client";
-
 import React, { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Shield, Check, X, Eye, Edit2, Loader2 } from "lucide-react";
 import { showToast } from "@/components/Toast";
 import { supabase } from "@/lib/supabase";
+import { useSupabaseData } from "@/lib/useSupabaseData";
 
 const pageNames: Record<string, string> = {
     dashboard: "ダッシュボード",
@@ -24,9 +24,22 @@ interface UserProfile {
 }
 
 export default function AdminPage() {
+    const { profile: currentProfile, loading: profileLoading } = useSupabaseData();
+    const router = useRouter();
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [loading, setLoading] = useState(true);
     const [resetting, setResetting] = useState(false);
+
+    // 管理者以外はアクセスブロック
+    useEffect(() => {
+        if (!profileLoading && currentProfile && currentProfile.role !== 'admin') {
+            router.replace("/");
+        }
+    }, [profileLoading, currentProfile, router]);
+
+    if (!profileLoading && currentProfile && currentProfile.role !== 'admin') {
+        return null;
+    }
 
     const refresh = useCallback(async () => {
         try {

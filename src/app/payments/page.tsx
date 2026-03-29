@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { CheckCircle2, Clock, AlertCircle, ShieldCheck, Download, Edit2, X, Check, Undo2, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CheckCircle2, Clock, AlertCircle, ShieldCheck, Download, Edit2, X, Check, Undo2, ChevronDown, ChevronRight, Loader2, CreditCard } from "lucide-react";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { useSupabaseData } from "@/lib/useSupabaseData";
@@ -18,7 +19,20 @@ type StatusFilter = "wip" | "pre_payment" | "paid" | "confirmed";
 
 export default function PaymentsPage() {
     const { paymentItems, loading, profile, refresh } = useSupabaseData();
+    const router = useRouter();
     const canEdit = profile?.role === 'admin' || (profile?.permissions?.payments?.edit === true);
+
+    // 閲覧権限がない場合はアクセスブロック
+    useEffect(() => {
+        if (!loading && profile && profile.role !== 'admin' && profile.permissions?.payments?.view === false) {
+            router.replace("/");
+        }
+    }, [loading, profile, router]);
+
+    if (!loading && profile && profile.role !== 'admin' && profile.permissions?.payments?.view === false) {
+        return null;
+    }
+
     const [actionLoading, setActionLoading] = useState(false);
 
     // Map Supabase objects to flat list for UI
