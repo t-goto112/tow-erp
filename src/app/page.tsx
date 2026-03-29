@@ -373,7 +373,7 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates, pro
 }) {
     const [editId, setEditId] = useState<string | null>(null);
     const [editQty, setEditQty] = useState("");
-    const [adjustMode, setAdjustMode] = useState<"correct" | "move_prev" | "move_next">("correct");
+    const [adjustMode, setAdjustMode] = useState<"move_prev" | "move_next">("move_next");
     const [targetSubId, setTargetSubId] = useState("");
     const [saving, setSaving] = useState(false);
 
@@ -386,49 +386,7 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates, pro
             const qty = Number(editQty);
             const diff = qty - del.qty;
 
-            if (adjustMode === "correct") {
-                // 支払確定済みかチェック
-                const payLine = paymentItems.find((pl: any) => pl.lot_process_delivery_id === del.id);
-                if (payLine) {
-                    const payStatus = payLine.payments?.status;
-                    if (payStatus && payStatus !== 'wip' && payStatus !== 'pre_payment') {
-                        throw new Error(`支払管理側が確定済み（${payStatus}）のため修正できません。`);
-                    }
-                }
-
-                // 最終工程で完了済み(在庫移動済)の場合はアラートを出す（ユーザー要望）
-                if ((proc.processes?.group_index === 0 || proc.processes?.group_index === null) && del.completion_date) {
-                    alert("完成在庫については変動しないため在庫管理で修正してください。");
-                }
-
-                // 1. 直近の実績の数を修正
-                await supabase.from('lot_process_deliveries').update({ qty }).eq('id', del.id);
-
-                // 2. lot_processes の集計数を修正
-                const newComp = (proc.completed_quantity || 0) + (del.completion_date ? diff : 0);
-                const newInp = (proc.input_quantity || 0) + (del.completion_date ? 0 : diff);
-                await supabase.from('lot_processes').update({ completed_quantity: Math.max(0, newComp), input_quantity: Math.max(0, newInp) }).eq('id', proc.id);
-
-                // 3. 支払明細と親データを修正
-                if (payLine) {
-                    const unitPrice = payLine.unit_price;
-                    const newAmount = qty * unitPrice;
-                    const diffAmount = newAmount - payLine.amount;
-                    
-                    await supabase.from('payment_items').update({ 
-                        good_quantity: qty, amount: newAmount
-                    }).eq('id', payLine.id);
-
-                    if (payLine.payment_id) {
-                        const { data: pay } = await supabase.from('payments').select('total_amount').eq('id', payLine.payment_id).single();
-                        if (pay) {
-                            await supabase.from('payments').update({ 
-                                total_amount: Math.max(0, Number(pay.total_amount) + diffAmount)
-                            }).eq('id', payLine.payment_id);
-                        }
-                    }
-                }
-            } else if (adjustMode === "move_next") {
+            if (adjustMode === "move_next") {
                 const currentGroup = proc.processes?.group_index || 0;
                 const groupTemplates = processes.filter((t: any) => (t.group_index || 0) === currentGroup).sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0));
                 const currentTplIdx = groupTemplates.findIndex((t: any) => t.id === proc.process_id);
@@ -457,9 +415,7 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates, pro
                 await moveBack(lot.id, proc.id, qty, today, del.due_date || today, prevTemplate.id, prevSubId);
             }
 
-            if (adjustMode === "correct") {
-                await syncLotAndOrderStatus(lot.id);
-            }
+            
 
             showToast("success", "調整を保存しました");
             setEditId(null);
@@ -517,7 +473,7 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates, pro
                                                 {del.completion_date && <span className="text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">完了:{del.completion_date}</span>}
                                             </div>
                                             {!isEd && (
-                                                <button onClick={() => { setEditId(del.id); setEditQty(String(del.qty)); setAdjustMode("correct"); setTargetSubId(""); }}
+                                                <button onClick={() => { setEditId(del.id); setEditQty(String(del.qty)); setAdjustMode("move_next"); setTargetSubId(""); }}
                                                     className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-blue-600">
                                                     <Edit2 size={12} />
                                                 </button>
@@ -534,12 +490,6 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates, pro
                                                                 <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isSyncedStatus ? "bg-blue-100 text-blue-600" : "bg-emerald-100 text-emerald-600"}`}>
                                                                     支払:{payLine.payments?.status === "wip" ? "仕掛中" : payLine.payments?.status === "pre_payment" ? "支払前" : payLine.payments?.status === "paid" ? "支払済" : "確認済"}
                                                                 </span>
-                                                                {!isSyncedStatus && adjustMode === "correct" && (
-                                                                    <div className="flex items-center gap-1 text-amber-600" title="支払確定済みのため、金額は自動修正されません">
-                                                                        <AlertCircle size={10} />
-                                                                        <span className="text-[9px] font-bold">非連動</span>
-                                                                    </div>
-                                                                )}
                                                             </>
                                                         ) : (
                                                             <span className="text-[9px] text-slate-400 font-bold italic">支払情報なし</span>
@@ -554,9 +504,8 @@ function LotDetailModal({ lot, onClose, refresh, paymentItems, processRates, pro
                                                     <div>
                                                         <label className="block text-[9px] text-slate-400 mb-0.5">モード</label>
                                                         <select value={adjustMode} onChange={(e) => setAdjustMode(e.target.value as any)} className="select-base !py-1 text-xs">
-                                                            <option value="correct">修正</option>
-                                                            <option value="move_prev">差戻し</option>
                                                             <option value="move_next">送り</option>
+                                                            <option value="move_prev">差戻し</option>
                                                         </select>
                                                     </div>
                                                 </div>

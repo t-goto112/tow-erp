@@ -1,14 +1,17 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { User, Lock, Palette, BellRing, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { User, Lock, Palette, BellRing, Loader2, LogOut } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 
 export default function MyPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [loggingOut, setLoggingOut] = useState(false);
     const [profile, setProfile] = useState<{ id: string; name: string; email: string } | null>(null);
+    const router = useRouter();
 
     useEffect(() => {
         const fetchProfile = async () => {
@@ -182,6 +185,24 @@ export default function MyPage() {
                 className="w-full bg-slate-800 text-white font-bold py-4 rounded-2xl shadow-xl shadow-slate-800/20 hover:bg-slate-900 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "設定内容を保存する"}
+            </button>
+
+            <button
+                onClick={async () => {
+                    setLoggingOut(true);
+                    try {
+                        await supabase.auth.signOut();
+                        router.push("/login");
+                    } catch (err) {
+                        console.error("Logout error:", err);
+                        showToast("error", "ログアウトに失敗しました");
+                        setLoggingOut(false);
+                    }
+                }}
+                disabled={loggingOut}
+                className="w-full bg-white text-red-500 border border-red-200 font-bold py-4 rounded-2xl hover:bg-red-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                {loggingOut ? <Loader2 className="w-4 h-4 animate-spin" /> : <><LogOut className="w-4 h-4" /> ログアウト</>}
             </button>
         </div>
     );

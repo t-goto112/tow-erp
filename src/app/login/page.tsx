@@ -60,9 +60,6 @@ export default function LoginPage() {
                             </span>
                         </div>
                         <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase font-sans">TOWMEI</h1>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-4 bg-slate-100 px-4 py-1.5 rounded-full">
-                            Industrial OS V5.0
-                        </p>
                     </div>
 
                     <form onSubmit={handleLogin} className="space-y-6">
@@ -131,9 +128,6 @@ export default function LoginPage() {
             <div className="mt-12 flex gap-10 text-[11px] text-slate-400 font-black uppercase tracking-[0.2em] relative z-10">
             </div>
 
-            <div className="mt-6 text-[10px] text-slate-300 font-medium">
-                Version 5.8.2-stable
-            </div>
         </div>
     );
 }
