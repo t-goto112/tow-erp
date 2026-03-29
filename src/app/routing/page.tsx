@@ -312,7 +312,7 @@ export default function RoutingPage() {
             </div>
 
             {selectedProc && (needsWipRegistration || (isFirstProcessForWip && selectedProcCurrentQty > 0)) && (
-                <div className="bg-white rounded-2xl border border-blue-100 shadow-sm p-6 space-y-4 animate-in slide-in-from-top-4 duration-500">
+                <div className="bg-white rounded-2xl border border-blue-100 shadow-sm p-4 md:p-6 space-y-4 animate-in slide-in-from-top-4 duration-500">
                     <div className="flex items-center gap-3 border-b border-blue-50 pb-4">
                         <div className="bg-blue-600 p-2 rounded-lg text-white"><Loader2 className="w-5 h-5" /></div>
                         <div>
@@ -359,7 +359,7 @@ export default function RoutingPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* 次工程へ送る */}
-                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-3">
                             <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2"><ArrowRight className="w-4 h-4 text-blue-500" /> 次工程へ送る</h4>
                             <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">数量</label><input type="number" value={fwdQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdQty(e.target.value)} max={selectedProcCurrentQty} className="input-base" placeholder={`最大 ${selectedProcCurrentQty}`} /></div>
                             <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">現工程完了日 *</label><input type="date" value={fwdCompletionDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdCompletionDate(e.target.value)} className="input-base" /></div>
@@ -442,7 +442,7 @@ export default function RoutingPage() {
                         {/* 差戻し + ロス */}
                         <div className="space-y-4">
                             {selectedLot.lot_processes && selectedLot.lot_processes.findIndex((p: any) => p.id === selectedProcessId) > 0 && (
-                                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+                                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-3">
                                     <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2"><ArrowLeft className="w-4 h-4 text-amber-500" /> 差戻し</h4>
                                     <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">数量</label><input type="number" value={backQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackQty(e.target.value)} max={selectedProcCurrentQty} className="input-base" /></div>
                                     <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">差戻し日 *</label><input type="date" value={backDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackDate(e.target.value)} className="input-base" /></div>
@@ -471,7 +471,7 @@ export default function RoutingPage() {
                             )}
 
                             {selectedProcCurrentQty > 0 && (
-                                <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-5 space-y-3">
+                                <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-4 md:p-5 space-y-3">
                                     <h4 className="font-bold text-sm text-red-600 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> ロス確定</h4>
                                     <p className="text-xs text-slate-500">現在数 {selectedProcCurrentQty}個 を廃棄(ロス)として確定します。</p>
                                     {canEdit && (
@@ -483,7 +483,7 @@ export default function RoutingPage() {
                     </div>
 
                     {/* 操作履歴 */}
-                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5">
                         <h4 className="font-bold text-sm text-slate-800 mb-3">操作履歴</h4>
                         <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
                             {(() => {

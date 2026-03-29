@@ -38,11 +38,19 @@ body {
 
 @layer components {
   .input-base {
-    @apply w-full bg-slate-50 border border-slate-200 rounded-xl md:rounded-2xl px-3.5 py-2.5 md:px-5 md:py-3.5 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white transition-all duration-300 min-w-0;
+    @apply w-full max-w-full bg-slate-50 border border-slate-200 rounded-xl md:rounded-2xl px-3.5 py-2.5 md:px-5 md:py-3.5 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white transition-all duration-300 min-w-0;
   }
 
   .select-base {
-    @apply w-full bg-slate-50 border border-slate-200 rounded-xl md:rounded-2xl px-3.5 py-2.5 md:px-5 md:py-3.5 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white transition-all duration-300 appearance-none cursor-pointer min-w-0;
+    @apply w-full max-w-full bg-slate-50 border border-slate-200 rounded-xl md:rounded-2xl px-3.5 py-2.5 md:px-5 md:py-3.5 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white transition-all duration-300 appearance-none cursor-pointer min-w-0;
+  }
+
+  /* type="date" のブラウザ規定の最小幅を抑え、コンテナに収まるようにする */
+  input[type="date"] {
+    min-width: 0;
+    -webkit-appearance: none;
+    display: inline-flex;
+    align-items: center;
   }
 
   .glass-card {
