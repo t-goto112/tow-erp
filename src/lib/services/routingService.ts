@@ -102,13 +102,9 @@ export async function syncLotAndOrderStatus(lotId: string) {
             await supabase.from('lots').update({ status: 'completed' }).eq('id', lotId);
         }
         if (lot.order_id) {
-            const { data: siblingLots } = await supabase.from('lots').select('status').eq('order_id', lot.order_id);
-            if (siblingLots && siblingLots.every((l: any) => l.status === 'completed')) {
-                const { data: ord } = await supabase.from('orders').select('status').eq('id', lot.order_id).single();
-                if (ord && ord.status !== 'completed') {
-                    await supabase.from('orders').update({ status: 'completed' }).eq('id', lot.order_id);
-                }
-            }
+            // 受注の自動完了（生産完了ベース）は廃止し、出荷完了（shipAndInvoice等）ベースに統一するため
+            // ここでの受注ステータス更新は行わない。
+            // これにより、出荷が完了するまで「受注残高」に金額が残り続ける。
         }
     } else if (anyInProgress) {
         if (lot.status === 'created' || lot.status === 'pending' || lot.status === 'completed') {
