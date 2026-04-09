@@ -14,6 +14,7 @@ import {
     Shield,
     Loader2,
     X,
+    TrendingDown,
 } from "lucide-react";
 import { useSupabaseData } from "@/lib/useSupabaseData";
 
@@ -26,6 +27,7 @@ const navItems = [
 
 const subNavItems = [
     { href: "/routing", icon: ClipboardEdit, label: "工程実績・納入" },
+    { href: "/loss-rate", icon: TrendingDown, label: "ロス率分析" },
     { href: "/master", icon: Database, label: "マスタ管理" },
     { href: "/admin", icon: Shield, label: "管理者設定" },
 ];
