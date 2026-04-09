@@ -14,6 +14,7 @@ const pageNames: Record<string, string> = {
     payments: "支払管理",
     routing: "工程実績",
     "loss-rate": "ロス率分析",
+    schedule: "日程予測",
     master: "マスタ管理",
     admin: "管理者設定",
 };
