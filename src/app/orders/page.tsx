@@ -166,6 +166,11 @@ export default function OrdersPage() {
                 {filtered.map(order => {
                     const st = statusLabels[order.status] || statusLabels.pending;
                     const total = order.order_items?.reduce((s, i) => s + i.quantity * i.unit_price, 0) || 0;
+                    const firstItem = order.order_items?.[0];
+                    const itemName = firstItem?.products?.name || "";
+                    const orderQty = firstItem?.quantity || 0;
+                    const shippedQty = firstItem?.shipped_quantity || 0;
+                    const remainQty = Math.max(0, orderQty - shippedQty);
                     return (
                         <div key={order.id} onClick={() => setDetailOrder(order)} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md hover:border-blue-200 transition cursor-pointer group">
                             <div className="flex items-center justify-between mb-2">
@@ -180,8 +185,14 @@ export default function OrdersPage() {
                             <div className="flex gap-3 text-[10px] text-slate-400 font-bold mt-1">
                                 <span>納期: {order.due_date}</span>
                                 {total > 0 && <span>合計: ¥{total.toLocaleString()}</span>}
-                                <span>{order.order_items?.length || 0}品目</span>
                             </div>
+                            {itemName && (
+                                <div className="flex gap-3 text-[10px] font-bold mt-1.5">
+                                    <span className="text-slate-500">{itemName}</span>
+                                    <span className="text-slate-400">受注数: {orderQty.toLocaleString()}</span>
+                                    <span className={remainQty > 0 ? "text-amber-600" : "text-emerald-600"}>残り: {remainQty.toLocaleString()}</span>
+                                </div>
+                            )}
                         </div>
                     );
                 })}
@@ -237,7 +248,7 @@ export default function OrdersPage() {
                                 <input type="number" placeholder="単価" value={item.unitPrice || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const arr = [...formItems]; arr[i].unitPrice = Number(e.target.value); setFormItems(arr); }} className="input-base w-full sm:w-16 shrink-0 px-2 text-xs" disabled={isEcOrDirect} />
                             </div>
                         ))}
-                        <button type="button" onClick={() => setFormItems(prev => [...prev, { product: "", quantity: 0, unitPrice: 0, shipped_quantity: 0 }])} className="text-[10px] text-blue-600 font-bold hover:underline">+ 品目を追加</button>
+
                     </div>
                     <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">備考</label><textarea value={formNotes} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormNotes(e.target.value)} rows={2} className="input-base" /></div>
                     <button onClick={handleCreate} disabled={loading} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2">
