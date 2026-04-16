@@ -6,7 +6,7 @@ import { CalendarClock, Download, Loader2, ArrowUpDown, ArrowDown, ArrowUp, Aler
 import { showToast } from "@/components/Toast";
 import { useSupabaseData } from "@/lib/useSupabaseData";
 
-type SortKey = "lotNumber" | "productName" | "lastCompletionDate" | "totalPayment";
+type SortKey = "lotNumber" | "productName" | "totalPayment";
 type SortDir = "asc" | "desc";
 
 interface ProcessSchedule {
@@ -17,7 +17,7 @@ interface ProcessSchedule {
     avgDaysPerUnit: number;
     unitPrice: number;
     payment: number;
-    dataCount: number; // 直近何件の実績から算出したか
+    canCalculate: boolean;
 }
 
 interface LotSchedule {
@@ -28,45 +28,44 @@ interface LotSchedule {
     quantity: number;
     createdAt: string;
     processes: ProcessSchedule[];
-    lastCompletionDate: string;
     totalPayment: number;
-    hasData: boolean; // 実績データが存在するか
+    canCalculate: boolean;
 }
 
 export default function SchedulePage() {
-    const { lots, processes, processRates, loading, profile } = useSupabaseData();
+    const { lots, orders, processes, processRates, loading, profile } = useSupabaseData();
     const router = useRouter();
 
-    const [sortKey, setSortKey] = useState<SortKey>("lastCompletionDate");
+    const [sortKey, setSortKey] = useState<SortKey>("lotNumber");
     const [sortDir, setSortDir] = useState<SortDir>("asc");
+    const [dateFrom, setDateFrom] = useState("");
+    const [dateTo, setDateTo] = useState("");
 
-    // 閲覧権限がない場合はアクセスブロック
+    // 閲覧権限チェック
     useEffect(() => {
-        if (!loading && profile && profile.role !== 'admin' && profile.permissions?.schedule?.view === false) {
+        if (!loading && profile && profile.role !== 'admin' && (profile.permissions as any)?.schedule?.view === false) {
             router.replace("/");
         }
     }, [loading, profile, router]);
 
-    if (!loading && profile && profile.role !== 'admin' && profile.permissions?.schedule?.view === false) {
+    if (!loading && profile && profile.role !== 'admin' && (profile.permissions as any)?.schedule?.view === false) {
         return null;
     }
 
     const handleSort = (key: SortKey) => {
         if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
-        else { setSortKey(key); setSortDir(key === "lastCompletionDate" ? "asc" : "desc"); }
+        else { setSortKey(key); setSortDir("asc"); }
     };
 
-    // ━━━━━━━━━━━━ 商品×工程ごとの平均リードタイム算出(直近5件) ━━━━━━━━━━━━
+    // ━━━ 商品×工程ごとの平均リードタイム算出(直近5件、あるだけ使う) ━━━
     const avgLeadTimes = useMemo(() => {
-        // key: `${product_id}__${process_id}` => { totalDays, totalQty, count, records[] }
-        const map = new Map<string, { records: { daysPerUnit: number }[] }>();
+        const map = new Map<string, { records: number[] }>();
 
         lots.forEach((lot: any) => {
             const productId = lot.product_id;
             (lot.lot_processes || []).forEach((lp: any) => {
                 if (!lp.process_id) return;
-                const deliveries = lp.lot_process_deliveries || [];
-                deliveries.forEach((d: any) => {
+                (lp.lot_process_deliveries || []).forEach((d: any) => {
                     if (!d.delivery_date || !d.completion_date || d.qty <= 0) return;
                     const start = new Date(d.delivery_date);
                     const end = new Date(d.completion_date);
@@ -75,63 +74,86 @@ export default function SchedulePage() {
 
                     const key = `${productId}__${lp.process_id}`;
                     if (!map.has(key)) map.set(key, { records: [] });
-                    map.get(key)!.records.push({ daysPerUnit });
+                    map.get(key)!.records.push(daysPerUnit);
                 });
             });
         });
 
-        // 直近5件のみ使用
         const result = new Map<string, { avgDaysPerUnit: number; dataCount: number }>();
         map.forEach((val, key) => {
-            const recent = val.records.slice(-5);
-            const avg = recent.reduce((s, r) => s + r.daysPerUnit, 0) / recent.length;
+            const recent = val.records.slice(-5); // 直近5件(5件未満ならあるだけ)
+            const avg = recent.reduce((s, r) => s + r, 0) / recent.length;
             result.set(key, { avgDaysPerUnit: avg, dataCount: recent.length });
         });
         return result;
     }, [lots]);
 
-    // ━━━━━━━━━━━━ ロットごとのスケジュール予測 ━━━━━━━━━━━━
+    // ━━━ ロットごとのスケジュール予測 ━━━
     const schedules = useMemo<LotSchedule[]>(() => {
+        // order_itemsからquantityを取得するためのマップ
+        const orderItemMap = new Map<string, number>();
+        orders.forEach((o: any) => {
+            (o.order_items || []).forEach((oi: any) => {
+                orderItemMap.set(oi.id, oi.quantity || 0);
+            });
+        });
+
         return lots
             .filter((lot: any) => lot.status !== "completed" && lot.status !== "cancelled")
             .map((lot: any) => {
                 const productId = lot.product_id;
                 const productName = lot.products?.name || "不明";
-                const quantity = lot.quantity || 0;
+                // quantity: 全て新規受注登録(order_items)での数字を参照させる
+                const orderItemQty = lot.order_item_id ? (orderItemMap.get(lot.order_item_id) || 0) : 0;
+                const quantity = orderItemQty;
                 const createdAt = lot.created_at ? lot.created_at.split("T")[0] : new Date().toISOString().split("T")[0];
 
-                // この商品のメイン工程テンプレート(group_index=0)をsort_order順に取得
+                // 全工程テンプレートをgroup_index順、sort_order順に取得
                 const templates = processes
-                    .filter((p: any) => p.product_id === productId && (p.group_index || 0) === 0)
-                    .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0));
+                    .filter((p: any) => p.product_id === productId)
+                    .sort((a: any, b: any) => {
+                        if ((a.group_index || 0) !== (b.group_index || 0)) return (a.group_index || 0) - (b.group_index || 0);
+                        return (a.sort_order || 0) - (b.sort_order || 0);
+                    });
 
+                let currentGroupIndex = -1;
                 let currentDate = createdAt;
-                let hasData = false;
+                let canCalculateAll = true;
                 const processSchedules: ProcessSchedule[] = [];
 
                 templates.forEach((tmpl: any) => {
+                    const groupIndex = tmpl.group_index || 0;
+                    if (currentGroupIndex !== groupIndex) {
+                        currentGroupIndex = groupIndex;
+                        currentDate = createdAt; // 各グループ(メイン/パーツ)の起点を受注登録日にリセット
+                    }
                     const key = `${productId}__${tmpl.id}`;
                     const leadTime = avgLeadTimes.get(key);
 
-                    // 登録単価を取得(process_subcontractor_ratesから最初に見つかった単価)
-                    const rate = processRates.find((r: any) => r.process_id === tmpl.id);
-                    const unitPrice = rate?.unit_price || 0;
+                    // 単価: この工程の登録単価のうち最も高いものを採用
+                    const rates = processRates.filter((r: any) => r.process_id === tmpl.id);
+                    const unitPrice = rates.length > 0
+                        ? Math.max(...rates.map((r: any) => r.unit_price || 0))
+                        : 0;
 
-                    let avgDays: number;
-                    let dataCount = 0;
-                    if (leadTime) {
-                        avgDays = leadTime.avgDaysPerUnit;
-                        dataCount = leadTime.dataCount;
-                        hasData = true;
-                    } else {
-                        // 実績データなし → デフォルト: 1本あたり0.5日（仮値）
-                        avgDays = 0.5;
+                    if (!leadTime) {
+                        // 実績0件 → 算出不可
+                        canCalculateAll = false;
+                        processSchedules.push({
+                            processName: tmpl.name,
+                            sortOrder: tmpl.sort_order || 0,
+                            estimatedStartDate: currentDate,
+                            estimatedEndDate: "",
+                            avgDaysPerUnit: 0,
+                            unitPrice,
+                            payment: quantity * unitPrice,
+                            canCalculate: false,
+                        });
+                        return; // 次工程の開始日は不明のまま
                     }
 
-                    const totalDays = Math.max(1, Math.ceil(avgDays * quantity));
+                    const totalDays = Math.max(1, Math.ceil(leadTime.avgDaysPerUnit * quantity));
                     const startDate = currentDate;
-
-                    // 完了予定日を計算（土日考慮なし）
                     const endDt = new Date(startDate);
                     endDt.setDate(endDt.getDate() + totalDays);
                     const endDate = endDt.toISOString().split("T")[0];
@@ -141,19 +163,14 @@ export default function SchedulePage() {
                         sortOrder: tmpl.sort_order || 0,
                         estimatedStartDate: startDate,
                         estimatedEndDate: endDate,
-                        avgDaysPerUnit: avgDays,
+                        avgDaysPerUnit: leadTime.avgDaysPerUnit,
                         unitPrice,
                         payment: quantity * unitPrice,
-                        dataCount,
+                        canCalculate: true,
                     });
 
-                    // 次の工程の開始日 = この工程の完了日
                     currentDate = endDate;
                 });
-
-                const lastDate = processSchedules.length > 0
-                    ? processSchedules[processSchedules.length - 1].estimatedEndDate
-                    : createdAt;
 
                 const totalPayment = processSchedules.reduce((s, p) => s + p.payment, 0);
 
@@ -165,41 +182,52 @@ export default function SchedulePage() {
                     quantity,
                     createdAt,
                     processes: processSchedules,
-                    lastCompletionDate: lastDate,
                     totalPayment,
-                    hasData,
+                    canCalculate: canCalculateAll && processSchedules.length > 0,
                 };
             });
-    }, [lots, processes, processRates, avgLeadTimes]);
+    }, [lots, orders, processes, processRates, avgLeadTimes]);
+
+    // 日付フィルタ（工程の完了目安日に基づく）
+    const filtered = useMemo(() => {
+        if (!dateFrom && !dateTo) return schedules;
+        return schedules.filter(lot =>
+            lot.processes.some(p => {
+                if (!p.estimatedEndDate) return false;
+                if (dateFrom && p.estimatedEndDate < dateFrom) return false;
+                if (dateTo && p.estimatedEndDate > dateTo) return false;
+                return true;
+            })
+        );
+    }, [schedules, dateFrom, dateTo]);
 
     // ソート
     const sorted = useMemo(() => {
-        const data = [...schedules];
+        const data = [...filtered];
         data.sort((a, b) => {
             let aVal: any, bVal: any;
             switch (sortKey) {
                 case "lotNumber": aVal = a.lotNumber; bVal = b.lotNumber; break;
                 case "productName": aVal = a.productName; bVal = b.productName; break;
-                case "lastCompletionDate": aVal = a.lastCompletionDate; bVal = b.lastCompletionDate; break;
                 case "totalPayment": aVal = a.totalPayment; bVal = b.totalPayment; break;
-                default: aVal = a.lastCompletionDate; bVal = b.lastCompletionDate;
+                default: aVal = a.lotNumber; bVal = b.lotNumber;
             }
             if (typeof aVal === "string") return sortDir === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
             return sortDir === "asc" ? aVal - bVal : bVal - aVal;
         });
         return data;
-    }, [schedules, sortKey, sortDir]);
+    }, [filtered, sortKey, sortDir]);
 
     // CSV出力
     const handleExportCSV = () => {
         const rows: string[] = [];
-        const headers = ["ロット番号", "商品名", "数量", "工程名", "搬入目安日", "完了目安日", "単価", "支払予定額", "実績件数"];
+        const headers = ["ロット番号", "商品名", "数量", "工程名", "搬入目安日", "完了目安日", "単価", "支払予定額"];
         rows.push(headers.join(","));
 
         sorted.forEach(lot => {
             lot.processes.forEach(p => {
                 rows.push(
-                    [lot.lotNumber, lot.productName, lot.quantity, p.processName, p.estimatedStartDate, p.estimatedEndDate, p.unitPrice, p.payment, p.dataCount > 0 ? `直近${p.dataCount}件` : "仮値"]
+                    [lot.lotNumber, lot.productName, lot.quantity, p.processName, p.estimatedStartDate, p.canCalculate ? p.estimatedEndDate : "算出不可", p.unitPrice, p.payment]
                         .map(v => `"${v}"`)
                         .join(",")
                 );
@@ -231,7 +259,7 @@ export default function SchedulePage() {
     }
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="space-y-4 animate-in fade-in duration-300">
             {/* ヘッダー */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -248,33 +276,35 @@ export default function SchedulePage() {
                 </button>
             </div>
 
-            {/* サマリー */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <MiniCard label="対象ロット" value={`${sorted.length}件`} />
-                <MiniCard label="実績あり" value={`${sorted.filter(s => s.hasData).length}件`} />
-                <MiniCard label="支払予定合計" value={`¥${sorted.reduce((s, l) => s + l.totalPayment, 0).toLocaleString()}`} />
-                <MiniCard label="最遠完了予定" value={sorted.length > 0 ? sorted.reduce((max, l) => l.lastCompletionDate > max ? l.lastCompletionDate : max, "0000-00-00") : "-"} />
+            {/* 日付フィルタ */}
+            <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5 text-xs">
+                    <span className="text-slate-400 font-bold">完了目安日:</span>
+                    <input type="date" value={dateFrom} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDateFrom(e.target.value)} className="border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-xs" />
+                    <span className="text-slate-400">〜</span>
+                    <input type="date" value={dateTo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDateTo(e.target.value)} className="border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-xs" />
+                    {(dateFrom || dateTo) && (
+                        <button onClick={() => { setDateFrom(""); setDateTo(""); }} className="text-[10px] text-slate-400 hover:text-red-500 font-bold ml-1 transition">クリア</button>
+                    )}
+                </div>
+                <span className="text-[10px] text-slate-400 font-bold ml-auto">{sorted.length}件</span>
             </div>
 
             {/* テーブル */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm min-w-[900px]">
+                    <table className="w-full text-sm min-w-[800px]">
                         <thead className="bg-slate-50/80">
                             <tr>
                                 <th className="text-left px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600 select-none" onClick={() => handleSort("lotNumber")}>
-                                    ロット<SortIcon col="lotNumber" />
-                                </th>
-                                <th className="text-left px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600 select-none" onClick={() => handleSort("productName")}>
-                                    商品<SortIcon col="productName" />
+                                    ロット / 商品<SortIcon col="lotNumber" />
                                 </th>
                                 <th className="text-right px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">数量</th>
-                                <th className="text-left px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">工程スケジュール</th>
+                                <th className="text-left px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">工程</th>
+                                <th className="text-left px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">搬入目安日</th>
+                                <th className="text-left px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">完了目安日</th>
                                 <th className="text-right px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600 select-none" onClick={() => handleSort("totalPayment")}>
                                     支払予定額<SortIcon col="totalPayment" />
-                                </th>
-                                <th className="text-left px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600 select-none" onClick={() => handleSort("lastCompletionDate")}>
-                                    完了目安日<SortIcon col="lastCompletionDate" />
                                 </th>
                             </tr>
                         </thead>
@@ -282,52 +312,66 @@ export default function SchedulePage() {
                             {sorted.length === 0 && (
                                 <tr>
                                     <td colSpan={6} className="text-center py-16 text-slate-300 font-bold">
-                                        進行中のロットがありません
+                                        該当するロットがありません
                                     </td>
                                 </tr>
                             )}
                             {sorted.map((lot) => (
                                 <tr key={lot.lotId} className="hover:bg-slate-50/50 transition align-top">
-                                    <td className="px-4 py-3">
-                                        <span className="font-mono text-xs font-bold text-blue-600">{lot.lotNumber}</span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className="text-sm font-bold text-slate-700">{lot.productName}</span>
-                                        <div className="flex items-center gap-1 mt-0.5">
-                                            {lot.hasData ? (
-                                                <span className="text-[9px] font-bold text-emerald-600 flex items-center gap-0.5"><CheckCircle2 className="w-3 h-3" />実績ベース</span>
+                                    <td className="px-4 py-3" rowSpan={1}>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-mono text-xs font-bold text-blue-600">{lot.lotNumber}</span>
+                                            {lot.canCalculate ? (
+                                                <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
                                             ) : (
-                                                <span className="text-[9px] font-bold text-amber-500 flex items-center gap-0.5"><AlertTriangle className="w-3 h-3" />仮値</span>
+                                                <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
                                             )}
                                         </div>
+                                        <span className="text-[11px] text-slate-500">{lot.productName}</span>
                                     </td>
                                     <td className="px-4 py-3 text-right font-mono font-bold text-slate-600">{lot.quantity.toLocaleString()}</td>
                                     <td className="px-4 py-3">
-                                        <div className="space-y-1">
+                                        <div className="space-y-1.5">
                                             {lot.processes.map((p, i) => (
-                                                <div key={i} className="flex items-center gap-2 text-[11px]">
-                                                    <span className="w-20 shrink-0 font-bold text-slate-600 truncate" title={p.processName}>{p.processName}</span>
-                                                    <span className="text-slate-400">{p.estimatedStartDate}</span>
-                                                    <span className="text-slate-300">→</span>
-                                                    <span className="text-slate-700 font-bold">{p.estimatedEndDate}</span>
-                                                    <span className="text-[9px] text-slate-300 ml-1">
-                                                        (¥{p.payment.toLocaleString()})
-                                                    </span>
-                                                    {p.dataCount > 0 && (
-                                                        <span className="text-[8px] bg-emerald-50 text-emerald-600 px-1 rounded font-bold">
-                                                            {p.dataCount}件
-                                                        </span>
+                                                <div key={i} className="text-[11px] font-bold text-slate-600 truncate" title={p.processName}>{p.processName}</div>
+                                            ))}
+                                            {lot.processes.length === 0 && <span className="text-[10px] text-slate-300 italic">工程マスタ未登録</span>}
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <div className="space-y-1.5">
+                                            {lot.processes.map((p, i) => (
+                                                <div key={i} className="text-[11px] text-slate-500">{p.estimatedStartDate}</div>
+                                            ))}
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <div className="space-y-1.5">
+                                            {lot.processes.map((p, i) => (
+                                                <div key={i} className="text-[11px]">
+                                                    {p.canCalculate ? (
+                                                        <span className="font-bold text-slate-700">{p.estimatedEndDate}</span>
+                                                    ) : (
+                                                        <span className="text-amber-500 font-bold">算出不可</span>
                                                     )}
                                                 </div>
                                             ))}
-                                            {lot.processes.length === 0 && (
-                                                <span className="text-[10px] text-slate-300 italic">工程マスタ未登録</span>
-                                            )}
                                         </div>
                                     </td>
-                                    <td className="px-4 py-3 text-right font-bold text-slate-700">¥{lot.totalPayment.toLocaleString()}</td>
                                     <td className="px-4 py-3">
-                                        <span className="text-sm font-black text-slate-800">{lot.lastCompletionDate}</span>
+                                        <div className="space-y-1.5">
+                                            {lot.processes.map((p, i) => (
+                                                <div key={i} className="text-[11px] text-right font-bold text-slate-700">
+                                                    ¥{p.payment.toLocaleString()}
+                                                    <span className="text-[9px] text-slate-400 font-normal ml-1">(@¥{p.unitPrice.toLocaleString()})</span>
+                                                </div>
+                                            ))}
+                                            {lot.processes.length > 1 && (
+                                                <div className="text-[10px] text-right font-black text-blue-600 border-t border-slate-100 pt-1">
+                                                    計 ¥{lot.totalPayment.toLocaleString()}
+                                                </div>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -335,32 +379,6 @@ export default function SchedulePage() {
                     </table>
                 </div>
             </div>
-
-            {/* 凡例 */}
-            <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-2">
-                <p className="text-xs text-slate-400 font-bold">📊 日程予測の計算方法</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] text-slate-500">
-                    <div className="bg-white rounded-lg p-2 border border-slate-100">
-                        <span className="font-black text-slate-700">所要日数</span>: 直近5件の「(完了日−納入日)÷本数」の平均 × 受注本数
-                    </div>
-                    <div className="bg-white rounded-lg p-2 border border-slate-100">
-                        <span className="font-black text-slate-700">支払予定額</span>: 受注本数 × 登録単価（工程ごと）
-                    </div>
-                </div>
-                <div className="flex gap-4 mt-2 text-[10px] font-bold">
-                    <span className="flex items-center gap-1 text-emerald-600"><CheckCircle2 className="w-3 h-3" /> 実績ベース: 過去の実績データから算出</span>
-                    <span className="flex items-center gap-1 text-amber-500"><AlertTriangle className="w-3 h-3" /> 仮値: 実績がないため仮の値 (0.5日/本) で計算</span>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function MiniCard({ label, value }: { label: string; value: string }) {
-    return (
-        <div className="bg-white rounded-xl p-3 border border-slate-200 shadow-sm">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{label}</p>
-            <p className="text-lg font-black text-slate-700">{value}</p>
         </div>
     );
 }
