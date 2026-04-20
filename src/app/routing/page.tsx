@@ -61,7 +61,7 @@ export default function RoutingPage() {
     // Group lot_processes by process_id + subcontractor_id to handle mismatch
     const lotGroupedProcs = useMemo(() => {
         if (!selectedLot) return [];
-        const grouped: Record<string, { id: string; process_id: string; subcontractor_id: string; input_quantity: number; completed_quantity: number; loss_qty: number; label: string; records: any[] }> = {};
+        const grouped: Record<string, { id: string; process_id: string; subcontractor_id: string; input_quantity: number; completed_quantity: number; loss_qty: number; label: string; records: any[]; group_index: number; part_label: string | null }> = {};
         const rawProcs = [...(selectedLot.lot_processes || [])].sort((a, b) => 
             (a.processes?.group_index || 0) - (b.processes?.group_index || 0) || 
             (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0)
@@ -78,7 +78,9 @@ export default function RoutingPage() {
                     completed_quantity: p.completed_quantity || 0,
                     loss_qty: p.loss_qty || 0,
                     label: `${p.processes?.name || "不明"} — ${p.subcontractors?.name || "未定"}`,
-                    records: [p]
+                    records: [p],
+                    group_index: p.processes?.group_index || 0,
+                    part_label: (p.processes as any)?.part_label || null
                 };
             } else {
                 grouped[key].input_quantity += (p.input_quantity || 0);
@@ -301,10 +303,21 @@ export default function RoutingPage() {
                         <select value={selectedProcessId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedProcessId(e.target.value)}
                             className="select-base">
                             <option value="">選択してください</option>
-                            {lotGroupedProcs.map((g) => (
-                                <option key={g.id} value={g.id}>
-                                    {g.label} (現在:{g.input_quantity - g.completed_quantity - g.loss_qty})
-                                </option>
+                            {Object.entries(
+                                lotGroupedProcs.reduce((acc, g) => {
+                                    const groupName = g.group_index === 0 ? "メイン工程" : (g.part_label || `パーツ工程 (グループ ${g.group_index})`);
+                                    if (!acc[groupName]) acc[groupName] = [];
+                                    acc[groupName].push(g);
+                                    return acc;
+                                }, {} as Record<string, typeof lotGroupedProcs>)
+                            ).map(([groupName, procs]) => (
+                                <optgroup key={groupName} label={groupName}>
+                                    {procs.map((g) => (
+                                        <option key={g.id} value={g.id}>
+                                            {g.label} (現在:{g.input_quantity - g.completed_quantity - g.loss_qty})
+                                        </option>
+                                    ))}
+                                </optgroup>
                             ))}
                         </select>
                     </div>
