@@ -78,6 +78,8 @@ export interface SupabaseInventory {
     location: string;
     item_type?: 'finished' | 'parts' | 'material';
     lot_id: string | null;
+    part_label?: string;
+    source_group_index?: number;
     products: { name: string; code: string } | null;
 }
 
@@ -88,6 +90,8 @@ export interface SupabaseProcess {
     sort_order: number;
     group_index: number;
     is_parallel: boolean;
+    part_label?: string;
+    target_group_indexes?: number[];
 }
 
 export interface SupabaseSubcontractor {

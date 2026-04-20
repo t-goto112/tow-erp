@@ -94,7 +94,7 @@ export default function InventoryPage() {
             const prodCode = i.products?.product_code || "";
             const prodName = i.products?.name || "不明な製品";
             const location = i.location || "未設定";
-            const key = `${prodCode}-${prodName}-${i.item_type}-${location}`; // コード、名前、タイプ、倉庫でグループ化
+            const key = `${prodCode}-${prodName}-${i.item_type}-${location}-${i.part_label || ''}`; // コード、名前、タイプ、倉庫、パーツ名でグループ化
             if (grouped[key]) {
                 grouped[key].quantity += i.quantity;
             } else {
@@ -168,7 +168,7 @@ export default function InventoryPage() {
                                         <div className="flex items-center gap-2 min-w-0">
                                             <span className="font-bold text-slate-700 truncate">{item.products?.name}</span>
                                             <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 ${item.item_type === 'finished' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
-                                                {item.item_type === 'finished' ? '完成品' : '仕掛パーツ'}
+                                                {item.item_type === 'finished' ? '完成品' : (item.part_label || '仕掛パーツ')}
                                             </span>
                                         </div>
                                     </td>

@@ -2,26 +2,40 @@ import { supabase } from "@/lib/supabase";
 
 // ─── ヘルパー: パーツ在庫の消費 ───
 async function consumePartsIfAssembly(processId: string, templateId: string, qty: number, lotId: string, errorPrefix: string) {
-    const { data: tpl } = await supabase.from('processes').select('is_assembly_point').eq('id', templateId).single();
+    const { data: tpl } = await supabase.from('processes').select('is_assembly_point, target_group_indexes').eq('id', templateId).single();
     if (tpl?.is_assembly_point) {
         const { data: lot } = await supabase.from('lots').select('product_id').eq('id', lotId).single();
         if (lot) {
-            // 全ての「パーツ」在庫を取得（場所を問わず）
-            const { data: partsInvs } = await supabase
+            const targetGroups: number[] = (tpl.target_group_indexes && Array.isArray(tpl.target_group_indexes) && tpl.target_group_indexes.length > 0)
+                ? tpl.target_group_indexes
+                : null;
+
+            // パーツ在庫を取得（ターゲットグループが指定されていれば対象グループのみフィルタ）
+            let query = supabase
                 .from('inventory')
                 .select('*')
                 .eq('product_id', lot.product_id)
                 .eq('item_type', 'parts');
 
-            const totalAvailable = (partsInvs || []).reduce((sum: number, inv: any) => sum + Number(inv.quantity), 0);
+            const { data: partsInvs } = await query;
+
+            // ターゲットグループ指定がある場合は、対象グループの在庫のみフィルタ
+            const filteredInvs = targetGroups
+                ? (partsInvs || []).filter((inv: any) => targetGroups.includes(inv.source_group_index))
+                : (partsInvs || []);
+
+            const totalAvailable = filteredInvs.reduce((sum: number, inv: any) => sum + Number(inv.quantity), 0);
 
             if (totalAvailable < qty) {
-                throw new Error(`パーツ在庫が不足しています (在庫: ${totalAvailable}, 必要: ${qty})。不足しているため${errorPrefix}できません。`);
+                const groupLabel = targetGroups
+                    ? `グループ[${targetGroups.join(',')}]の`
+                    : '';
+                throw new Error(`${groupLabel}パーツ在庫が不足しています (在庫: ${totalAvailable}, 必要: ${qty})。不足しているため${errorPrefix}できません。`);
             }
 
             // 在庫を消費（数量の多いレコードから順に引く）
             let remainingToConsume = qty;
-            const sortedInvs = [...(partsInvs || [])].sort((a: any, b: any) => Number(b.quantity) - Number(a.quantity));
+            const sortedInvs = [...filteredInvs].sort((a: any, b: any) => Number(b.quantity) - Number(a.quantity));
 
             for (const inv of sortedInvs) {
                 if (remainingToConsume <= 0) break;
@@ -299,16 +313,32 @@ export async function moveForward(
             const targetLoc = isFinished ? '完成品倉庫' : '仕掛パーツ置場';
             const itemType = isFinished ? 'finished' : 'parts';
             
+            // パーツの場合、part_label を取得
+            let partLabel: string | null = null;
+            if (!isFinished) {
+                const { data: tplData } = await supabase.from('processes').select('part_label').eq('id', leadProc.process_id).single();
+                partLabel = tplData?.part_label || null;
+            }
+
             if (isFinished) {
                 const { data: wh } = await supabase.from('warehouses').select('id').eq('name', targetLoc).maybeSingle();
                 if (!wh) await supabase.from('warehouses').insert([{ name: targetLoc }]);
             }
 
-            const { data: existingInv } = await supabase.from('inventory').select('*').eq('product_id', lot.product_id).eq('location', targetLoc).eq('item_type', itemType).maybeSingle();
+            let invQuery = supabase.from('inventory').select('*').eq('product_id', lot.product_id).eq('location', targetLoc).eq('item_type', itemType);
+            if (!isFinished) {
+                invQuery = invQuery.eq('source_group_index', groupIndex);
+            }
+            const { data: existingInv } = await invQuery.maybeSingle();
             if (existingInv) {
                 await supabase.from('inventory').update({ quantity: existingInv.quantity + qty }).eq('id', existingInv.id);
             } else {
-                await supabase.from('inventory').insert([{ product_id: lot.product_id, quantity: qty, location: targetLoc, item_type: itemType }]);
+                const insertData: any = { product_id: lot.product_id, quantity: qty, location: targetLoc, item_type: itemType };
+                if (!isFinished) {
+                    insertData.source_group_index = groupIndex;
+                    insertData.part_label = partLabel;
+                }
+                await supabase.from('inventory').insert([insertData]);
             }
         }
     }
@@ -465,16 +495,32 @@ export async function moveToInventory(
     const isPartsType = groupIndex > 0;
     const targetLocation = warehouseName || (isPartsType ? '仕掛パーツ置場' : '未設定の倉庫');
 
+    // パーツの場合、part_label を取得
+    let partLabel: string | null = null;
+    if (isPartsType) {
+        const { data: tplData } = await supabase.from('processes').select('part_label').eq('id', leadProc.process_id).single();
+        partLabel = tplData?.part_label || null;
+    }
+
     if (!isPartsType) {
         const { data: wh } = await supabase.from('warehouses').select('id').eq('name', targetLocation).maybeSingle();
         if (!wh) await supabase.from('warehouses').insert([{ name: targetLocation }]);
     }
 
-    const { data: existingInvs } = await supabase.from('inventory').select('*').eq('product_id', productId).eq('location', targetLocation).eq('item_type', isPartsType ? 'parts' : 'finished');
+    let invQuery = supabase.from('inventory').select('*').eq('product_id', productId).eq('location', targetLocation).eq('item_type', isPartsType ? 'parts' : 'finished');
+    if (isPartsType) {
+        invQuery = invQuery.eq('source_group_index', groupIndex);
+    }
+    const { data: existingInvs } = await invQuery;
     if (existingInvs && existingInvs.length > 0) {
         await supabase.from('inventory').update({ quantity: existingInvs[0].quantity + qty }).eq('id', existingInvs[0].id);
     } else {
-        await supabase.from('inventory').insert([{ product_id: productId, quantity: qty, location: targetLocation, item_type: isPartsType ? 'parts' : 'finished' }]);
+        const insertData: any = { product_id: productId, quantity: qty, location: targetLocation, item_type: isPartsType ? 'parts' : 'finished' };
+        if (isPartsType) {
+            insertData.source_group_index = groupIndex;
+            insertData.part_label = partLabel;
+        }
+        await supabase.from('inventory').insert([insertData]);
     }
 
     await syncLotAndOrderStatus(lotId);

@@ -156,6 +156,23 @@ export default function MasterPage() {
         setFormGroups(arr);
     };
 
+    const updateGroupPartLabel = (gi: number, value: string) => {
+        const arr = [...formGroups];
+        arr[gi].partLabel = value;
+        setFormGroups(arr);
+    };
+
+    const toggleTargetGroup = (gi: number, pi: number, targetGi: number) => {
+        const arr = [...formGroups];
+        const proc = arr[gi].templates[pi];
+        const indexes = proc.targetGroupIndexes ? [...proc.targetGroupIndexes] : [];
+        const idx = indexes.indexOf(targetGi);
+        if (idx >= 0) indexes.splice(idx, 1); else indexes.push(targetGi);
+        proc.targetGroupIndexes = indexes;
+        proc.isAssemblyPoint = indexes.length > 0;
+        setFormGroups(arr);
+    };
+
     const handleSave = async () => {
         setLoading(true);
         try {
@@ -297,6 +314,12 @@ export default function MasterPage() {
                                                 <button onClick={() => removeGroup(gi)} className="text-[10px] text-red-500 font-bold hover:underline">このグループを削除</button>
                                             )}
                                         </div>
+                                        {gi > 0 && (
+                                            <div className="mb-3">
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">パーツ名</label>
+                                                <input type="text" value={group.partLabel || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateGroupPartLabel(gi, e.target.value)} placeholder="例: 柄パーツ、鍔パーツ" className="input-base text-sm" />
+                                            </div>
+                                        )}
 
                                         {group.templates.map((proc: any, pi: number) => (
                                             <div key={proc.id} className="bg-slate-50 rounded-2xl border border-slate-200 p-4 mb-3">
@@ -312,14 +335,27 @@ export default function MasterPage() {
                                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">工程名</label>
                                                     <input type="text" value={proc.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateProcess(gi, pi, "name", e.target.value)} placeholder="鍛造" className="input-base text-sm" />
                                                 </div>
-                                                <div className="mb-3 flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200">
-                                                    <input type="checkbox" id={`assembly-cb-${gi}-${pi}`} checked={!!proc.isAssemblyPoint}
-                                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateProcess(gi, pi, "isAssemblyPoint", e.target.checked as any)}
-                                                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300" />
-                                                    <label htmlFor={`assembly-cb-${gi}-${pi}`} className="text-[10px] font-bold text-slate-600 cursor-pointer">
-                                                        この工程で別グループのパーツを組み付ける（実績報告時に仕掛パーツ在庫を消費）
-                                                    </label>
-                                                </div>
+                                                {gi === 0 && formGroups.length > 1 && (
+                                                    <div className="mb-3 bg-white p-2 rounded-lg border border-slate-200">
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">パーツ組付け設定（この工程で消費するパーツ）</p>
+                                                        {formGroups.filter((_: any, fgi: number) => fgi > 0).map((_: any, idx: number) => {
+                                                            const targetGi = idx + 1;
+                                                            const targetGroup = formGroups[targetGi];
+                                                            const isChecked = (proc.targetGroupIndexes || []).includes(targetGi);
+                                                            const targetLabel = targetGroup?.partLabel || targetGroup?.label || `工程登録${targetGi + 1}`;
+                                                            return (
+                                                                <div key={targetGi} className="flex items-center gap-2 py-0.5">
+                                                                    <input type="checkbox" id={`target-cb-${gi}-${pi}-${targetGi}`} checked={isChecked}
+                                                                        onChange={() => toggleTargetGroup(gi, pi, targetGi)}
+                                                                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300" />
+                                                                    <label htmlFor={`target-cb-${gi}-${pi}-${targetGi}`} className="text-[10px] font-bold text-slate-600 cursor-pointer">
+                                                                        {targetLabel} を組み付ける
+                                                                    </label>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
                                                 <div>
                                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">外注先・単価</label>
                                                     {proc.subcontractors.map((sub: any, si: number) => (

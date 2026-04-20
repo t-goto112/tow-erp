@@ -11,12 +11,14 @@ export interface FormProcess {
     name: string;
     sortOrder: number;
     isAssemblyPoint?: boolean;
+    targetGroupIndexes?: number[];
     subcontractors: FormSubcontractor[];
 }
 
 export interface FormGroup {
     id: string;
     label: string;
+    partLabel?: string;
     templates: FormProcess[];
 }
 
@@ -34,6 +36,8 @@ export interface MasterProcess {
     sort_order: number;
     group_index: number;
     is_assembly_point: boolean;
+    part_label: string | null;
+    target_group_indexes: number[];
     process_subcontractor_rates: {
         id: string;
         unit_price: number;
@@ -48,7 +52,7 @@ export async function fetchMasterProducts(): Promise<MasterProduct[]> {
         .select(`
             id, name, code,
             processes(
-                id, name, sort_order, group_index, is_assembly_point,
+                id, name, sort_order, group_index, is_assembly_point, part_label, target_group_indexes,
                 process_subcontractor_rates(id, unit_price, subcontractors(id, name))
             )
         `)
@@ -107,7 +111,9 @@ export async function createProduct(
                     name: tpl.name,
                     sort_order: tpl.sortOrder,
                     group_index: gi,
-                    is_assembly_point: !!tpl.isAssemblyPoint,
+                    is_assembly_point: !!(tpl.isAssemblyPoint || (tpl.targetGroupIndexes && tpl.targetGroupIndexes.length > 0)),
+                    part_label: group.partLabel || null,
+                    target_group_indexes: tpl.targetGroupIndexes || [],
                 })
                 .select('id')
                 .single();
@@ -186,14 +192,16 @@ export async function updateProduct(
     }
 
     // 5. Upsert processes: update existing, insert new
-    for (const { gi, tpl } of newProcesses) {
+    for (const { group, gi, tpl } of newProcesses) {
         if (keepIds.has(tpl.id)) {
             // Update existing process
             await supabase.from('processes').update({
                 name: tpl.name,
                 sort_order: tpl.sortOrder,
                 group_index: gi,
-                is_assembly_point: !!tpl.isAssemblyPoint,
+                is_assembly_point: !!(tpl.isAssemblyPoint || (tpl.targetGroupIndexes && tpl.targetGroupIndexes.length > 0)),
+                part_label: group.partLabel || null,
+                target_group_indexes: tpl.targetGroupIndexes || [],
             }).eq('id', tpl.id);
 
             // Delete old rates and re-insert
@@ -216,7 +224,9 @@ export async function updateProduct(
                     name: tpl.name,
                     sort_order: tpl.sortOrder,
                     group_index: gi,
-                    is_assembly_point: !!tpl.isAssemblyPoint,
+                    is_assembly_point: !!(tpl.isAssemblyPoint || (tpl.targetGroupIndexes && tpl.targetGroupIndexes.length > 0)),
+                    part_label: group.partLabel || null,
+                    target_group_indexes: tpl.targetGroupIndexes || [],
                 })
                 .select('id')
                 .single();
@@ -254,15 +264,19 @@ export function processesToFormGroups(processes: MasterProcess[]): FormGroup[] {
             groupMap.set(gi, {
                 id: `g-${gi}`,
                 label: gi === 0 ? "工程登録1" : `工程登録${gi + 1}`,
+                partLabel: proc.part_label || undefined,
                 templates: [],
             });
         }
         const group = groupMap.get(gi)!;
+        // partLabel は同一グループ内で最初に見つかった値を採用
+        if (!group.partLabel && proc.part_label) group.partLabel = proc.part_label;
         group.templates.push({
             id: proc.id,
             name: proc.name,
             sortOrder: proc.sort_order,
             isAssemblyPoint: proc.is_assembly_point,
+            targetGroupIndexes: proc.target_group_indexes || [],
             subcontractors: (proc.process_subcontractor_rates || []).map((r: any) => ({
                 name: r.subcontractors?.name || "",
                 unitPrice: r.unit_price || 0,
