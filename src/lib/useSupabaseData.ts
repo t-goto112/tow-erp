@@ -5,10 +5,19 @@ import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 
 // Data types aligned with Supabase schema
+export interface SupabaseProductGroup {
+    id: string;
+    name: string;
+    sort_order: number;
+    created_at: string;
+}
+
 export interface SupabaseProduct {
     id: string;
     code: string;
     name: string;
+    group_id?: string | null;
+    sort_order?: number;
 }
 
 export interface SupabaseOrder {
@@ -30,7 +39,7 @@ export interface SupabaseOrderItem {
     quantity: number;
     unit_price: number;
     shipped_quantity: number;
-    products: { name: string; code: string };
+    products: { name: string; code: string; group_id?: string | null };
 }
 
 export interface SupabaseLot {
@@ -42,7 +51,7 @@ export interface SupabaseLot {
     order_id: string;
     orders?: { status: string; order_number: string } | null;
     created_at: string;
-    products: { name: string } | null;
+    products: { name: string; group_id?: string | null } | null;
     lot_processes?: SupabaseLotProcess[];
 }
 
@@ -136,6 +145,7 @@ export interface SupabasePaymentItem {
 
 export function useSupabaseData() {
     const [products, setProducts] = useState<SupabaseProduct[]>([]);
+    const [productGroups, setProductGroups] = useState<SupabaseProductGroup[]>([]);
     const [orders, setOrders] = useState<SupabaseOrder[]>([]);
     const [lots, setLots] = useState<SupabaseLot[]>([]);
     const [inventory, setInventory] = useState<SupabaseInventory[]>([]);
@@ -166,15 +176,26 @@ export function useSupabaseData() {
                 setProfile(profData as any);
             }
 
+            // 0.5 Fetch Product Groups
+            const { data: pgData, error: pgErr } = await supabase
+                .from('product_groups')
+                .select('*')
+                .order('sort_order', { ascending: true });
+            if (pgErr) throw pgErr;
+            setProductGroups(pgData || []);
+
             // 1. Fetch Products
-            const { data: pData, error: pErr } = await supabase.from('products').select('*');
+            const { data: pData, error: pErr } = await supabase
+                .from('products')
+                .select('*')
+                .order('sort_order', { ascending: true });
             if (pErr) throw pErr;
             setProducts(pData || []);
 
             // 2. Fetch Orders with Items
             const { data: oData, error: oErr } = await supabase
                 .from('orders')
-                .select('*, order_items(*, products(name, product_code:code))')
+                .select('*, order_items(*, products(name, product_code:code, group_id))')
                 .order('created_at', { ascending: false });
             if (oErr) throw oErr;
             setOrders(oData || []);
@@ -182,7 +203,7 @@ export function useSupabaseData() {
             // 3. Fetch Lots with nested processes, process definitions, and deliveries
             const { data: lData, error: lErr } = await supabase
                 .from('lots')
-                .select('*, orders(status, order_number), products(name, product_code:code), lot_processes(*, processes(name, sort_order, group_index), subcontractors(id, name), lot_process_deliveries(*))')
+                .select('*, orders(status, order_number), products(name, product_code:code, group_id), lot_processes(*, processes(name, sort_order, group_index), subcontractors(id, name), lot_process_deliveries(*))')
                 .order('created_at', { ascending: false });
             if (lErr) throw lErr;
             setLots(lData || []);
@@ -231,5 +252,5 @@ export function useSupabaseData() {
         fetchData(true);
     }, [fetchData]);
 
-    return { products, orders, lots, inventory, processes, subcontractors, warehouses, processRates, paymentItems, loading, profile, refresh: () => fetchData(false) };
+    return { products, productGroups, orders, lots, inventory, processes, subcontractors, warehouses, processRates, paymentItems, loading, profile, refresh: () => fetchData(false) };
 }

@@ -2,22 +2,26 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Edit2, Check, Loader2, ChevronRight, ArrowUp, ArrowDown, X, Package, Copy, Database } from "lucide-react";
+import { Plus, Trash2, Edit2, Check, Loader2, ChevronRight, ArrowUp, ArrowDown, X, Package, Copy, Database, GripVertical, ChevronDown } from "lucide-react";
 import { showToast } from "@/components/Toast";
 import Modal from "@/components/Modal";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import {
     fetchMasterProducts, createProduct, updateProduct, deleteProduct,
     processesToFormGroups,
+    createProductGroup, updateProductGroup, deleteProductGroup, reorderProductGroups,
+    moveProductToGroup, reorderProductsInGroup,
     type MasterProduct, type FormGroup
 } from "@/lib/services/masterService";
 import { useSupabaseData } from "@/lib/useSupabaseData";
+import { supabase } from "@/lib/supabase";
 
 let _formUid = Date.now();
 function formUid() { return `f${++_formUid}`; }
 
 export default function MasterPage() {
     const [products, setProducts] = useState<MasterProduct[]>([]);
+    const [productGroups, setProductGroups] = useState<{ id: string; name: string; sort_order: number }[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editProduct, setEditProduct] = useState<MasterProduct | null>(null);
     const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -25,6 +29,18 @@ export default function MasterPage() {
     const [loading, setLoading] = useState(false);
     const { profile, loading: authLoading } = useSupabaseData();
     const router = useRouter();
+
+    // Group-related States
+    const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+    const [editGroup, setEditGroup] = useState<{ id: string; name: string } | null>(null);
+    const [groupFormName, setGroupFormName] = useState("");
+    const [deleteGroupId, setDeleteGroupId] = useState<string | null>(null);
+    const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+    // Drag and Drop States
+    const [draggingGroupId, setDraggingGroupId] = useState<string | null>(null);
+    const [draggingProductId, setDraggingProductId] = useState<string | null>(null);
+    const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
     const canEdit = profile?.role === 'admin' || (profile?.permissions?.master?.edit === true);
 
     // 閲覧権限がない場合はアクセスブロック
@@ -50,8 +66,12 @@ export default function MasterPage() {
     const refresh = useCallback(async () => {
         try {
             setFetching(true);
-            const data = await fetchMasterProducts();
-            setProducts(data);
+            const [prodData, groupData] = await Promise.all([
+                fetchMasterProducts(),
+                supabase.from('product_groups').select('*').order('sort_order', { ascending: true })
+            ]);
+            setProducts(prodData);
+            setProductGroups(groupData.data || []);
         } catch (e: any) {
             console.error(e);
             showToast("error", "商品データの取得に失敗しました");
@@ -61,6 +81,48 @@ export default function MasterPage() {
     }, []);
 
     useEffect(() => { refresh(); }, [refresh]);
+
+    const toggleGroupCollapse = (groupId: string) => {
+        setCollapsedGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }));
+    };
+
+    const handleSaveGroup = async () => {
+        if (!groupFormName) {
+            showToast("error", "グループ名を入力してください");
+            return;
+        }
+        setLoading(true);
+        try {
+            if (editGroup) {
+                await updateProductGroup(editGroup.id, groupFormName);
+                showToast("success", `グループ「${groupFormName}」を更新しました`);
+            } else {
+                await createProductGroup(groupFormName);
+                showToast("success", `グループ「${groupFormName}」を作成しました`);
+            }
+            setIsGroupModalOpen(false);
+            setGroupFormName("");
+            await refresh();
+        } catch (e: any) {
+            console.error(e);
+            showToast("error", e.message || "グループの保存に失敗しました");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteGroup = async () => {
+        if (!deleteGroupId) return;
+        try {
+            await deleteProductGroup(deleteGroupId);
+            showToast("success", "グループと中の商品を削除しました");
+            setDeleteGroupId(null);
+            await refresh();
+        } catch (e: any) {
+            console.error(e);
+            showToast("error", e.message || "グループの削除に失敗しました");
+        }
+    };
 
     const resetForm = () => {
         setFormName(""); setFormCode("");
@@ -216,59 +278,434 @@ export default function MasterPage() {
             <div className="flex items-center justify-between">
                 <h3 className="text-xl font-black text-slate-800">商品マスタ管理</h3>
                 {canEdit && (
-                    <button onClick={openNew} className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all">
-                        <Plus size={16} /> 新規登録
-                    </button>
+                    <div className="flex gap-2">
+                        <button onClick={() => { setEditGroup(null); setGroupFormName(""); setIsGroupModalOpen(true); }} className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-sm font-bold active:scale-[0.98] transition-all">
+                            <Plus size={16} /> グループ作成
+                        </button>
+                        <button onClick={openNew} className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all">
+                            <Plus size={16} /> 新規登録
+                        </button>
+                    </div>
                 )}
             </div>
 
-            {/* 商品カード一覧 */}
-            <div className="space-y-3">
+            {/* 商品カード一覧（グループ化） */}
+            <div className="space-y-6">
                 {fetching && products.length === 0 && (
                     <div className="text-center py-20 bg-white rounded-xl border border-slate-200">
                         <Loader2 className="w-6 h-6 animate-spin mx-auto text-slate-400" />
                         <p className="text-sm text-slate-400 mt-2">読み込み中...</p>
                     </div>
                 )}
-                {products.map((p: MasterProduct) => {
-                    const groups = getProductGroups(p);
+                
+                {/* 各グループの表示 */}
+                {productGroups.map((g) => {
+                    const groupProducts = products.filter(p => p.group_id === g.id);
+                    const isCollapsed = collapsedGroups[g.id];
+                    const isDragOver = dragOverGroupId === g.id;
+
                     return (
-                        <div key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition">
-                            <div className="flex items-start justify-between mb-3">
-                                <div>
-                                    <div className="flex items-center gap-2 mb-1 min-w-0">
-                                        <span className="font-mono text-xs font-bold text-blue-600 shrink-0">{p.code}</span>
-                                        <span className="font-bold text-slate-800 truncate">{p.name}</span>
-                                    </div>
-                                    <p className="text-xs text-slate-400">{groups.length}グループ | {groups.reduce((s: number, g: any) => s + g.templates.length, 0)}工程</p>
+                        <div 
+                            key={g.id}
+                            className={`bg-slate-50 border-2 rounded-2xl p-4 transition-all ${
+                                isDragOver ? "border-blue-400 bg-blue-50/30" : "border-slate-200"
+                            }`}
+                            onDragOver={(e) => {
+                                e.preventDefault();
+                                if (draggingGroupId !== g.id) {
+                                    setDragOverGroupId(g.id);
+                                }
+                            }}
+                            onDragLeave={() => {
+                                setDragOverGroupId(null);
+                            }}
+                            onDrop={async (e) => {
+                                e.preventDefault();
+                                setDragOverGroupId(null);
+                                const data = e.dataTransfer.getData("text/plain");
+                                if (data.startsWith("group:")) {
+                                    const droppedGroupId = data.split(":")[1];
+                                    if (droppedGroupId === g.id) return;
+                                    
+                                    const groupIds = productGroups.map(pg => pg.id);
+                                    const fromIndex = groupIds.indexOf(droppedGroupId);
+                                    const toIndex = groupIds.indexOf(g.id);
+                                    
+                                    const newGroupIds = [...groupIds];
+                                    newGroupIds.splice(fromIndex, 1);
+                                    newGroupIds.splice(toIndex, 0, droppedGroupId);
+                                    
+                                    const reordered = newGroupIds.map((id, index) => {
+                                        const group = productGroups.find(pg => pg.id === id)!;
+                                        return { ...group, sort_order: index };
+                                    });
+                                    setProductGroups(reordered);
+                                    
+                                    try {
+                                        await reorderProductGroups(newGroupIds);
+                                        showToast("success", "グループの並び順を更新しました");
+                                    } catch (err) {
+                                        showToast("error", "グループの並び替えに失敗しました");
+                                        refresh();
+                                    }
+                                } else if (data.startsWith("product:")) {
+                                    const droppedProductId = data.split(":")[1];
+                                    try {
+                                        const nextSortOrder = groupProducts.length;
+                                        setProducts(prev => prev.map(p => 
+                                            p.id === droppedProductId 
+                                                ? { ...p, group_id: g.id, sort_order: nextSortOrder }
+                                                : p
+                                        ));
+                                        await moveProductToGroup(droppedProductId, g.id, nextSortOrder);
+                                        showToast("success", "商品を移動しました");
+                                    } catch (err) {
+                                        showToast("error", "商品の移動に失敗しました");
+                                        refresh();
+                                    }
+                                }
+                            }}
+                        >
+                            {/* グループヘッダー */}
+                            <div 
+                                className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4 cursor-pointer select-none"
+                                onClick={() => toggleGroupCollapse(g.id)}
+                            >
+                                <div className="flex items-center gap-2">
+                                    {canEdit && (
+                                        <div 
+                                            draggable="true"
+                                            onDragStart={(e) => {
+                                                e.stopPropagation();
+                                                e.dataTransfer.setData("text/plain", `group:${g.id}`);
+                                                setDraggingGroupId(g.id);
+                                            }}
+                                            onDragEnd={() => {
+                                                setDraggingGroupId(null);
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="cursor-grab active:cursor-grabbing p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-200/50"
+                                        >
+                                            <GripVertical size={16} />
+                                        </div>
+                                    )}
+                                    <ChevronDown 
+                                        size={16} 
+                                        className={`text-slate-500 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} 
+                                    />
+                                    <span className="font-black text-slate-700 text-sm">{g.name}</span>
+                                    <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full text-xs font-bold">{groupProducts.length}</span>
                                 </div>
-                                <div className="flex items-center gap-1">
-                                    {canEdit && <button onClick={() => duplicateProduct(p)} className="p-1.5 rounded-md hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition" title="複製"><Copy size={14} /></button>}
-                                    {canEdit && <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition" title="編集"><Edit2 size={14} /></button>}
-                                    {canEdit && <button onClick={() => setDeleteId(p.id)} className="p-1.5 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 transition" title="削除"><Trash2 size={14} /></button>}
+                                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                    {canEdit && (
+                                        <>
+                                            <button 
+                                                onClick={() => { setEditGroup(g); setGroupFormName(g.name); setIsGroupModalOpen(true); }}
+                                                className="p-1.5 rounded-md hover:bg-slate-200/50 text-slate-400 hover:text-blue-600 transition"
+                                                title="グループ名を編集"
+                                            >
+                                                <Edit2 size={14} />
+                                            </button>
+                                            <button 
+                                                onClick={() => setDeleteGroupId(g.id)}
+                                                className="p-1.5 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 transition"
+                                                title="グループを削除（中の商品も削除）"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </>
+                                    )}
                                 </div>
                             </div>
-                            {/* 工程グループ別フロー表示 */}
-                            {groups.map((g: any, gi: number) => (
-                                <div key={g.id || gi} className="mb-2">
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{g.label}</p>
-                                    <div className="flex items-center gap-1 overflow-x-auto pb-1">
-                                        {g.templates.sort((a: any, b: any) => a.sortOrder - b.sortOrder).map((pt: any, i: number) => (
-                                            <div key={pt.id || i} className="flex items-center gap-1 shrink-0">
-                                                <div className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-center">
-                                                    <p className="text-[10px] font-bold text-slate-600">{pt.name}</p>
-                                                    <p className="text-[9px] text-slate-400">{pt.subcontractors.map((s: any) => s.name).join(", ")}</p>
+
+                            {/* グループ内の商品リスト */}
+                            {!isCollapsed && (
+                                <div className="space-y-3">
+                                    {groupProducts.length === 0 ? (
+                                        <div className="text-center py-6 text-xs text-slate-400 border border-dashed border-slate-200 bg-white rounded-xl">
+                                            このグループには商品がありません。商品をドラッグ＆ドロップして追加できます。
+                                        </div>
+                                    ) : (
+                                        groupProducts.map((p) => {
+                                            const groups = getProductGroups(p);
+                                            return (
+                                                <div 
+                                                    key={p.id} 
+                                                    draggable={canEdit ? "true" : "false"}
+                                                    onDragStart={(e) => {
+                                                        if (!canEdit) return;
+                                                        e.stopPropagation();
+                                                        e.dataTransfer.setData("text/plain", `product:${p.id}`);
+                                                        setDraggingProductId(p.id);
+                                                    }}
+                                                    onDragEnd={() => {
+                                                        setDraggingProductId(null);
+                                                    }}
+                                                    onDragOver={(e) => {
+                                                        e.preventDefault();
+                                                    }}
+                                                    onDrop={async (e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        const data = e.dataTransfer.getData("text/plain");
+                                                        if (data.startsWith("product:")) {
+                                                            const droppedProductId = data.split(":")[1];
+                                                            if (droppedProductId === p.id) return;
+
+                                                            const targetGroupId = p.group_id || null;
+                                                            const groupProducts = products.filter(item => item.group_id === targetGroupId && item.id !== droppedProductId);
+                                                            const targetIndex = groupProducts.findIndex(item => item.id === p.id);
+
+                                                            const reorderedProducts = [...groupProducts];
+                                                            reorderedProducts.splice(targetIndex, 0, products.find(item => item.id === droppedProductId)!);
+
+                                                            const orderedIds = reorderedProducts.map(item => item.id);
+
+                                                            setProducts(prev => {
+                                                                const otherGroupProducts = prev.filter(item => item.group_id !== targetGroupId && item.id !== droppedProductId);
+                                                                const updatedGroupProducts = reorderedProducts.map((item, index) => ({
+                                                                    ...item,
+                                                                    group_id: targetGroupId,
+                                                                    sort_order: index
+                                                                }));
+                                                                return [...otherGroupProducts, ...updatedGroupProducts].sort((a, b) => {
+                                                                    if (a.group_id === b.group_id) {
+                                                                        return (a.sort_order || 0) - (b.sort_order || 0);
+                                                                    }
+                                                                    const aGroup = productGroups.find(pg => pg.id === a.group_id);
+                                                                    const bGroup = productGroups.find(pg => pg.id === b.group_id);
+                                                                    const aOrder = aGroup ? aGroup.sort_order : 9999;
+                                                                    const bOrder = bGroup ? bGroup.sort_order : 9999;
+                                                                    return aOrder - bOrder;
+                                                                });
+                                                            });
+
+                                                            try {
+                                                                await reorderProductsInGroup(targetGroupId, orderedIds);
+                                                                showToast("success", "商品の並び順を更新しました");
+                                                            } catch (err) {
+                                                                showToast("error", "商品の並び替えに失敗しました");
+                                                                refresh();
+                                                            }
+                                                        }
+                                                    }}
+                                                    className={`bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition ${
+                                                        canEdit ? "cursor-grab active:cursor-grabbing" : ""
+                                                    }`}
+                                                >
+                                                    <div className="flex items-start justify-between mb-3">
+                                                        <div>
+                                                            <div className="flex items-center gap-2 mb-1 min-w-0">
+                                                                {canEdit && <GripVertical size={14} className="text-slate-300 shrink-0" />}
+                                                                <span className="font-mono text-xs font-bold text-blue-600 shrink-0">{p.code}</span>
+                                                                <span className="font-bold text-slate-800 truncate">{p.name}</span>
+                                                            </div>
+                                                            <p className="text-xs text-slate-400">{groups.length}グループ | {groups.reduce((s: number, g: any) => s + g.templates.length, 0)}工程</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            {canEdit && <button onClick={() => duplicateProduct(p)} className="p-1.5 rounded-md hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition" title="複製"><Copy size={14} /></button>}
+                                                            {canEdit && <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition" title="編集"><Edit2 size={14} /></button>}
+                                                            {canEdit && <button onClick={() => setDeleteId(p.id)} className="p-1.5 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 transition" title="削除"><Trash2 size={14} /></button>}
+                                                        </div>
+                                                    </div>
+                                                    {/* 工程グループ別フロー表示 */}
+                                                    {groups.map((g: any, gi: number) => (
+                                                        <div key={g.id || gi} className="mb-2">
+                                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{g.label}</p>
+                                                            <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                                                                {g.templates.sort((a: any, b: any) => a.sortOrder - b.sortOrder).map((pt: any, i: number) => (
+                                                                    <div key={pt.id || i} className="flex items-center gap-1 shrink-0">
+                                                                        <div className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-center">
+                                                                            <p className="text-[10px] font-bold text-slate-600">{pt.name}</p>
+                                                                            <p className="text-[9px] text-slate-400">{pt.subcontractors.map((s: any) => s.name).join(", ")}</p>
+                                                                        </div>
+                                                                        {i < g.templates.length - 1 && <ChevronRight className="w-3 h-3 text-slate-300 shrink-0" />}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                                {i < g.templates.length - 1 && <ChevronRight className="w-3 h-3 text-slate-300 shrink-0" />}
-                                            </div>
-                                        ))}
-                                    </div>
+                                            );
+                                        })
+                                    )}
                                 </div>
-                            ))}
+                            )}
                         </div>
                     );
                 })}
-                {!fetching && products.length === 0 && <div className="text-center py-20 bg-white rounded-xl border border-dashed border-slate-200"><p className="text-sm text-slate-400">商品が登録されていません</p></div>}
+
+                {/* 未分類の商品の表示 */}
+                {(() => {
+                    const unclassifiedProducts = products.filter(p => !p.group_id);
+                    const isDragOver = dragOverGroupId === "unclassified";
+                    const isCollapsed = collapsedGroups["unclassified"];
+
+                    return (
+                        <div 
+                            className={`bg-slate-50 border-2 border-dashed rounded-2xl p-4 transition-all ${
+                                isDragOver ? "border-blue-400 bg-blue-50/30" : "border-slate-300"
+                            }`}
+                            onDragOver={(e) => {
+                                e.preventDefault();
+                                setDragOverGroupId("unclassified");
+                            }}
+                            onDragLeave={() => {
+                                setDragOverGroupId(null);
+                            }}
+                            onDrop={async (e) => {
+                                e.preventDefault();
+                                setDragOverGroupId(null);
+                                const data = e.dataTransfer.getData("text/plain");
+                                if (data.startsWith("product:")) {
+                                    const droppedProductId = data.split(":")[1];
+                                    try {
+                                        const nextSortOrder = unclassifiedProducts.length;
+                                        setProducts(prev => prev.map(p => 
+                                            p.id === droppedProductId 
+                                                ? { ...p, group_id: null, sort_order: nextSortOrder }
+                                                : p
+                                        ));
+                                        await moveProductToGroup(droppedProductId, null, nextSortOrder);
+                                        showToast("success", "商品を未分類に移動しました");
+                                    } catch (err) {
+                                        showToast("error", "商品の移動に失敗しました");
+                                        refresh();
+                                    }
+                                }
+                            }}
+                        >
+                            {/* 未分類ヘッダー */}
+                            <div 
+                                className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4 cursor-pointer select-none"
+                                onClick={() => toggleGroupCollapse("unclassified")}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <ChevronDown 
+                                        size={16} 
+                                        className={`text-slate-500 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} 
+                                    />
+                                    <span className="font-black text-slate-700 text-sm">未分類</span>
+                                    <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full text-xs font-bold">{unclassifiedProducts.length}</span>
+                                </div>
+                            </div>
+
+                            {/* 未分類の商品リスト */}
+                            {!isCollapsed && (
+                                <div className="space-y-3">
+                                    {unclassifiedProducts.length === 0 ? (
+                                        <div className="text-center py-6 text-xs text-slate-400 border border-dashed border-slate-200 bg-white rounded-xl">
+                                            未分類商品は存在しません。商品をここにドラッグ＆ドロップして未分類にできます。
+                                        </div>
+                                    ) : (
+                                        unclassifiedProducts.map((p) => {
+                                            const groups = getProductGroups(p);
+                                            return (
+                                                <div 
+                                                    key={p.id} 
+                                                    draggable={canEdit ? "true" : "false"}
+                                                    onDragStart={(e) => {
+                                                        if (!canEdit) return;
+                                                        e.stopPropagation();
+                                                        e.dataTransfer.setData("text/plain", `product:${p.id}`);
+                                                        setDraggingProductId(p.id);
+                                                    }}
+                                                    onDragEnd={() => {
+                                                        setDraggingProductId(null);
+                                                    }}
+                                                    onDragOver={(e) => {
+                                                        e.preventDefault();
+                                                    }}
+                                                    onDrop={async (e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        const data = e.dataTransfer.getData("text/plain");
+                                                        if (data.startsWith("product:")) {
+                                                            const droppedProductId = data.split(":")[1];
+                                                            if (droppedProductId === p.id) return;
+
+                                                            const targetGroupId = null;
+                                                            const groupProducts = products.filter(item => item.group_id === targetGroupId && item.id !== droppedProductId);
+                                                            const targetIndex = groupProducts.findIndex(item => item.id === p.id);
+
+                                                            const reorderedProducts = [...groupProducts];
+                                                            reorderedProducts.splice(targetIndex, 0, products.find(item => item.id === droppedProductId)!);
+
+                                                            const orderedIds = reorderedProducts.map(item => item.id);
+
+                                                            setProducts(prev => {
+                                                                const otherGroupProducts = prev.filter(item => item.group_id !== targetGroupId && item.id !== droppedProductId);
+                                                                const updatedGroupProducts = reorderedProducts.map((item, index) => ({
+                                                                    ...item,
+                                                                    group_id: targetGroupId,
+                                                                    sort_order: index
+                                                                }));
+                                                                return [...otherGroupProducts, ...updatedGroupProducts].sort((a, b) => {
+                                                                    if (a.group_id === b.group_id) {
+                                                                        return (a.sort_order || 0) - (b.sort_order || 0);
+                                                                    }
+                                                                    const aGroup = productGroups.find(pg => pg.id === a.group_id);
+                                                                    const bGroup = productGroups.find(pg => pg.id === b.group_id);
+                                                                    const aOrder = aGroup ? aGroup.sort_order : 9999;
+                                                                    const bOrder = bGroup ? bGroup.sort_order : 9999;
+                                                                    return aOrder - bOrder;
+                                                                });
+                                                            });
+
+                                                            try {
+                                                                await reorderProductsInGroup(targetGroupId, orderedIds);
+                                                                showToast("success", "商品の並び順を更新しました");
+                                                            } catch (err) {
+                                                                showToast("error", "商品の並び替えに失敗しました");
+                                                                refresh();
+                                                            }
+                                                        }
+                                                    }}
+                                                    className={`bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition ${
+                                                        canEdit ? "cursor-grab active:cursor-grabbing" : ""
+                                                    }`}
+                                                >
+                                                    <div className="flex items-start justify-between mb-3">
+                                                        <div>
+                                                            <div className="flex items-center gap-2 mb-1 min-w-0">
+                                                                {canEdit && <GripVertical size={14} className="text-slate-300 shrink-0" />}
+                                                                <span className="font-mono text-xs font-bold text-blue-600 shrink-0">{p.code}</span>
+                                                                <span className="font-bold text-slate-800 truncate">{p.name}</span>
+                                                            </div>
+                                                            <p className="text-xs text-slate-400">{groups.length}グループ | {groups.reduce((s: number, g: any) => s + g.templates.length, 0)}工程</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            {canEdit && <button onClick={() => duplicateProduct(p)} className="p-1.5 rounded-md hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition" title="複製"><Copy size={14} /></button>}
+                                                            {canEdit && <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition" title="編集"><Edit2 size={14} /></button>}
+                                                            {canEdit && <button onClick={() => setDeleteId(p.id)} className="p-1.5 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-500 transition" title="削除"><Trash2 size={14} /></button>}
+                                                        </div>
+                                                    </div>
+                                                    {/* 工程グループ別フロー表示 */}
+                                                    {groups.map((g: any, gi: number) => (
+                                                        <div key={g.id || gi} className="mb-2">
+                                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{g.label}</p>
+                                                            <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                                                                {g.templates.sort((a: any, b: any) => a.sortOrder - b.sortOrder).map((pt: any, i: number) => (
+                                                                    <div key={pt.id || i} className="flex items-center gap-1 shrink-0">
+                                                                        <div className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-center">
+                                                                            <p className="text-[10px] font-bold text-slate-600">{pt.name}</p>
+                                                                            <p className="text-[9px] text-slate-400">{pt.subcontractors.map((s: any) => s.name).join(", ")}</p>
+                                                                        </div>
+                                                                        {i < g.templates.length - 1 && <ChevronRight className="w-3 h-3 text-slate-300 shrink-0" />}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
             </div>
 
             {/* モーダル */}
@@ -397,8 +834,55 @@ export default function MasterPage() {
                 </div>
             </Modal>
 
+            {/* グループ作成・編集モーダル */}
+            <Modal 
+                open={isGroupModalOpen} 
+                onClose={() => { setIsGroupModalOpen(false); setGroupFormName(""); setEditGroup(null); }}
+                title={editGroup ? "グループを編集" : "グループを作成"}
+                width="max-w-md"
+            >
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">グループ名</label>
+                        <input 
+                            type="text" 
+                            value={groupFormName} 
+                            onChange={(e) => setGroupFormName(e.target.value)} 
+                            placeholder="例: 牛刀シリーズ" 
+                            className="input-base" 
+                        />
+                    </div>
+                    <div className="flex gap-3">
+                        <button 
+                            onClick={() => { setIsGroupModalOpen(false); setGroupFormName(""); setEditGroup(null); }} 
+                            className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition text-sm"
+                        >
+                            キャンセル
+                        </button>
+                        <button 
+                            onClick={handleSaveGroup} 
+                            disabled={loading}
+                            className="flex-1 bg-blue-600 text-white font-black py-3 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2"
+                        >
+                            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "保存する"}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
             <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={handleDelete}
                 title="商品を削除しますか？" message="この商品に紐づく工程データもすべて削除されます。" confirmLabel="削除する" danger />
+
+            {/* グループ削除の警告ダイアログ */}
+            <ConfirmDialog 
+                open={!!deleteGroupId} 
+                onClose={() => setDeleteGroupId(null)} 
+                onConfirm={handleDeleteGroup}
+                title="グループを削除しますか？" 
+                message="グループを削除すると、そのグループに含まれるすべての商品も削除されます。よろしいですか？" 
+                confirmLabel="削除する" 
+                danger 
+            />
         </div>
     );
 }

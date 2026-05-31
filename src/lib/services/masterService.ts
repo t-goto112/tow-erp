@@ -27,6 +27,8 @@ export interface MasterProduct {
     id: string;
     name: string;
     code: string;
+    group_id?: string | null;
+    sort_order?: number;
     processes: MasterProcess[];
 }
 
@@ -50,13 +52,13 @@ export async function fetchMasterProducts(): Promise<MasterProduct[]> {
     const { data, error } = await supabase
         .from('products')
         .select(`
-            id, name, code,
+            id, name, code, group_id, sort_order,
             processes(
                 id, name, sort_order, group_index, is_assembly_point, part_label, target_group_indexes,
                 process_subcontractor_rates(id, unit_price, subcontractors(id, name))
             )
         `)
-        .order('created_at', { ascending: false });
+        .order('sort_order', { ascending: true });
 
     if (error) throw error;
     return (data as any) || [];
@@ -252,6 +254,85 @@ export async function deleteProduct(productId: string): Promise<void> {
         .delete()
         .eq('id', productId);
     if (error) throw error;
+}
+
+// ─── Create a product group ───
+export async function createProductGroup(name: string): Promise<string> {
+    const { data: maxGroup } = await supabase
+        .from('product_groups')
+        .select('sort_order')
+        .order('sort_order', { ascending: false })
+        .limit(1);
+    
+    const nextSortOrder = maxGroup && maxGroup.length > 0 ? maxGroup[0].sort_order + 1 : 1;
+
+    const { data, error } = await supabase
+        .from('product_groups')
+        .insert({ name, sort_order: nextSortOrder })
+        .select('id')
+        .single();
+    
+    if (error) throw error;
+    return data.id;
+}
+
+// ─── Update a product group name ───
+export async function updateProductGroup(groupId: string, name: string): Promise<void> {
+    const { error } = await supabase
+        .from('product_groups')
+        .update({ name })
+        .eq('id', groupId);
+    if (error) throw error;
+}
+
+// ─── Delete a product group and its products ───
+export async function deleteProductGroup(groupId: string): Promise<void> {
+    // Delete all products inside the group first (because of custom constraint logic)
+    const { error: pErr } = await supabase
+        .from('products')
+        .delete()
+        .eq('group_id', groupId);
+    
+    if (pErr) throw pErr;
+
+    // Delete the group itself
+    const { error: gErr } = await supabase
+        .from('product_groups')
+        .delete()
+        .eq('id', groupId);
+    
+    if (gErr) throw gErr;
+}
+
+// ─── Reorder product groups ───
+export async function reorderProductGroups(orderedIds: string[]): Promise<void> {
+    const promises = orderedIds.map((id, index) => 
+        supabase
+            .from('product_groups')
+            .update({ sort_order: index })
+            .eq('id', id)
+    );
+    await Promise.all(promises);
+}
+
+// ─── Move a product to group and assign order ───
+export async function moveProductToGroup(productId: string, groupId: string | null, sortOrder: number): Promise<void> {
+    const { error } = await supabase
+        .from('products')
+        .update({ group_id: groupId, sort_order: sortOrder })
+        .eq('id', productId);
+    if (error) throw error;
+}
+
+// ─── Reorder products within a group ───
+export async function reorderProductsInGroup(groupId: string | null, orderedProductIds: string[]): Promise<void> {
+    const promises = orderedProductIds.map((id, index) => 
+        supabase
+            .from('products')
+            .update({ sort_order: index, group_id: groupId })
+            .eq('id', id)
+    );
+    await Promise.all(promises);
 }
 
 // ─── Convert Supabase process data to form groups ───

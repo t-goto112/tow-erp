@@ -9,7 +9,7 @@ import { useSupabaseData, SupabaseLot, SupabaseLotProcess } from "@/lib/useSupab
 import { moveForward, registerWip, moveBack, moveToInventory, shipAndInvoice, confirmLoss as confirmLossService } from "@/lib/services/routingService";
 
 export default function RoutingPage() {
-    const { lots, inventory, processes, subcontractors, warehouses, processRates, loading: dataLoading, profile, refresh } = useSupabaseData();
+    const { lots, productGroups, inventory, processes, subcontractors, warehouses, processRates, loading: dataLoading, profile, refresh } = useSupabaseData();
     const router = useRouter();
     const canEdit = profile?.role === 'admin' || (profile?.permissions?.routing?.edit === true);
 
@@ -294,7 +294,28 @@ export default function RoutingPage() {
                         disabled={!canEdit}
                         className={`select-base ${!canEdit ? 'opacity-50 cursor-not-allowed bg-slate-100' : ''}`}>
                         <option value="">{canEdit ? '選択してください' : '閲覧のみ（選択不可）'}</option>
-                        {activeLots.map(l => <option key={l.id} value={l.id}>{l.lot_number} — {l.products?.name} ({l.total_quantity}個)</option>)}
+                        {productGroups.map(g => {
+                            const groupLots = activeLots.filter(l => l.products?.group_id === g.id);
+                            if (groupLots.length === 0) return null;
+                            return (
+                                <optgroup key={g.id} label={g.name}>
+                                    {groupLots.map(l => (
+                                        <option key={l.id} value={l.id}>{l.lot_number} — {l.products?.name} ({l.total_quantity}個)</option>
+                                    ))}
+                                </optgroup>
+                            );
+                        })}
+                        {(() => {
+                            const unclassifiedLots = activeLots.filter(l => !l.products?.group_id);
+                            if (unclassifiedLots.length === 0) return null;
+                            return (
+                                <optgroup label="未分類">
+                                    {unclassifiedLots.map(l => (
+                                        <option key={l.id} value={l.id}>{l.lot_number} — {l.products?.name} ({l.total_quantity}個)</option>
+                                    ))}
+                                </optgroup>
+                            );
+                        })()}
                     </select>
                 </div>
                 {selectedLot && (

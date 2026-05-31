@@ -18,7 +18,7 @@ const statusLabels: Record<string, { label: string; color: string }> = {
 };
 
 export default function OrdersPage() {
-    const { orders, products, loading: dataLoading, profile, refresh } = useSupabaseData();
+    const { orders, products, productGroups, loading: dataLoading, profile, refresh } = useSupabaseData();
     const router = useRouter();
     const canEdit = profile?.role === 'admin' || (profile?.permissions?.orders?.edit === true);
 
@@ -152,7 +152,28 @@ export default function OrdersPage() {
                     </div>
                     <select value={productFilter} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setProductFilter(e.target.value)} className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
                         <option value="">全製品</option>
-                        {products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                        {productGroups.map(g => {
+                            const groupProds = products.filter(p => p.group_id === g.id);
+                            if (groupProds.length === 0) return null;
+                            return (
+                                <optgroup key={g.id} label={g.name}>
+                                    {groupProds.map(p => (
+                                        <option key={p.id} value={p.name}>{p.name}</option>
+                                    ))}
+                                </optgroup>
+                            );
+                        })}
+                        {(() => {
+                            const unclassified = products.filter(p => !p.group_id);
+                            if (unclassified.length === 0) return null;
+                            return (
+                                <optgroup label="未分類">
+                                    {unclassified.map(p => (
+                                        <option key={p.id} value={p.name}>{p.name}</option>
+                                    ))}
+                                </optgroup>
+                            );
+                        })()}
                     </select>
                 </div>
                 {canEdit && (
@@ -242,7 +263,29 @@ export default function OrdersPage() {
                         {formItems.map((item, i) => (
                             <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-2">
                                 <select value={item.product} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { const arr = [...formItems]; arr[i].product = e.target.value; setFormItems(arr); }} className="select-base flex-1 w-full text-sm">
-                                    <option value="">選択</option>{products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                                    <option value="">選択</option>
+                                    {productGroups.map(g => {
+                                        const groupProds = products.filter(p => p.group_id === g.id);
+                                        if (groupProds.length === 0) return null;
+                                        return (
+                                            <optgroup key={g.id} label={g.name}>
+                                                {groupProds.map(p => (
+                                                    <option key={p.id} value={p.name}>{p.name}</option>
+                                                ))}
+                                            </optgroup>
+                                        );
+                                    })}
+                                    {(() => {
+                                        const unclassified = products.filter(p => !p.group_id);
+                                        if (unclassified.length === 0) return null;
+                                        return (
+                                            <optgroup label="未分類">
+                                                {unclassified.map(p => (
+                                                    <option key={p.id} value={p.name}>{p.name}</option>
+                                                ))}
+                                            </optgroup>
+                                        );
+                                    })()}
                                 </select>
                                 <input type="number" placeholder="数量" value={item.quantity || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const arr = [...formItems]; arr[i].quantity = Number(e.target.value); setFormItems(arr); }} className="input-base w-full sm:w-24 shrink-0 px-2" />
                                 <input type="number" placeholder="単価" value={item.unitPrice || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const arr = [...formItems]; arr[i].unitPrice = Number(e.target.value); setFormItems(arr); }} className="input-base w-full sm:w-16 shrink-0 px-2 text-xs" disabled={isEcOrDirect} />
