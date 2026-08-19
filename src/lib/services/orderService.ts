@@ -136,3 +136,64 @@ export async function deleteSupabaseOrder(orderId: string) {
     if (error) throw error;
     return true;
 }
+
+export async function updateOrderItem(
+    orderItemId: string,
+    orderId: string,
+    newQuantity: number,
+    newUnitPrice: number
+) {
+    // 1. Update order_items
+    const { error: itemErr } = await supabase
+        .from('order_items')
+        .update({ quantity: newQuantity, unit_price: newUnitPrice })
+        .eq('id', orderItemId);
+    if (itemErr) throw itemErr;
+
+    // 2. Get the product_id for this order item to find the related lot
+    const { data: orderItem } = await supabase
+        .from('order_items')
+        .select('product_id')
+        .eq('id', orderItemId)
+        .single();
+
+    if (orderItem) {
+        // Update the lot's total_quantity to match the new order item quantity
+        await supabase
+            .from('lots')
+            .update({ total_quantity: newQuantity })
+            .eq('order_id', orderId)
+            .eq('product_id', orderItem.product_id);
+    }
+
+    // 3. Auto-complete check: if all items have shipped_quantity >= quantity, mark order as completed
+    const { data: allItems } = await supabase
+        .from('order_items')
+        .select('quantity, shipped_quantity')
+        .eq('order_id', orderId);
+
+    if (allItems && allItems.length > 0) {
+        const allComplete = allItems.every(item => (item.shipped_quantity || 0) >= item.quantity);
+        if (allComplete) {
+            await supabase
+                .from('orders')
+                .update({ status: 'completed' })
+                .eq('id', orderId);
+        } else {
+            // If not all complete, ensure it's not marked as completed (revert to in_progress if it was)
+            const { data: orderData } = await supabase
+                .from('orders')
+                .select('status')
+                .eq('id', orderId)
+                .single();
+            if (orderData && orderData.status === 'completed') {
+                await supabase
+                    .from('orders')
+                    .update({ status: 'in_progress' })
+                    .eq('id', orderId);
+            }
+        }
+    }
+
+    return { ok: true };
+}

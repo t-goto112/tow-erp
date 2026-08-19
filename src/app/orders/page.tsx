@@ -2,12 +2,12 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, ChevronRight, Loader2, Trash2 } from "lucide-react";
+import { Plus, ChevronRight, Loader2, Trash2, Edit2, Check, X } from "lucide-react";
 import { showToast } from "@/components/Toast";
 import Modal from "@/components/Modal";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { useSupabaseData, SupabaseOrder } from "@/lib/useSupabaseData";
-import { createSupabaseOrder, deleteSupabaseOrder } from "@/lib/services/orderService";
+import { createSupabaseOrder, deleteSupabaseOrder, updateOrderItem } from "@/lib/services/orderService";
 
 const channelLabels: Record<string, string> = { ec: "EC", wholesale: "卸売", direct: "直販" };
 const statusLabels: Record<string, { label: string; color: string }> = {
@@ -36,6 +36,20 @@ export default function OrdersPage() {
     const [isNewOpen, setIsNewOpen] = useState(false);
     const [detailOrder, setDetailOrder] = useState<SupabaseOrder | null>(null);
     const [deleteId, setDeleteId] = useState<string | null>(null);
+    const [editItemId, setEditItemId] = useState<string | null>(null);
+    const [editItemQty, setEditItemQty] = useState("");
+    const [editItemPrice, setEditItemPrice] = useState("");
+    const [saving, setSaving] = useState(false);
+
+    // detailOrderをordersデータと同期（編集後のリアルタイム反映）
+    useEffect(() => {
+        if (detailOrder) {
+            const updated = orders.find(o => o.id === detailOrder.id);
+            if (updated) {
+                setDetailOrder(updated);
+            }
+        }
+    }, [orders]);
 
     // フィルタ
     const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -131,6 +145,25 @@ export default function OrdersPage() {
         }
     };
 
+    const handleSaveItem = async (item: any) => {
+        if (!detailOrder) return;
+        const newQty = Number(editItemQty);
+        const newPrice = Number(editItemPrice);
+        if (newQty <= 0) { showToast("error", "数量は1以上を入力してください"); return; }
+        setSaving(true);
+        try {
+            await updateOrderItem(item.id, detailOrder.id, newQty, newPrice);
+            showToast("success", "受注内容を更新しました");
+            setEditItemId(null);
+            refresh();
+        } catch (err: any) {
+            console.error(err);
+            showToast("error", "更新に失敗しました");
+        } finally {
+            setSaving(false);
+        }
+    };
+
     if (dataLoading) {
         return <div className="flex h-full items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;
     }
@@ -221,7 +254,7 @@ export default function OrdersPage() {
             </div>
 
             {/* 詳細モーダル */}
-            <Modal open={!!detailOrder} onClose={() => setDetailOrder(null)} title={detailOrder?.order_number || ""} subtitle={detailOrder?.customer_name} width="max-w-2xl">
+            <Modal open={!!detailOrder} onClose={() => { setDetailOrder(null); setEditItemId(null); }} title={detailOrder?.order_number || ""} subtitle={detailOrder?.customer_name} width="max-w-2xl">
                 {detailOrder && (
                     <div className="space-y-4">
                         <div className="flex gap-2 flex-wrap text-xs">
@@ -230,14 +263,53 @@ export default function OrdersPage() {
                             <span className="text-slate-400">納期: {detailOrder.due_date}</span>
                         </div>
                         <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">品目</p>
-                            {detailOrder.order_items?.map((item, i) => (
-                                <div key={i} className="flex justify-between py-1 text-sm">
-                                    <span className="text-slate-700">{item.products?.name} × {item.quantity}</span>
-                                    {item.unit_price > 0 && <span className="font-bold text-slate-600">¥{(item.quantity * item.unit_price).toLocaleString()}</span>}
-                                </div>
-                            ))}
-
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">品目</p>
+                                <p className="text-xs font-black text-slate-600">合計: ¥{(detailOrder.order_items?.reduce((s, i) => s + i.quantity * i.unit_price, 0) || 0).toLocaleString()}</p>
+                            </div>
+                            {detailOrder.order_items?.map((item, i) => {
+                                const isEditingItem = editItemId === item.id;
+                                const remainQty = Math.max(0, item.quantity - (item.shipped_quantity || 0));
+                                return (
+                                    <div key={i} className="flex items-center justify-between py-2 border-b border-slate-200/60 last:border-0 gap-2">
+                                        <div className="flex-1 min-w-0">
+                                            <span className="text-sm text-slate-700 font-medium">{item.products?.name}</span>
+                                            {!isEditingItem && (
+                                                <div className="flex gap-3 text-[10px] mt-0.5">
+                                                    <span className="text-slate-400">数量: {item.quantity}</span>
+                                                    {item.unit_price > 0 && <span className="text-slate-400">単価: ¥{item.unit_price.toLocaleString()}</span>}
+                                                    <span className={remainQty > 0 ? "text-amber-600 font-bold" : "text-emerald-600 font-bold"}>残り: {remainQty}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {isEditingItem ? (
+                                            <div className="flex items-center gap-1.5">
+                                                <div className="flex flex-col gap-1">
+                                                    <div className="flex items-center gap-1">
+                                                        <span className="text-[9px] text-slate-400 w-6">数量</span>
+                                                        <input type="number" value={editItemQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditItemQty(e.target.value)} className="w-20 px-1.5 py-1 border border-slate-200 rounded text-xs text-right" />
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        <span className="text-[9px] text-slate-400 w-6">単価</span>
+                                                        <input type="number" value={editItemPrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditItemPrice(e.target.value)} className="w-20 px-1.5 py-1 border border-slate-200 rounded text-xs text-right" />
+                                                    </div>
+                                                </div>
+                                                <button onClick={() => handleSaveItem(item)} disabled={saving} className="p-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition disabled:opacity-50"><Check size={12} /></button>
+                                                <button onClick={() => setEditItemId(null)} className="p-1.5 bg-slate-200 rounded text-xs hover:bg-slate-300 transition"><X size={12} /></button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-2">
+                                                {item.unit_price > 0 && <span className="font-bold text-sm text-slate-600">¥{(item.quantity * item.unit_price).toLocaleString()}</span>}
+                                                {canEdit && (
+                                                    <button onClick={() => { setEditItemId(item.id); setEditItemQty(String(item.quantity)); setEditItemPrice(String(item.unit_price)); }} title="編集" className="p-1 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition">
+                                                        <Edit2 size={14} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                         {detailOrder.notes && <p className="text-xs text-slate-500 bg-amber-50 rounded-xl p-3 border border-amber-200">📝 {detailOrder.notes}</p>}
                         {canEdit && (

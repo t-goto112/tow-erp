@@ -59,6 +59,7 @@ async function consumeWipPayments(lotProcessId: string, qty: number) {
         .from('payment_items')
         .select('id, good_quantity, unit_price, amount, payment_id')
         .eq('lot_process_id', lotProcessId)
+        .eq('status', 'wip')
         .order('created_at', { ascending: true });
 
     if (!wipItems) return;
@@ -193,7 +194,9 @@ async function createPaymentItem(
         lot_process_delivery_id: deliveryId || null,
         good_quantity: qty,
         unit_price: Number(unitPrice),
-        amount: amount
+        amount: amount,
+        status: paymentStatus,
+        voucher_date: new Date(completionDate).toISOString().split('T')[0]
     }]);
     if (piErr) throw piErr;
 }

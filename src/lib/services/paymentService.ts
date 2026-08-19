@@ -49,7 +49,7 @@ export async function revertPayment(paymentItemId: string) {
     return { ok: true };
 }
 
-export async function updatePaymentItem(paymentItemId: string, paymentId: string, newQty: number, newPrice: number | null) {
+export async function updatePaymentItem(paymentItemId: string, paymentId: string, newQty: number, newPrice: number | null, voucherDate?: string | null) {
     // Fetch current item to see the difference in amount
     const { data: currentItem, error: fetchErr } = await supabase
         .from('payment_items')
@@ -62,14 +62,19 @@ export async function updatePaymentItem(paymentItemId: string, paymentId: string
     const newAmount = newQty * (newPrice || 0);
     const amountDiff = newAmount - currentItem.amount;
 
-    // Update payment item
+    // Update payment item (including voucher_date if provided)
+    const updateData: any = {
+        good_quantity: newQty,
+        unit_price: newPrice !== null ? newPrice : 0,
+        amount: newAmount
+    };
+    if (voucherDate !== undefined && voucherDate !== null) {
+        updateData.voucher_date = voucherDate;
+    }
+
     const { error: updItemErr } = await supabase
         .from('payment_items')
-        .update({
-            good_quantity: newQty,
-            unit_price: newPrice !== null ? newPrice : 0,
-            amount: newAmount
-        })
+        .update(updateData)
         .eq('id', paymentItemId);
 
     if (updItemErr) throw updItemErr;

@@ -212,13 +212,63 @@ export function useSupabaseData() {
             const { data: piData, error: piErr } = await supabase
                 .from('payment_items')
                 .select(`
-                    id, payment_id, lot_process_id, lot_process_delivery_id, good_quantity, unit_price, amount, status, created_at,
+                    id, payment_id, lot_process_id, lot_process_delivery_id, good_quantity, unit_price, amount, status, created_at, voucher_date,
                     payments(status, period_start, subcontractors(name, id)),
                     lot_processes(unit_price_override, lots(lot_number), processes(name))
                 `)
                 .order('created_at', { ascending: false });
             if (piErr) throw piErr;
             setPaymentItems(piData as any || []);
+
+            // ─── 過去の支払明細ステータス自動自己修復 ───
+            (async () => {
+                try {
+                    const { data: mismatchItems, error: mismatchErr } = await supabase
+                        .from('payment_items')
+                        .select('id, payments(status)')
+                        .eq('status', 'wip');
+                    
+                    if (!mismatchErr && mismatchItems && mismatchItems.length > 0) {
+                        const updates: Record<string, string[]> = {};
+                        mismatchItems.forEach((item: any) => {
+                            const parentStatus = item.payments?.status;
+                            if (parentStatus && parentStatus !== 'wip') {
+                                if (!updates[parentStatus]) {
+                                    updates[parentStatus] = [];
+                                }
+                                updates[parentStatus].push(item.id);
+                            }
+                        });
+
+                        let hasUpdated = false;
+                        for (const [status, ids] of Object.entries(updates)) {
+                            if (ids.length > 0) {
+                                const { error: updErr } = await supabase
+                                    .from('payment_items')
+                                    .update({ status })
+                                    .in('id', ids);
+                                
+                                if (!updErr) {
+                                    hasUpdated = true;
+                                    console.log(`Auto-healed ${ids.length} payment_items to status: ${status}`);
+                                }
+                            }
+                        }
+
+                        if (hasUpdated) {
+                            setPaymentItems(prev => prev.map(pi => {
+                                const pStatus = pi.payments?.status;
+                                if (pi.status === 'wip' && pStatus && pStatus !== 'wip') {
+                                    return { ...pi, status: pStatus };
+                                }
+                                return pi;
+                            }));
+                        }
+                    }
+                } catch (healErr) {
+                    console.error("Auto-healing error:", healErr);
+                }
+            })();
 
             // 4. Fetch Inventory
             const { data: iData, error: iErr } = await supabase
