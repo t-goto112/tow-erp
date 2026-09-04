@@ -218,11 +218,16 @@ export function useSupabaseData() {
                 `)
                 .order('created_at', { ascending: false });
             if (piErr) throw piErr;
-            setPaymentItems(piData as any || []);
+            const normalizedPiData = (piData || []).map((item: any) => ({
+                ...item,
+                amount: Math.round(Number(item.amount) || 0)
+            }));
+            setPaymentItems(normalizedPiData as any || []);
 
-            // ─── 過去の支払明細ステータス自動自己修復 ───
+            // ─── 過去の支払明細ステータス＆金額の自動自己修復 ───
             (async () => {
                 try {
+                    // 1. ステータス不整合の修復
                     const { data: mismatchItems, error: mismatchErr } = await supabase
                         .from('payment_items')
                         .select('id, payments(status)')
@@ -264,6 +269,22 @@ export function useSupabaseData() {
                                 return pi;
                             }));
                         }
+                    }
+
+                    // 2. 小数点を含む金額の四捨五入・整数化修復
+                    const unroundedItems = (piData || []).filter((item: any) => {
+                        const num = Number(item.amount) || 0;
+                        return Math.round(num) !== num;
+                    });
+                    if (unroundedItems.length > 0) {
+                        for (const item of unroundedItems) {
+                            const rounded = Math.round(Number(item.amount) || 0);
+                            await supabase
+                                .from('payment_items')
+                                .update({ amount: rounded })
+                                .eq('id', item.id);
+                        }
+                        console.log(`Auto-healed ${unroundedItems.length} payment_items amounts to rounded integers.`);
                     }
                 } catch (healErr) {
                     console.error("Auto-healing error:", healErr);

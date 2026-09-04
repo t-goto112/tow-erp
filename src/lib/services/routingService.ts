@@ -87,7 +87,7 @@ async function consumeWipPayments(lotProcessId: string, qty: number) {
         } else {
             const oldAmount = item.amount;
             const newItemQty = item.good_quantity - remaining;
-            const newAmount = newItemQty * item.unit_price;
+            const newAmount = Math.round(newItemQty * item.unit_price);
             remaining = 0;
             await supabase.from('payment_items').update({
                 good_quantity: newItemQty,
@@ -160,7 +160,7 @@ async function createPaymentItem(
             .maybeSingle();
         unitPrice = rateData ? rateData.unit_price : 0;
     }
-    const amount = qty * Number(unitPrice);
+    const amount = Math.round(qty * Number(unitPrice));
 
     const { data: existingPayment } = await supabase
         .from('payments')

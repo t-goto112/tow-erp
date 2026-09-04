@@ -46,7 +46,7 @@ export default function PaymentsPage() {
             qty: pi.good_quantity,
             unitPrice: pi.unit_price,
             unitPriceOverride: pi.lot_processes?.unit_price_override,
-            amount: pi.amount,
+            amount: Math.round(Number(pi.amount) || 0),
             completionDate: pi.created_at.split('T')[0],
             voucherDate: pi.voucher_date || pi.created_at.split('T')[0],
             status: (pi.status as any) || (pi.payments?.status as any) || "wip"

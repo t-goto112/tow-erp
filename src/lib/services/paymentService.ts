@@ -59,7 +59,7 @@ export async function updatePaymentItem(paymentItemId: string, paymentId: string
 
     if (fetchErr) throw fetchErr;
 
-    const newAmount = newQty * (newPrice || 0);
+    const newAmount = Math.round(newQty * (newPrice || 0));
     const amountDiff = newAmount - currentItem.amount;
 
     // Update payment item (including voucher_date if provided)
