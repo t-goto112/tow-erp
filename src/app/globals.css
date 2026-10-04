@@ -73,3 +73,40 @@ body {
 .animate-in {
   animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* ─── 文字サイズ「大」(約2.5倍) のスタイリング ─── */
+html[data-font-size="large"] {
+  font-size: 175%; /* 基本フォントサイズを拡大 */
+}
+
+html[data-font-size="large"] body {
+  font-size: 1.4rem;
+  line-height: 1.6;
+}
+
+html[data-font-size="large"] p,
+html[data-font-size="large"] span,
+html[data-font-size="large"] label,
+html[data-font-size="large"] input,
+html[data-font-size="large"] select,
+html[data-font-size="large"] textarea,
+html[data-font-size="large"] button,
+html[data-font-size="large"] td,
+html[data-font-size="large"] th,
+html[data-font-size="large"] div {
+  font-size: 1.4em;
+  word-break: break-word;
+}
+
+/* アイコンや特定固定サイズバッジなどの縮小を防ぎレイアウトを崩さない設定 */
+html[data-font-size="large"] svg {
+  flex-shrink: 0;
+}
+
+html[data-font-size="large"] table {
+  table-layout: auto;
+}
+
+html[data-font-size="large"] .overflow-x-auto {
+  overflow-x: auto;
+}

@@ -4,6 +4,8 @@ import "./globals.css";
 import AppShell from "@/components/AppShell";
 import ToastContainer from "@/components/Toast";
 
+import { FontSizeProvider } from "@/context/FontSizeContext";
+
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const noto = Noto_Sans_JP({
     subsets: ["latin"],
@@ -26,9 +28,11 @@ export default function RootLayout({
             <body
                 className={`${inter.variable} ${noto.variable} font-sans`}
             >
-                <AppShell>{children}</AppShell>
-                <ToastContainer />
-                <div id="modal-root" />
+                <FontSizeProvider>
+                    <AppShell>{children}</AppShell>
+                    <ToastContainer />
+                    <div id="modal-root" />
+                </FontSizeProvider>
             </body>
         </html>
     );

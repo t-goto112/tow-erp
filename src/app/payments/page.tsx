@@ -54,6 +54,7 @@ export default function PaymentsPage() {
     }, [paymentItems]);
 
     const [statusFilters, setStatusFilters] = useState<StatusFilter[]>(["wip", "pre_payment", "paid"]);
+    const [dateType, setDateType] = useState<"completion" | "voucher">("completion");
     const [dateFrom, setDateFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; });
     const [dateTo, setDateTo] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(0); return d.toISOString().split("T")[0]; });
     const [editId, setEditId] = useState<string | null>(null);
@@ -68,10 +69,10 @@ export default function PaymentsPage() {
     // サマリー計算用のデータ（ステータスフィルタを無視し、期間のみでフィルタ）
     const summaryItems = useMemo(() => {
         let res = lines;
-        if (dateFrom) res = res.filter((pl: any) => pl.completionDate >= dateFrom);
-        if (dateTo) res = res.filter((pl: any) => pl.completionDate <= dateTo);
+        if (dateFrom) res = res.filter((pl: any) => (dateType === "voucher" ? pl.voucherDate : pl.completionDate) >= dateFrom);
+        if (dateTo) res = res.filter((pl: any) => (dateType === "voucher" ? pl.voucherDate : pl.completionDate) <= dateTo);
         return res;
-    }, [lines, dateFrom, dateTo]);
+    }, [lines, dateFrom, dateTo, dateType]);
 
     // 一覧表示用のデータ（ステータスフィルタも適用）
     const filtered = useMemo(() => {
@@ -193,7 +194,11 @@ export default function PaymentsPage() {
             {/* フィルタ (検索窓なし) */}
             <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-1.5 text-xs">
-                    <span className="text-slate-400">完了日:</span>
+                    <select value={dateType} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setDateType(e.target.value as "completion" | "voucher")} className="border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-xs font-bold text-slate-600">
+                        <option value="completion">完了日</option>
+                        <option value="voucher">伝票日付</option>
+                    </select>
+                    <span className="text-slate-400">:</span>
                     <input type="date" value={dateFrom} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDateFrom(e.target.value)} className="border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-xs" />
                     <span className="text-slate-400">〜</span>
                     <input type="date" value={dateTo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDateTo(e.target.value)} className="border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-xs" />

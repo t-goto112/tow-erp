@@ -2,15 +2,17 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { User, Loader2, LogOut } from "lucide-react";
+import { User, Loader2, LogOut, Type } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
+import { useFontSize, FontSize } from "@/context/FontSizeContext";
 
 export default function MyPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [loggingOut, setLoggingOut] = useState(false);
-    const [profile, setProfile] = useState<{ id: string; name: string; email: string } | null>(null);
+    const [profile, setProfile] = useState<{ id: string; name: string; email: string; fontSize: FontSize } | null>(null);
+    const { fontSize: currentFontSize, setFontSize } = useFontSize();
     const router = useRouter();
 
     useEffect(() => {
@@ -22,16 +24,19 @@ export default function MyPage() {
                 if (user) {
                     const { data: pData, error } = await supabase
                         .from('profiles')
-                        .select('full_name') // id is already known from user
+                        .select('full_name, font_size')
                         .eq('id', user.id)
                         .single();
 
                     if (error) console.error("MyPage: DB Fetch error", error);
 
+                    const userFontSize = (pData?.font_size as FontSize) || currentFontSize || "small";
+
                     setProfile({
                         id: user.id,
                         name: pData?.full_name || user.user_metadata?.full_name || "未設定",
-                        email: user.email || ""
+                        email: user.email || "",
+                        fontSize: userFontSize
                     });
                 }
             } catch (e) {
@@ -49,11 +54,13 @@ export default function MyPage() {
             return;
         }
         setSaving(true);
-        console.log("MyPage: Attempting to save profile", profile);
         try {
             const { data, error } = await supabase
                 .from('profiles')
-                .update({ full_name: profile.name })
+                .update({ 
+                    full_name: profile.name,
+                    font_size: profile.fontSize
+                })
                 .eq('id', profile.id)
                 .select();
 
@@ -62,7 +69,9 @@ export default function MyPage() {
                 throw error;
             }
 
-            console.log("MyPage: Update successful", data);
+            // コンテキストとLocalStorageに即時反映
+            setFontSize(profile.fontSize);
+
             showToast("success", "プロフィールの更新が完了しました");
         } catch (err: any) {
             console.error("MyPage: Save attempt failed", err);
@@ -116,6 +125,42 @@ export default function MyPage() {
                 </div>
             </section>
 
+            {/* Display Settings */}
+            <section className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-100">
+                    <h5 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        <Type className="w-4 h-4 text-blue-500" />
+                        表示設定（文字サイズ）
+                    </h5>
+                </div>
+                <div className="p-6 space-y-3">
+                    <p className="text-xs text-slate-500 font-medium">画面全体の文字の大きさを設定します（デフォルト: 小）。</p>
+                    <div className="grid grid-cols-2 gap-4 pt-2">
+                        <button
+                            type="button"
+                            onClick={() => setProfile(prev => prev ? { ...prev, fontSize: "small" } : null)}
+                            className={`p-4 rounded-2xl border-2 font-bold text-sm text-center transition-all ${
+                                profile?.fontSize === "small"
+                                    ? "border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-500/20"
+                                    : "border-slate-100 bg-slate-50 text-slate-600 hover:border-slate-200"
+                            }`}
+                        >
+                            小（標準）
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setProfile(prev => prev ? { ...prev, fontSize: "large" } : null)}
+                            className={`p-4 rounded-2xl border-2 font-bold text-base text-center transition-all ${
+                                profile?.fontSize === "large"
+                                    ? "border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-500/20"
+                                    : "border-slate-100 bg-slate-50 text-slate-600 hover:border-slate-200"
+                            }`}
+                        >
+                            大（拡大 2.5倍）
+                        </button>
+                    </div>
+                </div>
+            </section>
 
             <button
                 onClick={handleSave}

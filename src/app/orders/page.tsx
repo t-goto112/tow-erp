@@ -91,7 +91,7 @@ export default function OrdersPage() {
         }, 0);
         
         const nextNum = maxNum + 1;
-        setFormNumber(`${yearMonth}-${nextNum}`);
+        setFormNumber(`${yearMonth}-${String(nextNum).padStart(2, '0')}`);
         setFormCustomer(""); setFormChannel("wholesale"); setFormDueDate(""); setFormNotes("");
         setFormItems([{ product: "", quantity: 0, unitPrice: 0, shipped_quantity: 0 }]);
         setIsNewOpen(true);
