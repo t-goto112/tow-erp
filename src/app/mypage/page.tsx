@@ -145,7 +145,7 @@ export default function MyPage() {
                                     : "border-slate-100 bg-slate-50 text-slate-600 hover:border-slate-200"
                             }`}
                         >
-                            小（標準）
+                            小
                         </button>
                         <button
                             type="button"
@@ -156,7 +156,7 @@ export default function MyPage() {
                                     : "border-slate-100 bg-slate-50 text-slate-600 hover:border-slate-200"
                             }`}
                         >
-                            大（拡大 2.5倍）
+                            大
                         </button>
                     </div>
                 </div>
