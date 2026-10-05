@@ -75,19 +75,12 @@ body {
 }
 
 /* ─── 文字サイズ「大」の安全なスケーリング ─── */
+/*
+  CSS zoom を使うことで px 指定・rem 指定・select/option/th 等ブラウザ既定要素も含め
+  レイアウトを崩さず全要素を均一に約1.25倍拡大する。
+  font-size: 125% では text-[9px] 等の絶対px指定は変化しないが、
+  zoom: 1.25 では全要素が比例スケールされる。
+*/
 html[data-font-size="large"] {
-  font-size: 125%; /* ルートの標準remを均一に拡張 */
-}
-
-html[data-font-size="large"] body {
-  line-height: 1.5;
-}
-
-/* アイコンやテーブルの安全設定 */
-html[data-font-size="large"] svg {
-  flex-shrink: 0;
-}
-
-html[data-font-size="large"] table {
-  table-layout: auto;
+  zoom: 1.25;
 }
