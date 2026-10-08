@@ -62,7 +62,7 @@ export default function RoutingPage() {
     const lotGroupedProcs = useMemo(() => {
         if (!selectedLot) return [];
         const grouped: Record<string, { id: string; process_id: string; subcontractor_id: string; input_quantity: number; completed_quantity: number; loss_qty: number; label: string; records: any[]; group_index: number; part_label: string | null }> = {};
-        const rawProcs = [...(selectedLot.lot_processes || [])].sort((a, b) => 
+        const rawProcs = (selectedLot.lot_processes || []).filter(p => p.processes?.is_active).sort((a, b) => 
             (a.processes?.group_index || 0) - (b.processes?.group_index || 0) || 
             (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0)
         );
@@ -99,6 +99,10 @@ export default function RoutingPage() {
 
     const isFirstProcessForWip = selectedProc?.processes?.sort_order === 1;
     const needsWipRegistration = isFirstProcessForWip;
+
+    const orderedTemplates = processes.filter(p => p.product_id === selectedLot?.product_id && p.group_index === selectedProc?.processes?.group_index).sort((a, b) => a.sort_order - b.sort_order);
+    const nextTemplate = orderedTemplates.find(p => p.sort_order > (selectedProc?.processes?.sort_order ?? Infinity));
+    const prevTemplate = [...orderedTemplates].reverse().find(p => p.sort_order < (selectedProc?.processes?.sort_order ?? -Infinity));
 
     // 選択中工程の外注先
     const currentProcessSubs = useMemo(() => {
@@ -172,7 +176,7 @@ export default function RoutingPage() {
 
         setLoading(true);
         try {
-            await moveForward(selectedLot.id, selectedProc.id, Number(fwdQty), fwdCompletionDate, fwdDeliveryDate, fwdDueDate, nextProcessSubs[0]?.process_id, nextSubId, fwdOverride ? Number(fwdOverride) : undefined);
+            await moveForward(selectedLot.id, selectedProc.id, Number(fwdQty), fwdCompletionDate, fwdDeliveryDate, fwdDueDate, nextTemplate?.id, nextSubId, fwdOverride ? Number(fwdOverride) : undefined);
             showToast("success", `${fwdQty}個を次工程へ送りました`);
             setFwdQty("");
             refresh();
@@ -204,7 +208,11 @@ export default function RoutingPage() {
     };
 
     const handleBack = async () => {
-        if (!canEdit || !selectedLot || !selectedProc || prevProcessSubs.length === 0) return;
+        if (!canEdit || !selectedLot || !selectedProc || !prevTemplate) return;
+        if (!Number.isFinite(Number(backQty)) || Number(backQty) <= 0 || Number(backQty) > selectedProcCurrentQty) {
+            showToast("error", `差戻数量は現在数（${selectedProcCurrentQty}個）以下の正の数を入力してください`);
+            return;
+        }
         
         const subId = prevProcessSubs.find(s => s.name === backPrevSub)?.id;
         // 外注先が複数ある場合のバリデーション
@@ -215,7 +223,7 @@ export default function RoutingPage() {
 
         setLoading(true);
         try {
-            await moveBack(selectedLot.id, selectedProc.id, Number(backQty), backDate, backDueDate, prevProcessSubs[0].process_id, subId);
+            await moveBack(selectedLot.id, selectedProc.id, Number(backQty), backDate, backDueDate, prevTemplate.id, subId);
             showToast("warning", `${backQty}個を前工程へ差戻しました`);
             setBackQty(""); setBackDate(""); setBackDueDate("");
             refresh();
@@ -475,10 +483,10 @@ export default function RoutingPage() {
 
                         {/* 差戻し + ロス */}
                         <div className="space-y-4">
-                            {selectedLot.lot_processes && selectedLot.lot_processes.findIndex((p: any) => p.id === selectedProcessId) > 0 && (
+                            {prevTemplate && (
                                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-3">
                                     <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2"><ArrowLeft className="w-4 h-4 text-amber-500" /> 差戻し</h4>
-                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">数量</label><input type="number" value={backQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackQty(e.target.value)} max={selectedProcCurrentQty} className="input-base" /></div>
+                                    <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">数量</label><input type="number" value={backQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const value = e.target.value; setBackQty(value === "" ? "" : String(Math.min(Math.max(0, Number(value)), Math.max(0, selectedProcCurrentQty)))); }} min={0} max={Math.max(0, selectedProcCurrentQty)} className="input-base" /></div>
                                     <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">差戻し日 *</label><input type="date" value={backDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackDate(e.target.value)} className="input-base" /></div>
                                     <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">前工程完了予定日 *</label><input type="date" value={backDueDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackDueDate(e.target.value)} className="input-base" /></div>
                                     {/* 前工程 外注先選択 */}
@@ -496,7 +504,7 @@ export default function RoutingPage() {
                                         </div>
                                     )}
                                     {canEdit && (
-                                        <button onClick={handleBack} disabled={loading || !backQty || !backDate || !backDueDate}
+                                        <button onClick={handleBack} disabled={loading || !backQty || !Number.isFinite(Number(backQty)) || Number(backQty) <= 0 || Number(backQty) > selectedProcCurrentQty || !backDate || !backDueDate}
                                             className="w-full bg-amber-500 text-white font-bold py-3 rounded-2xl shadow-lg shadow-amber-500/20 hover:bg-amber-600 active:scale-[0.98] transition-all disabled:bg-slate-300 flex items-center justify-center gap-2 text-sm">
                                             <ArrowLeft className="w-4 h-4" /> 差戻す
                                         </button>

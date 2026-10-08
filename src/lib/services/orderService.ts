@@ -78,12 +78,14 @@ export async function createSupabaseOrder(params: {
             if (lotError) throw lotError;
 
             // 4. Create initial lot processes based on Product Process definitions
-            const { data: templates } = await supabase
+            const { data: templates, error: templatesError } = await supabase
                 .from('processes')
                 .select('*')
                 .eq('product_id', productId)
+                .eq('is_active', true)
                 .order('group_index', { ascending: true })
                 .order('sort_order', { ascending: true });
+            if (templatesError) throw templatesError;
 
             if (templates && templates.length > 0) {
                 // Find default subcontractor for first process template's first rate

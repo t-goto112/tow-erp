@@ -65,7 +65,7 @@ export interface SupabaseLotProcess {
     defect_quantity: number;
     loss_qty: number;
     status: string;
-    processes: { name: string; sort_order: number; group_index: number } | null;
+    processes: { name: string; sort_order: number; group_index: number; is_active: boolean; part_label: string | null } | null;
     subcontractors: { name: string } | null;
     lot_process_deliveries?: SupabaseLotProcessDelivery[];
 }
@@ -203,7 +203,7 @@ export function useSupabaseData() {
             // 3. Fetch Lots with nested processes, process definitions, and deliveries
             const { data: lData, error: lErr } = await supabase
                 .from('lots')
-                .select('*, orders(status, order_number), products(name, product_code:code, group_id), lot_processes(*, processes(name, sort_order, group_index), subcontractors(id, name), lot_process_deliveries(*))')
+                .select('*, orders(status, order_number), products(name, product_code:code, group_id), lot_processes(*, processes(name, sort_order, group_index, is_active, part_label), subcontractors(id, name), lot_process_deliveries(*))')
                 .order('created_at', { ascending: false });
             if (lErr) throw lErr;
             setLots(lData || []);
@@ -299,7 +299,7 @@ export function useSupabaseData() {
             setInventory(iData || []);
 
             // 5. Fetch Master Data for routing/processing
-            const { data: procData } = await supabase.from('processes').select('*').order('sort_order', { ascending: true });
+            const { data: procData } = await supabase.from('processes').select('*').eq('is_active', true).order('sort_order', { ascending: true });
             setProcesses(procData || []);
 
             const { data: subData } = await supabase.from('subcontractors').select('*');

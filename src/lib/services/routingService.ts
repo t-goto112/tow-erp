@@ -103,7 +103,7 @@ async function consumeWipPayments(lotProcessId: string, qty: number) {
 
 // ─── ロット・受注ステータス更新 ───
 export async function syncLotAndOrderStatus(lotId: string) {
-    const { data: procs } = await supabase.from('lot_processes').select('*').eq('lot_id', lotId);
+    const { data: procs } = await supabase.from('lot_processes').select('*, processes!inner(is_active)').eq('lot_id', lotId).eq('processes.is_active', true);
     if (!procs) return;
 
     const { data: lot } = await supabase.from('lots').select('order_id, status').eq('id', lotId).single();
@@ -215,7 +215,8 @@ async function getGroupRecords(lotId: string, processTemplateId: string, subcont
         query.is('subcontractor_id', null);
     }
     
-    const { data } = await query;
+    const { data, error } = await query;
+    if (error) throw error;
     return data || [];
 }
 
@@ -402,20 +403,28 @@ export async function moveBack(
     const { data: leadProc, error: cpErr } = await supabase.from('lot_processes').select('*, processes(group_index)').eq('id', currentProcessId).single();
     if (cpErr) throw cpErr;
 
+    if (leadProc.lot_id !== lotId) throw new Error('対象ロットと工程が一致しません');
+
     const groupRecords = await getGroupRecords(lotId, leadProc.process_id, leadProc.subcontractor_id);
+    const currentQty = groupRecords.reduce((sum: number, proc: any) =>
+        sum + (proc.input_quantity || 0) - (proc.completed_quantity || 0) - (proc.loss_qty || 0), 0);
+    if (!Number.isFinite(qty) || qty <= 0 || qty > currentQty) {
+        throw new Error(`差戻数量は現在数（${currentQty}個）以下の正の数を入力してください`);
+    }
     
     let remainingQty = qty;
     for (const proc of [...groupRecords].reverse()) {
         if (remainingQty <= 0) break;
-        const availableToRemove = (proc.input_quantity || 0) - (proc.completed_quantity || 0);
+        const availableToRemove = (proc.input_quantity || 0) - (proc.completed_quantity || 0) - (proc.loss_qty || 0);
         if (availableToRemove <= 0) continue;
 
         const toRemove = Math.min(remainingQty, availableToRemove);
         remainingQty -= toRemove;
 
-        await supabase.from('lot_processes').update({
+        const { error: removeErr } = await supabase.from('lot_processes').update({
             input_quantity: Math.max(0, (proc.input_quantity || 0) - toRemove)
         }).eq('id', proc.id);
+        if (removeErr) throw removeErr;
 
         await consumeWipPayments(proc.id, toRemove);
     }

@@ -34,6 +34,7 @@ export interface MasterProduct {
 
 export interface MasterProcess {
     id: string;
+    is_active: boolean;
     name: string;
     sort_order: number;
     group_index: number;
@@ -54,14 +55,17 @@ export async function fetchMasterProducts(): Promise<MasterProduct[]> {
         .select(`
             id, name, code, group_id, sort_order,
             processes(
-                id, name, sort_order, group_index, is_assembly_point, part_label, target_group_indexes,
+                id, name, sort_order, group_index, is_assembly_point, part_label, target_group_indexes, is_active,
                 process_subcontractor_rates(id, unit_price, subcontractors(id, name))
             )
         `)
         .order('sort_order', { ascending: true });
 
     if (error) throw error;
-    return (data as any) || [];
+    return ((data as any) || []).map((product: MasterProduct) => ({
+        ...product,
+        processes: product.processes.filter(process => process.is_active),
+    }));
 }
 
 // ─── Helper: find or create subcontractor by name ───
@@ -140,7 +144,7 @@ export async function createProduct(
     return product.id;
 }
 
-// ─── Update a product (delete old processes, re-insert) ───
+// ─── Update a product; retired processes retain their historical records ───
 export async function updateProduct(
     productId: string,
     name: string,
@@ -155,10 +159,12 @@ export async function updateProduct(
     if (pErr) throw pErr;
 
     // 2. Get existing processes for this product
-    const { data: existingProcs } = await supabase
+    const { data: existingProcs, error: existingErr } = await supabase
         .from('processes')
         .select('id')
-        .eq('product_id', productId);
+        .eq('product_id', productId)
+        .eq('is_active', true);
+    if (existingErr) throw existingErr;
     const existingIds = new Set<string>((existingProcs || []).map((p: any) => p.id));
 
     // 3. Collect all process IDs that will remain after update
@@ -177,27 +183,18 @@ export async function updateProduct(
         }
     }
 
-    // 4. Delete processes that are no longer referenced (only those without lot_processes FK)
+    // 4. Remove from active routing without deleting deliveries or payment history.
     const idsToRemove = Array.from(existingIds).filter(id => !keepIds.has(id));
     for (const id of idsToRemove) {
-        // Check if any lot_processes reference this process
-        const { data: refs } = await supabase
-            .from('lot_processes')
-            .select('id')
-            .eq('process_id', id)
-            .limit(1);
-        if (!refs || refs.length === 0) {
-            // Safe to delete
-            await supabase.from('processes').delete().eq('id', id);
-        }
-        // If referenced, leave it (orphan process that will be cleaned up later)
+        const { error } = await supabase.from('processes').update({ is_active: false }).eq('id', id);
+        if (error) throw error;
     }
 
     // 5. Upsert processes: update existing, insert new
     for (const { group, gi, tpl } of newProcesses) {
         if (keepIds.has(tpl.id)) {
             // Update existing process
-            await supabase.from('processes').update({
+            const { error: updateErr } = await supabase.from('processes').update({
                 name: tpl.name,
                 sort_order: tpl.sortOrder,
                 group_index: gi,
@@ -205,17 +202,20 @@ export async function updateProduct(
                 part_label: group.partLabel || null,
                 target_group_indexes: tpl.targetGroupIndexes || [],
             }).eq('id', tpl.id);
+            if (updateErr) throw updateErr;
 
             // Delete old rates and re-insert
-            await supabase.from('process_subcontractor_rates').delete().eq('process_id', tpl.id);
+            const { error: deleteRatesErr } = await supabase.from('process_subcontractor_rates').delete().eq('process_id', tpl.id);
+            if (deleteRatesErr) throw deleteRatesErr;
             for (const sub of tpl.subcontractors) {
                 if (!sub.name) continue;
                 const subId = await findOrCreateSubcontractor(sub.name);
-                await supabase.from('process_subcontractor_rates').insert({
+                const { error: rateErr } = await supabase.from('process_subcontractor_rates').insert({
                     process_id: tpl.id,
                     subcontractor_id: subId,
                     unit_price: sub.unitPrice || 0,
                 });
+                if (rateErr) throw rateErr;
             }
         } else {
             // Insert new process
@@ -237,11 +237,12 @@ export async function updateProduct(
             for (const sub of tpl.subcontractors) {
                 if (!sub.name) continue;
                 const subId = await findOrCreateSubcontractor(sub.name);
-                await supabase.from('process_subcontractor_rates').insert({
+                const { error: rateErr } = await supabase.from('process_subcontractor_rates').insert({
                     process_id: proc.id,
                     subcontractor_id: subId,
                     unit_price: sub.unitPrice || 0,
                 });
+                if (rateErr) throw rateErr;
             }
         }
     }
