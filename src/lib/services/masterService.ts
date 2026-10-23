@@ -2,6 +2,8 @@ import { supabase } from "@/lib/supabase";
 
 // ─── Types for Master page forms ───
 export interface FormSubcontractor {
+    id?: string;
+    originalName?: string;
     name: string;
     unitPrice: number;
 }
@@ -72,12 +74,13 @@ export async function fetchMasterProducts(): Promise<MasterProduct[]> {
 async function findOrCreateSubcontractor(name: string): Promise<string> {
     if (!name) throw new Error("外注先名が必要です");
 
-    const { data: existing } = await supabase
+    const { data: existing, error: lookupError } = await supabase
         .from('subcontractors')
         .select('id')
         .eq('name', name)
         .limit(1);
 
+    if (lookupError) throw lookupError;
     if (existing && existing.length > 0) return existing[0].id;
 
     const { data: created, error } = await supabase
@@ -151,6 +154,27 @@ export async function updateProduct(
     code: string,
     groups: FormGroup[]
 ): Promise<void> {
+    // A name edit must retain the identity used by existing lots and payments.
+    // The same subcontractor can appear in several processes in this form.
+    const renamed = new Map<string, string>();
+    for (const group of groups) {
+        for (const tpl of group.templates) {
+            if (!tpl.name) continue;
+            for (const sub of tpl.subcontractors) {
+                if (!sub.id || !sub.name || sub.originalName === undefined || sub.name === sub.originalName) continue;
+                const previous = renamed.get(sub.id);
+                if (previous !== undefined && previous !== sub.name) {
+                    throw new Error("同じ外注先に異なる変更名が指定されています");
+                }
+                renamed.set(sub.id, sub.name);
+            }
+        }
+    }
+    for (const [id, updatedName] of renamed) {
+        const { error } = await supabase.from('subcontractors').update({ name: updatedName }).eq('id', id);
+        if (error) throw error;
+    }
+
     // 1. Update product fields
     const { error: pErr } = await supabase
         .from('products')
@@ -209,7 +233,7 @@ export async function updateProduct(
             if (deleteRatesErr) throw deleteRatesErr;
             for (const sub of tpl.subcontractors) {
                 if (!sub.name) continue;
-                const subId = await findOrCreateSubcontractor(sub.name);
+                const subId = sub.id || await findOrCreateSubcontractor(sub.name);
                 const { error: rateErr } = await supabase.from('process_subcontractor_rates').insert({
                     process_id: tpl.id,
                     subcontractor_id: subId,
@@ -236,7 +260,7 @@ export async function updateProduct(
 
             for (const sub of tpl.subcontractors) {
                 if (!sub.name) continue;
-                const subId = await findOrCreateSubcontractor(sub.name);
+                const subId = sub.id || await findOrCreateSubcontractor(sub.name);
                 const { error: rateErr } = await supabase.from('process_subcontractor_rates').insert({
                     process_id: proc.id,
                     subcontractor_id: subId,
@@ -245,6 +269,35 @@ export async function updateProduct(
                 if (rateErr) throw rateErr;
             }
         }
+    }
+
+    // Also repair lots created before a process was added. Do not reset quantities,
+    // overrides, deliveries, or payments on existing process records.
+    const { data: activeProcesses, error: processesError } = await supabase.from('processes')
+        .select('id, process_subcontractor_rates(subcontractor_id)').eq('product_id', productId).eq('is_active', true);
+    if (processesError) throw processesError;
+    const pageSize = 500;
+    for (let offset = 0; ; offset += pageSize) {
+        const { data: lots, error: lotsError } = await supabase.from('lots').select('id').eq('product_id', productId)
+            .order('id', { ascending: true }).range(offset, offset + pageSize - 1);
+        if (lotsError) throw lotsError;
+        for (const lot of lots || []) {
+            const { data: records, error: recordsError } = await supabase.from('lot_processes').select('process_id').eq('lot_id', lot.id);
+            if (recordsError) throw recordsError;
+            const present = new Set((records || []).map(record => record.process_id));
+            const missing = (activeProcesses || []).filter(process => !present.has(process.id)).map(process => ({
+                lot_id: lot.id,
+                process_id: process.id,
+                subcontractor_id: process.process_subcontractor_rates?.[0]?.subcontractor_id || null,
+                status: 'pending',
+                input_quantity: 0,
+            }));
+            if (missing.length) {
+                const { error } = await supabase.from('lot_processes').insert(missing);
+                if (error) throw error;
+            }
+        }
+        if (!lots || lots.length < pageSize) break;
     }
 }
 
@@ -360,6 +413,8 @@ export function processesToFormGroups(processes: MasterProcess[]): FormGroup[] {
             isAssemblyPoint: proc.is_assembly_point,
             targetGroupIndexes: proc.target_group_indexes || [],
             subcontractors: (proc.process_subcontractor_rates || []).map((r: any) => ({
+                id: r.subcontractors?.id,
+                originalName: r.subcontractors?.name || "",
                 name: r.subcontractors?.name || "",
                 unitPrice: r.unit_price || 0,
             })),
