@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ArrowLeft, AlertTriangle, Loader2, Check, ClipboardList } from "lucide-react";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { useSupabaseData, SupabaseLot, SupabaseLotProcess } from "@/lib/useSupabaseData";
-import { moveForward, registerWip, moveBack, moveToInventory, shipAndInvoice, confirmLoss as confirmLossService } from "@/lib/services/routingService";
+import { moveForward, registerWip, moveBack, moveToInventory, shipAndInvoice, restoreLoss, confirmLoss as confirmLossService } from "@/lib/services/routingService";
 
 export default function RoutingPage() {
     const { lots, productGroups, inventory, processes, subcontractors, warehouses, processRates, loading: dataLoading, profile, refresh } = useSupabaseData();
@@ -19,10 +19,6 @@ export default function RoutingPage() {
             router.replace("/");
         }
     }, [dataLoading, profile, router]);
-
-    if (!dataLoading && profile && profile.role !== 'admin' && profile.permissions?.routing?.view === false) {
-        return null;
-    }
 
     const [selectedLotId, setSelectedLotId] = useState("");
     const [selectedProcessId, setSelectedProcessId] = useState("");
@@ -50,18 +46,28 @@ export default function RoutingPage() {
 
     const [showConfirmLoss, setShowConfirmLoss] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [restoreQty, setRestoreQty] = useState("");
+    const [showRestoreLoss, setShowRestoreLoss] = useState(false);
+    const restoreBusy = useRef(false);
+    const restoreRequest = useRef<{ key: string; id: string } | null>(null);
 
     // 最終工程の分岐
     const [shipMode, setShipMode] = useState<"inventory" | "ship" | null>(null);
     const [warehouseName, setWarehouseName] = useState("本社倉庫");
 
-    const activeLots = lots.filter(l => l.orders?.status !== "completed" || l.status !== "completed");
+    const activeLots = lots.filter(l =>
+        !["cancelled", "canceled"].includes(l.status) &&
+        !["cancelled", "canceled"].includes(l.orders?.status || "") &&
+        (l.status !== "completed" || l.lot_processes?.some(p => p.processes?.is_active && p.loss_qty > 0))
+    );
     const selectedLot = activeLots.find(l => l.id === selectedLotId) || null;
     
+    const restoreOnly = selectedLot?.status === "completed";
+
     // Group lot_processes by process_id + subcontractor_id to handle mismatch
     const lotGroupedProcs = useMemo(() => {
         if (!selectedLot) return [];
-        const grouped: Record<string, { id: string; process_id: string; subcontractor_id: string; input_quantity: number; completed_quantity: number; loss_qty: number; label: string; records: any[]; group_index: number; part_label: string | null }> = {};
+        const grouped: Record<string, { id: string; process_id: string; subcontractor_id: string | null; input_quantity: number; completed_quantity: number; loss_qty: number; label: string; records: any[]; group_index: number; part_label: string | null }> = {};
         const rawProcs = (selectedLot.lot_processes || []).filter(p => p.processes?.is_active).sort((a, b) => 
             (a.processes?.group_index || 0) - (b.processes?.group_index || 0) || 
             (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0)
@@ -89,13 +95,45 @@ export default function RoutingPage() {
                 grouped[key].records.push(p);
             }
         });
-        return Object.values(grouped);
-    }, [selectedLot]);
+        return Object.values(grouped).filter(g => !restoreOnly || g.loss_qty > 0);
+    }, [selectedLot, restoreOnly]);
 
     // Use a grouping-based selection instead of a single record ID
     const selectedGroup = lotGroupedProcs.find(g => g.id === selectedProcessId) || null;
     const selectedProc = selectedGroup?.records[0] || null; // For templates/metadata
     const selectedProcCurrentQty = selectedGroup ? (selectedGroup.input_quantity - selectedGroup.completed_quantity - selectedGroup.loss_qty) : 0;
+
+    const restoreQuantity = Number(restoreQty);
+    const validRestoreQuantity = !!selectedGroup?.subcontractor_id && Number.isSafeInteger(restoreQuantity) && restoreQuantity > 0 && restoreQuantity <= (selectedGroup?.loss_qty || 0);
+
+    useEffect(() => {
+        setRestoreQty(selectedGroup?.loss_qty ? String(selectedGroup.loss_qty) : "");
+        setShowRestoreLoss(false);
+    }, [selectedLotId, selectedProcessId, selectedGroup?.loss_qty]);
+
+    const handleRestoreLoss = async () => {
+        if (!canEdit || !selectedLot || !selectedGroup || !validRestoreQuantity || loading || restoreBusy.current) return;
+        restoreBusy.current = true;
+        setLoading(true);
+        try {
+            const key = JSON.stringify([selectedLot.id, selectedGroup.id, restoreQuantity]);
+            if (restoreRequest.current?.key !== key) {
+                restoreRequest.current = { key, id: crypto.randomUUID() };
+            }
+            await restoreLoss(selectedLot.id, selectedGroup.id, restoreQuantity, restoreRequest.current.id);
+            restoreRequest.current = null;
+            setShowRestoreLoss(false);
+            setSelectedProcessId("");
+            showToast("success", `${restoreQuantity}個をロスから戻しました`);
+            await refresh();
+        } catch (e: any) {
+            // 応答が途切れた場合も、同じ引数の再送には同じIDを使う。
+            showToast("error", e.message || "ロスから戻せませんでした。再度お試しください");
+        } finally {
+            restoreBusy.current = false;
+            setLoading(false);
+        }
+    };
 
     const isFirstProcessForWip = selectedProc?.processes?.sort_order === 1;
     const needsWipRegistration = isFirstProcessForWip;
@@ -149,7 +187,11 @@ export default function RoutingPage() {
         return result;
     }, [selectedLot, selectedProc, processes, processRates]);
 
-    // ロット選択時に初期化
+    const defaultNextSub = nextProcessSubs.length === 1 ? nextProcessSubs[0].name : "";
+    const defaultPrevSub = prevProcessSubs.length === 1 ? prevProcessSubs[0].name : "";
+    const defaultCurrentSub = currentProcessSubs.length === 1 ? currentProcessSubs[0].name : "";
+
+    // 選択変更時に初期化。再取得でオブジェクトが変わっても編集中の入力は保持する。
     useEffect(() => {
         const today = new Date().toISOString().split("T")[0];
         if (selectedLot) {
@@ -158,14 +200,14 @@ export default function RoutingPage() {
             setWipQty(selectedLot.total_quantity.toString()); setWipDeliveryDate(today); setWipDueDate(today); setWipSub(""); setWipOverride("");
             setShipMode(null);
             // 外注先が1つしかない場合は固定
-            if (nextProcessSubs.length === 1) setFwdNextSub(nextProcessSubs[0].name);
-            if (prevProcessSubs.length === 1) setBackPrevSub(prevProcessSubs[0].name);
-            if (currentProcessSubs.length === 1) setWipSub(currentProcessSubs[0].name);
+            if (defaultNextSub) setFwdNextSub(defaultNextSub);
+            if (defaultPrevSub) setBackPrevSub(defaultPrevSub);
+            if (defaultCurrentSub) setWipSub(defaultCurrentSub);
         }
-    }, [selectedLotId, selectedProcessId, nextProcessSubs, prevProcessSubs, currentProcessSubs, selectedLot]);
+    }, [selectedLotId, selectedProcessId, selectedLot?.total_quantity, defaultNextSub, defaultPrevSub, defaultCurrentSub]);
 
     const handleForward = async () => {
-        if (!canEdit || !selectedLot || !selectedProc || !fwdQty) return;
+        if (!canEdit || restoreOnly || !selectedLot || !selectedProc || !fwdQty) return;
         
         const nextSubId = fwdNextSub ? nextProcessSubs.find(s => s.name === fwdNextSub)?.id : undefined;
         // 外注先が複数ある場合のバリデーション
@@ -188,7 +230,7 @@ export default function RoutingPage() {
     };
 
     const handleRegisterWip = async () => {
-        if (!canEdit || !selectedLot || !selectedProc) return;
+        if (!canEdit || restoreOnly || !selectedLot || !selectedProc) return;
         if (currentProcessSubs.length > 0 && !wipSub) {
             showToast("error", "外注先を選択してください");
             return;
@@ -208,7 +250,7 @@ export default function RoutingPage() {
     };
 
     const handleBack = async () => {
-        if (!canEdit || !selectedLot || !selectedProc || !prevTemplate) return;
+        if (!canEdit || restoreOnly || !selectedLot || !selectedProc || !prevTemplate) return;
         if (!Number.isFinite(Number(backQty)) || Number(backQty) <= 0 || Number(backQty) > selectedProcCurrentQty) {
             showToast("error", `差戻数量は現在数（${selectedProcCurrentQty}個）以下の正の数を入力してください`);
             return;
@@ -235,7 +277,7 @@ export default function RoutingPage() {
     };
 
     const handleMoveToInventory = async () => {
-        if (!canEdit || !selectedLot || !selectedProc) return;
+        if (!canEdit || restoreOnly || !selectedLot || !selectedProc) return;
         setLoading(true);
         try {
             await moveToInventory(selectedLot.id, selectedProc.id, Number(fwdQty), warehouseName, fwdCompletionDate, selectedLot.product_id);
@@ -251,7 +293,7 @@ export default function RoutingPage() {
     };
 
     const handleShip = async () => {
-        if (!canEdit || !selectedLot || !selectedProc) return;
+        if (!canEdit || restoreOnly || !selectedLot || !selectedProc) return;
         setLoading(true);
         try {
             await shipAndInvoice(selectedLot.id, selectedProc.id, Number(fwdQty), selectedLot.order_id);
@@ -269,7 +311,7 @@ export default function RoutingPage() {
 
 
     const handleConfirmLoss = async () => {
-        if (!canEdit || !selectedLot || !selectedProc) return;
+        if (!canEdit || restoreOnly || !selectedLot || !selectedProc) return;
         try {
             const r = await confirmLossService(selectedLot.id, selectedProc.id);
             setShowConfirmLoss(false);
@@ -292,6 +334,10 @@ export default function RoutingPage() {
     // moveForward の際に fwdNextSub で指定した外注情報に基づき、次工程を自動的に複製/合流するため、
     // 次工程が存在するかは hasNext に依存する。
 
+    if (!dataLoading && profile && profile.role !== 'admin' && profile.permissions?.routing?.view === false) {
+        return null;
+    }
+
     return (
         <div className="space-y-5 animate-in fade-in duration-300">
             {/* ロット・工程選択 */}
@@ -299,7 +345,7 @@ export default function RoutingPage() {
                 <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">ロット</label>
                     <select value={selectedLotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setSelectedLotId(e.target.value); setSelectedProcessId(""); }}
-                        disabled={!canEdit}
+                        disabled={!canEdit || loading}
                         className={`select-base ${!canEdit ? 'opacity-50 cursor-not-allowed bg-slate-100' : ''}`}>
                         <option value="">{canEdit ? '選択してください' : '閲覧のみ（選択不可）'}</option>
                         {productGroups.map(g => {
@@ -308,7 +354,7 @@ export default function RoutingPage() {
                             return (
                                 <optgroup key={g.id} label={g.name}>
                                     {groupLots.map(l => (
-                                        <option key={l.id} value={l.id}>{l.lot_number} — {l.products?.name} ({l.total_quantity}個)</option>
+                                        <option key={l.id} value={l.id}>{l.lot_number} — {l.products?.name} ({l.total_quantity}個){l.status === "completed" ? "（ロス復活のみ）" : ""}</option>
                                     ))}
                                 </optgroup>
                             );
@@ -319,7 +365,7 @@ export default function RoutingPage() {
                             return (
                                 <optgroup label="未分類">
                                     {unclassifiedLots.map(l => (
-                                        <option key={l.id} value={l.id}>{l.lot_number} — {l.products?.name} ({l.total_quantity}個)</option>
+                                        <option key={l.id} value={l.id}>{l.lot_number} — {l.products?.name} ({l.total_quantity}個){l.status === "completed" ? "（ロス復活のみ）" : ""}</option>
                                     ))}
                                 </optgroup>
                             );
@@ -330,7 +376,7 @@ export default function RoutingPage() {
                     <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">工程</label>
                         <select value={selectedProcessId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedProcessId(e.target.value)}
-                            className="select-base">
+                            disabled={loading} className="select-base">
                             <option value="">選択してください</option>
                             {Object.entries(
                                 lotGroupedProcs.reduce((acc, g) => {
@@ -353,7 +399,7 @@ export default function RoutingPage() {
                 )}
             </div>
 
-            {selectedProc && (needsWipRegistration || (isFirstProcessForWip && selectedProcCurrentQty > 0)) && (
+            {!restoreOnly && selectedProc && (needsWipRegistration || (isFirstProcessForWip && selectedProcCurrentQty > 0)) && (
                 <div className="bg-white rounded-2xl border border-blue-100 shadow-sm p-4 md:p-6 space-y-4 animate-in slide-in-from-top-4 duration-500">
                     <div className="flex items-center gap-3 border-b border-blue-50 pb-4">
                         <div className="bg-blue-600 p-2 rounded-lg text-white"><Loader2 className="w-5 h-5" /></div>
@@ -387,7 +433,7 @@ export default function RoutingPage() {
                 </div>
             )}
 
-            {selectedProc && (selectedProc.status !== "pending" || (isFirstProcessForWip && selectedProcCurrentQty > 0)) && (
+            {selectedProc && (selectedProc.status !== "pending" || (selectedGroup?.loss_qty || 0) > 0 || (isFirstProcessForWip && selectedProcCurrentQty > 0)) && (
                 <>
                     {/* 現工程ステータス */}
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
@@ -401,7 +447,7 @@ export default function RoutingPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* 次工程へ送る */}
-                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-3">
+                        {!restoreOnly && <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-3">
                             <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2"><ArrowRight className="w-4 h-4 text-blue-500" /> 次工程へ送る</h4>
                             <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">数量</label><input type="number" value={fwdQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdQty(e.target.value)} max={selectedProcCurrentQty} className="input-base" placeholder={`最大 ${selectedProcCurrentQty}`} /></div>
                             <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">現工程完了日 *</label><input type="date" value={fwdCompletionDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFwdCompletionDate(e.target.value)} className="input-base" /></div>
@@ -479,11 +525,11 @@ export default function RoutingPage() {
                                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ArrowRight className="w-4 h-4" /> 次工程へ送る</>}
                                 </button>
                             )}
-                        </div>
+                        </div>}
 
                         {/* 差戻し + ロス */}
                         <div className="space-y-4">
-                            {prevTemplate && (
+                            {!restoreOnly && prevTemplate && (
                                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-3">
                                     <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2"><ArrowLeft className="w-4 h-4 text-amber-500" /> 差戻し</h4>
                                     <div><label className="block text-[10px] font-black text-slate-400 mb-1 whitespace-nowrap">数量</label><input type="number" value={backQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const value = e.target.value; setBackQty(value === "" ? "" : String(Math.min(Math.max(0, Number(value)), Math.max(0, selectedProcCurrentQty)))); }} min={0} max={Math.max(0, selectedProcCurrentQty)} className="input-base" /></div>
@@ -512,13 +558,26 @@ export default function RoutingPage() {
                                 </div>
                             )}
 
-                            {selectedProcCurrentQty > 0 && (
+                            {!restoreOnly && selectedProcCurrentQty > 0 && (
                                 <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-4 md:p-5 space-y-3">
                                     <h4 className="font-bold text-sm text-red-600 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> ロス確定</h4>
                                     <p className="text-xs text-slate-500">現在数 {selectedProcCurrentQty}個 を廃棄(ロス)として確定します。</p>
                                     {canEdit && (
                                         <button onClick={() => setShowConfirmLoss(true)} className="w-full bg-red-500 text-white font-bold py-3 rounded-2xl shadow-lg shadow-red-500/20 hover:bg-red-600 active:scale-[0.98] transition-all text-sm">ロス確定</button>
                                     )}
+                                </div>
+                            )}
+                            {canEdit && (selectedGroup?.loss_qty || 0) > 0 && (
+                                <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-4 md:p-5 space-y-3">
+                                    <h4 className="font-bold text-sm text-red-600">ロスから戻す</h4>
+                                    <p className="text-xs text-slate-500">ロス {selectedGroup?.loss_qty}個 のうち、指定した数量をこの工程の現在数へ戻します。</p>
+                                    {!selectedGroup?.subcontractor_id && <p className="text-xs text-red-600">外注先が未設定のため、ロスから戻せません。</p>}
+                                    <label className="block text-xs text-slate-500">戻す数量
+                                        <input type="number" min={1} max={selectedGroup?.loss_qty} step={1} value={restoreQty}
+                                            onChange={e => setRestoreQty(e.target.value)} disabled={loading} className="input-base mt-1" />
+                                    </label>
+                                    <button onClick={() => setShowRestoreLoss(true)} disabled={loading || !validRestoreQuantity}
+                                        className="w-full bg-amber-500 text-white font-bold py-3 rounded-2xl hover:bg-amber-600 disabled:bg-slate-300 text-sm">ロスから戻す</button>
                                 </div>
                             )}
                         </div>
@@ -560,8 +619,10 @@ export default function RoutingPage() {
                 </>
             )}
 
+            <ConfirmDialog open={showRestoreLoss && canEdit && !!selectedGroup} onClose={() => { if (!restoreBusy.current) setShowRestoreLoss(false); }} onConfirm={handleRestoreLoss}
+                title="ロスから戻しますか？" message={`${selectedGroup?.label || ""} のロスから ${restoreQuantity}個を戻します。復元後の現在数は ${selectedProcCurrentQty + restoreQuantity}個です。`} confirmLabel="ロスから戻す" />
             <ConfirmDialog open={showConfirmLoss} onClose={() => setShowConfirmLoss(false)} onConfirm={handleConfirmLoss}
-                title="ロスを確定しますか？" message={`${selectedProcCurrentQty}個を廃棄として記録します。この操作は取り消せません。`} confirmLabel="ロス確定" danger />
+                title="ロスを確定しますか？" message={`${selectedProcCurrentQty}個を廃棄として記録します。`} confirmLabel="ロス確定" danger />
         </div>
     );
 }

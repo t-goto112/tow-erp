@@ -47,8 +47,8 @@ export default function PaymentsPage() {
             unitPrice: pi.unit_price,
             unitPriceOverride: pi.lot_processes?.unit_price_override,
             amount: Math.round(Number(pi.amount) || 0),
-            completionDate: pi.created_at.split('T')[0],
-            voucherDate: pi.voucher_date || pi.created_at.split('T')[0],
+            completionDate: new Date(pi.created_at).toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" }),
+            voucherDate: pi.voucher_date || new Date(pi.created_at).toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" }),
             status: (pi.status as any) || (pi.payments?.status as any) || "wip"
         }));
     }, [paymentItems]);
@@ -56,7 +56,7 @@ export default function PaymentsPage() {
     const [statusFilters, setStatusFilters] = useState<StatusFilter[]>(["wip", "pre_payment", "paid"]);
     const [dateType, setDateType] = useState<"completion" | "voucher">("completion");
     const [dateFrom, setDateFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; });
-    const [dateTo, setDateTo] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(0); return d.toISOString().split("T")[0]; });
+    const [dateTo, setDateTo] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(0); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; });
     const [editId, setEditId] = useState<string | null>(null);
     const [editQty, setEditQty] = useState("");
     const [editPrice, setEditPrice] = useState("");

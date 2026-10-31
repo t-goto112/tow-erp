@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 
@@ -45,6 +45,7 @@ export interface SupabaseOrderItem {
 export interface SupabaseLot {
     id: string;
     lot_number: string;
+    total_quantity: number;
     product_id: string;
     quantity: number;
     status: string;
@@ -161,7 +162,12 @@ export function useSupabaseData() {
 
     const [loading, setLoading] = useState(true);
 
+    const mounted = useRef(false);
+    const fetchVersion = useRef(0);
     const fetchData = useCallback(async (isInitial = false) => {
+        if (!mounted.current) return;
+        const version = ++fetchVersion.current;
+        const isCurrent = () => mounted.current && version === fetchVersion.current;
         try {
             if (isInitial) setLoading(true);
 
@@ -173,8 +179,12 @@ export function useSupabaseData() {
                     .select('full_name, role, permissions')
                     .eq('id', session.user.id)
                     .single();
+                if (!isCurrent()) return;
                 setProfile(profData as any);
             }
+
+            if (!isCurrent()) return;
+            if (!session?.user) setProfile(null);
 
             // 0.5 Fetch Product Groups
             const { data: pgData, error: pgErr } = await supabase
@@ -182,6 +192,7 @@ export function useSupabaseData() {
                 .select('*')
                 .order('sort_order', { ascending: true });
             if (pgErr) throw pgErr;
+            if (!isCurrent()) return;
             setProductGroups(pgData || []);
 
             // 1. Fetch Products
@@ -190,6 +201,7 @@ export function useSupabaseData() {
                 .select('*')
                 .order('sort_order', { ascending: true });
             if (pErr) throw pErr;
+            if (!isCurrent()) return;
             setProducts(pData || []);
 
             // 2. Fetch Orders with Items
@@ -198,6 +210,7 @@ export function useSupabaseData() {
                 .select('*, order_items(*, products(name, product_code:code, group_id))')
                 .order('created_at', { ascending: false });
             if (oErr) throw oErr;
+            if (!isCurrent()) return;
             setOrders(oData || []);
 
             // 3. Fetch Lots with nested processes, process definitions, and deliveries
@@ -206,6 +219,7 @@ export function useSupabaseData() {
                 .select('*, orders(status, order_number), products(name, product_code:code, group_id), lot_processes(*, processes(name, sort_order, group_index, is_active, part_label), subcontractors(id, name), lot_process_deliveries(*))')
                 .order('created_at', { ascending: false });
             if (lErr) throw lErr;
+            if (!isCurrent()) return;
             setLots(lData || []);
 
             // 3.5 Fetch Payments
@@ -222,10 +236,11 @@ export function useSupabaseData() {
                 ...item,
                 amount: Math.round(Number(item.amount) || 0)
             }));
+            if (!isCurrent()) return;
             setPaymentItems(normalizedPiData as any || []);
 
             // ─── 過去の支払明細ステータス＆金額の自動自己修復 ───
-            (async () => {
+            if (isInitial) (async () => {
                 try {
                     // 1. ステータス不整合の修復
                     const { data: mismatchItems, error: mismatchErr } = await supabase
@@ -260,7 +275,7 @@ export function useSupabaseData() {
                             }
                         }
 
-                        if (hasUpdated) {
+                        if (hasUpdated && isCurrent()) {
                             setPaymentItems(prev => prev.map(pi => {
                                 const pStatus = pi.payments?.status;
                                 if (pi.status === 'wip' && pStatus && pStatus !== 'wip') {
@@ -296,31 +311,49 @@ export function useSupabaseData() {
                 .from('inventory')
                 .select('*, products(name, product_code:code)');
             if (iErr) throw iErr;
+            if (!isCurrent()) return;
             setInventory(iData || []);
 
             // 5. Fetch Master Data for routing/processing
             const { data: procData } = await supabase.from('processes').select('*').eq('is_active', true).order('sort_order', { ascending: true });
+            if (!isCurrent()) return;
             setProcesses(procData || []);
 
             const { data: subData } = await supabase.from('subcontractors').select('*');
+            if (!isCurrent()) return;
             setSubcontractors(subData || []);
 
             const { data: whData } = await supabase.from('warehouses').select('*');
+            if (!isCurrent()) return;
             setWarehouses(whData || []);
 
             const { data: ratesData } = await supabase.from('process_subcontractor_rates').select('*, subcontractors(id, name)');
+            if (!isCurrent()) return;
             setProcessRates(ratesData || []);
 
         } catch (error: any) {
+            if (!isCurrent()) return;
             console.error("Failed to fetch data:", error);
             showToast("error", "データの取得に失敗しました");
         } finally {
-            if (isInitial) setLoading(false);
+            if (isCurrent()) setLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        fetchData(true);
+        mounted.current = true;
+        void fetchData(true);
+        const refreshVisible = () => {
+            if (document.visibilityState === 'visible') void fetchData(false);
+        };
+        window.addEventListener('focus', refreshVisible);
+        document.addEventListener('visibilitychange', refreshVisible);
+        return () => {
+            mounted.current = false;
+            ++fetchVersion.current;
+            window.removeEventListener('focus', refreshVisible);
+            document.removeEventListener('visibilitychange', refreshVisible);
+        };
     }, [fetchData]);
 
     return { products, productGroups, orders, lots, inventory, processes, subcontractors, warehouses, processRates, paymentItems, loading, profile, refresh: () => fetchData(false) };

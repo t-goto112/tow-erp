@@ -14,7 +14,7 @@ function service(file, db) {
 
 function database(tables) {
     const writes = [];
-    return { writes, from(table) {
+    return { writes, rpc(name) { assert.ok(['routing_consume_wip', 'sync_routing_status', 'routing_create_payment'].includes(name)); return Promise.resolve({ data: null, error: null }); }, from(table) {
         let op = 'select', payload, single = false, window;
         const filters = [];
         const query = {

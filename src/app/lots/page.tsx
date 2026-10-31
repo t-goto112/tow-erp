@@ -43,9 +43,9 @@ export default function LotsPage() {
             <div className="space-y-3">
                 {lots.map(lot => {
                     const st = statusConfig[lot.status] || statusConfig.created;
-                    const wipQty = lot.lot_processes?.reduce((s, p) => s + p.current_quantity, 0) || 0;
-                    const MathTotalLoss = lot.lot_processes?.reduce((s, p) => s + p.loss_quantity, 0) || 0;
-                    const processList = lot.lot_processes?.sort((a, b) => a.step_order - b.step_order) || [];
+                    const wipQty = lot.lot_processes?.reduce((s, p) => s + ((p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0)), 0) || 0;
+                    const MathTotalLoss = lot.lot_processes?.reduce((s, p) => s + p.loss_qty, 0) || 0;
+                    const processList = [...(lot.lot_processes || [])].sort((a, b) => (a.processes?.group_index || 0) - (b.processes?.group_index || 0) || (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0)) || [];
                     const currentActive = processList.find(p => p.status === "in_progress");
 
                     return (
@@ -61,14 +61,14 @@ export default function LotsPage() {
                                     <p className="text-[10px] text-slate-400 mt-0.5">総数: {lot.total_quantity}個 | 仕掛: {wipQty}個 | ロス: {MathTotalLoss}個</p>
                                 </div>
                                 <div className="text-right">
-                                    {currentActive && <p className="text-xs font-bold text-blue-600">{currentActive.process_name}</p>}
+                                    {currentActive && <p className="text-xs font-bold text-blue-600">{currentActive.processes?.name}</p>}
                                     <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition ml-auto mt-1" />
                                 </div>
                             </div>
                             <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-slate-100">
                                 {processList.map(p => {
                                     const pct = lot.total_quantity > 0 ? (p.completed_quantity / lot.total_quantity) * 100 : 0;
-                                    return <div key={p.id} title={`${p.process_name}: ${p.completed_quantity}完了 / ${p.current_quantity}仕掛`} style={{ width: `${Math.max(pct, 2)}%` }}
+                                    return <div key={p.id} title={`${p.processes?.name}: ${p.completed_quantity}完了 / ${((p.input_quantity || 0) - (p.completed_quantity || 0) - (p.loss_qty || 0))}仕掛`} style={{ width: `${Math.max(pct, 2)}%` }}
                                         className={`rounded-full transition-all ${p.status === "completed" ? "bg-emerald-400" : p.status === "in_progress" ? "bg-blue-400" : "bg-slate-200"}`} />;
                                 })}
                             </div>
@@ -78,7 +78,7 @@ export default function LotsPage() {
                 {lots.length === 0 && <div className="text-center py-20 bg-white rounded-xl border border-dashed border-slate-200"><p className="text-sm text-slate-400">表示するロットがありません</p></div>}
             </div>
 
-            <LotDetailModal lot={selectedLot} onClose={() => setSelectedLot(null)} refresh={refresh} />
+            <LotDetailModal lot={lots.find(lot => lot.id === selectedLot?.id) || null} onClose={() => setSelectedLot(null)} refresh={refresh} />
 
             {/* 新規ロット登録モーダル */}
             <Modal open={isNewOpen} onClose={() => { setIsNewOpen(false); resetForm(); }} title="新規ロット登録" subtitle="受注品目から製造ロットを作成します" width="max-w-2xl">
@@ -131,7 +131,7 @@ function LotDetailModal({ lot, onClose, refresh }: { lot: SupabaseLot | null; on
 
     if (!lot) return null;
 
-    const processList = lot.lot_processes ? [...lot.lot_processes].sort((a, b) => a.step_order - b.step_order) : [];
+    const processList = lot.lot_processes ? [...lot.lot_processes].sort((a, b) => (a.processes?.group_index || 0) - (b.processes?.group_index || 0) || (a.processes?.sort_order || 0) - (b.processes?.sort_order || 0)) : [];
 
     const handleSave = async (processId: string, deliveryId: string) => {
         try {
@@ -158,13 +158,13 @@ function LotDetailModal({ lot, onClose, refresh }: { lot: SupabaseLot | null; on
                         <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
                                 <span className={`w-2 h-2 rounded-full ${proc.status === "completed" ? "bg-emerald-500" : proc.status === "in_progress" ? "bg-blue-500" : "bg-slate-300"}`} />
-                                <span className="font-bold text-sm">{proc.process_name}</span>
+                                <span className="font-bold text-sm">{proc.processes?.name}</span>
                                 <span className="text-[10px] text-slate-400">({proc.subcontractors?.name || "自社"})</span>
                             </div>
                             <div className="flex gap-2 text-[10px] font-bold">
-                                <span className="text-slate-500">現在:{proc.current_quantity}</span>
+                                <span className="text-slate-500">現在:{((proc.input_quantity || 0) - (proc.completed_quantity || 0) - (proc.loss_qty || 0))}</span>
                                 <span className="text-emerald-600">完了:{proc.completed_quantity}</span>
-                                {proc.loss_quantity > 0 && <span className="text-red-500">ロス:{proc.loss_quantity}</span>}
+                                {proc.loss_qty > 0 && <span className="text-red-500">ロス:{proc.loss_qty}</span>}
                             </div>
                         </div>
                         {proc.lot_process_deliveries && proc.lot_process_deliveries.length > 0 ? proc.lot_process_deliveries.map(del => {

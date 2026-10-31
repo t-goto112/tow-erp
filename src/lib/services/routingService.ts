@@ -55,83 +55,14 @@ async function consumePartsIfAssembly(processId: string, templateId: string, qty
 
 // ─── WIP支払の消費 ───
 async function consumeWipPayments(lotProcessId: string, qty: number) {
-    const { data: wipItems } = await supabase
-        .from('payment_items')
-        .select('id, good_quantity, unit_price, amount, payment_id')
-        .eq('lot_process_id', lotProcessId)
-        .eq('status', 'wip')
-        .order('created_at', { ascending: true });
-
-    if (!wipItems) return;
-
-    let remaining = qty;
-    for (const item of wipItems) {
-        if (remaining <= 0) break;
-        const { data: payment } = await supabase
-            .from('payments')
-            .select('id, status, total_amount')
-            .eq('id', item.payment_id)
-            .eq('status', 'wip')
-            .maybeSingle();
-        if (!payment) continue;
-
-        if (item.good_quantity <= remaining) {
-            remaining -= item.good_quantity;
-            await supabase.from('payment_items').delete().eq('id', item.id);
-            const newTotal = Math.max(0, Number(payment.total_amount) - item.amount);
-            if (newTotal <= 0) {
-                await supabase.from('payments').delete().eq('id', payment.id);
-            } else {
-                await supabase.from('payments').update({ total_amount: newTotal }).eq('id', payment.id);
-            }
-        } else {
-            const oldAmount = item.amount;
-            const newItemQty = item.good_quantity - remaining;
-            const newAmount = Math.round(newItemQty * item.unit_price);
-            remaining = 0;
-            await supabase.from('payment_items').update({
-                good_quantity: newItemQty,
-                amount: newAmount
-            }).eq('id', item.id);
-            const diff = oldAmount - newAmount;
-            await supabase.from('payments').update({
-                total_amount: Math.max(0, Number(payment.total_amount) - diff)
-            }).eq('id', payment.id);
-        }
-    }
+    const { error } = await supabase.rpc('routing_consume_wip', { p_process_id: lotProcessId, p_quantity: qty });
+    if (error) throw error;
 }
 
 // ─── ロット・受注ステータス更新 ───
 export async function syncLotAndOrderStatus(lotId: string) {
-    const { data: procs } = await supabase.from('lot_processes').select('*, processes!inner(is_active)').eq('lot_id', lotId).eq('processes.is_active', true);
-    if (!procs) return;
-
-    const { data: lot } = await supabase.from('lots').select('order_id, status').eq('id', lotId).single();
-    if (!lot) return;
-
-    const allCompleted = procs.length > 0 && procs.every((p: any) => p.status === 'completed');
-    const anyInProgress = procs.some((p: any) => p.status === 'in_progress' || p.status === 'completed');
-
-    if (allCompleted) {
-        if (lot.status !== 'completed') {
-            await supabase.from('lots').update({ status: 'completed' }).eq('id', lotId);
-        }
-        if (lot.order_id) {
-            // 受注の自動完了（生産完了ベース）は廃止し、出荷完了（shipAndInvoice等）ベースに統一するため
-            // ここでの受注ステータス更新は行わない。
-            // これにより、出荷が完了するまで「受注残高」に金額が残り続ける。
-        }
-    } else if (anyInProgress) {
-        if (lot.status === 'created' || lot.status === 'pending' || lot.status === 'completed') {
-            await supabase.from('lots').update({ status: 'in_progress' }).eq('id', lotId);
-        }
-        if (lot.order_id) {
-            const { data: ord } = await supabase.from('orders').select('status').eq('id', lot.order_id).single();
-            if (ord && (ord.status === 'pending' || ord.status === 'created' || ord.status === 'completed')) {
-                await supabase.from('orders').update({ status: 'in_progress' }).eq('id', lot.order_id);
-            }
-        }
-    }
+    const { error } = await supabase.rpc('sync_routing_status', { p_lot_id: lotId });
+    if (error) throw error;
 }
 
 // ─── 支払レコード作成 ───
@@ -144,61 +75,12 @@ async function createPaymentItem(
     deliveryId?: string
 ) {
     if (!currentProc.subcontractor_id) return;
-    const date = new Date(completionDate);
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const periodStart = `${date.getFullYear()}-${month}-01`;
-    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-    const periodEnd = `${date.getFullYear()}-${month}-${lastDay}`;
-
-    let unitPrice = overridePrice;
-    if (unitPrice === undefined || unitPrice === null) {
-        const { data: rateData } = await supabase
-            .from('process_subcontractor_rates')
-            .select('unit_price')
-            .eq('process_id', currentProc.process_id)
-            .eq('subcontractor_id', currentProc.subcontractor_id)
-            .maybeSingle();
-        unitPrice = rateData ? rateData.unit_price : 0;
-    }
-    const amount = Math.round(qty * Number(unitPrice));
-
-    const { data: existingPayment } = await supabase
-        .from('payments')
-        .select('id, total_amount')
-        .eq('subcontractor_id', currentProc.subcontractor_id)
-        .eq('period_start', periodStart)
-        .eq('status', paymentStatus)
-        .maybeSingle();
-
-    let paymentId;
-    if (existingPayment) {
-        paymentId = existingPayment.id;
-        await supabase.from('payments').update({
-            total_amount: Number(existingPayment.total_amount) + amount
-        }).eq('id', paymentId);
-    } else {
-        const { data: newPayment, error } = await supabase.from('payments').insert([{
-            subcontractor_id: currentProc.subcontractor_id,
-            period_start: periodStart,
-            period_end: periodEnd,
-            total_amount: amount,
-            status: paymentStatus
-        }]).select().single();
-        if (error) throw error;
-        paymentId = newPayment.id;
-    }
-
-    const { error: piErr } = await supabase.from('payment_items').insert([{
-        payment_id: paymentId,
-        lot_process_id: currentProc.id,
-        lot_process_delivery_id: deliveryId || null,
-        good_quantity: qty,
-        unit_price: Number(unitPrice),
-        amount: amount,
-        status: paymentStatus,
-        voucher_date: new Date(completionDate).toISOString().split('T')[0]
-    }]);
-    if (piErr) throw piErr;
+    const { error } = await supabase.rpc('routing_create_payment', {
+        p_process_id: currentProc.id, p_quantity: qty,
+        p_date: completionDate, p_price: overridePrice ?? null,
+        p_status: paymentStatus, p_delivery_id: deliveryId || null,
+    });
+    if (error) throw error;
 }
 
 // ─── グループ内レコードの取得ヘルパー ───
@@ -599,25 +481,22 @@ export async function shipAndInvoice(
 }
 
 export async function confirmLoss(lotId: string, processId: string) {
-    const { data: leadProc, error: cpErr } = await supabase.from('lot_processes').select('*').eq('id', processId).single();
-    if (cpErr) throw cpErr;
+    const { data, error } = await supabase.rpc('confirm_loss', { p_lot_id: lotId, p_process_id: processId });
+    if (error) throw error;
+    return data;
+}
 
-    const groupRecords = await getGroupRecords(lotId, leadProc.process_id, leadProc.subcontractor_id);
-    let totalLoss = 0;
-
-    for (const proc of groupRecords) {
-        const remaining = (proc.input_quantity || 0) - (proc.completed_quantity || 0) - (proc.loss_qty || 0);
-        if (remaining <= 0) continue;
-
-        await consumeWipPayments(proc.id, remaining);
-        await supabase.from('lot_processes').update({ 
-            loss_qty: (proc.loss_qty || 0) + remaining, 
-            loss_confirmed: true, 
-            status: 'completed' 
-        }).eq('id', proc.id);
-        totalLoss += remaining;
+// ロス復活はDB側で権限・最新数量を検証し、全対象行を一括更新する。
+export async function restoreLoss(lotId: string, processId: string, quantity: number, requestId: string) {
+    if (!Number.isSafeInteger(quantity) || quantity <= 0) {
+        throw new Error('戻す数量は正の整数を入力してください');
     }
-
-    await syncLotAndOrderStatus(lotId);
-    return { ok: true, lossQty: totalLoss };
+    const { data, error } = await supabase.rpc('restore_loss', {
+        p_lot_id: lotId,
+        p_process_id: processId,
+        p_quantity: quantity,
+        p_request_id: requestId
+    });
+    if (error) throw error;
+    return data;
 }
