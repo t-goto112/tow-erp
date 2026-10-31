@@ -24,9 +24,21 @@ function render() { let tree; for (let i = 0; i < 6; i++) { cursor = 0; tree = m
 function nodes(t) { return t && typeof t === 'object' ? [t, ...(t.children || []).flatMap(nodes)] : []; }
 function text(t) { return typeof t === 'string' || typeof t === 'number' ? String(t) : (t?.children || []).map(text).join(''); }
 function find(t, type, content) { return nodes(t).find(n => n.type === type && (!content || text(n).includes(content))); }
-function selectGroup() { let tree = render(); find(tree, 'select').props.onChange({ target: { value: 'l' } }); tree = render(); nodes(tree).filter(n => n.type === 'select')[1].props.onChange({ target: { value: 'a' } }); return render(); }
+function selectGroup() { let tree = render(); if(data.lots[0].status === 'completed') { find(tree, 'button', '完成済').props.onClick(); tree = render(); } find(tree, 'select').props.onChange({ target: { value: 'l' } }); tree = render(); nodes(tree).filter(n => n.type === 'select')[1].props.onChange({ target: { value: 'a' } }); return render(); }
 (async () => {
+  data.lots.push({...data.lots[0], id:'wip-lot', status:'in_progress'}, {...data.lots[0],id:'empty-completed',lot_processes:[proc('no-loss',0)]});
+  let initial = render();
+  assert(nodes(initial).some(n => n.type === 'option' && n.props.value === 'wip-lot'));
+  assert(!nodes(initial).some(n => n.type === 'option' && n.props.value === 'empty-completed'));
+  assert(find(initial, 'button', '仕掛中').props.className.includes('bg-blue-600'));
+  assert(!nodes(initial).some(n => n.type === 'option' && n.props.value === 'l'));
   let tree = selectGroup();
+  assert(find(tree, 'button', '完成済').props.className.includes('bg-blue-600'));
+  assert(!nodes(tree).some(n => n.type === 'option' && n.props.value === 'wip-lot'));
+  assert(nodes(tree).some(n => n.type === 'option' && n.props.value === 'empty-completed'));
+  find(tree, 'button', '仕掛中').props.onClick(); tree = render();
+  assert.equal(find(tree, 'select').props.value, '');
+  tree = selectGroup();
   assert(text(tree).includes('ロスから戻す'));
   for (const label of ['次工程へ送る', '仕掛登録', '差戻す']) assert(!text(tree).includes(label));
   assert.equal(find(tree, 'input').props.value, '7'); assert.equal(find(tree, 'input').props.max, 7);

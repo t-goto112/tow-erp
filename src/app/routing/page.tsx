@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ArrowLeft, AlertTriangle, Loader2, Check, ClipboardList } from "lucide-react";
+import { ArrowRight, ArrowLeft, AlertTriangle, Loader2, Check, ClipboardList, Box, Layers } from "lucide-react";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { useSupabaseData, SupabaseLot, SupabaseLotProcess } from "@/lib/useSupabaseData";
@@ -20,6 +20,7 @@ export default function RoutingPage() {
         }
     }, [dataLoading, profile, router]);
 
+    const [lotTab, setLotTab] = useState<"wip" | "completed">("wip");
     const [selectedLotId, setSelectedLotId] = useState("");
     const [selectedProcessId, setSelectedProcessId] = useState("");
 
@@ -58,7 +59,7 @@ export default function RoutingPage() {
     const activeLots = lots.filter(l =>
         !["cancelled", "canceled"].includes(l.status) &&
         !["cancelled", "canceled"].includes(l.orders?.status || "") &&
-        (l.status !== "completed" || l.lot_processes?.some(p => p.processes?.is_active && p.loss_qty > 0))
+        (lotTab === "completed" ? l.status === "completed" : l.status !== "completed")
     );
     const selectedLot = activeLots.find(l => l.id === selectedLotId) || null;
     
@@ -95,7 +96,7 @@ export default function RoutingPage() {
                 grouped[key].records.push(p);
             }
         });
-        return Object.values(grouped).filter(g => !restoreOnly || g.loss_qty > 0);
+        return Object.values(grouped);
     }, [selectedLot, restoreOnly]);
 
     // Use a grouping-based selection instead of a single record ID
@@ -122,6 +123,7 @@ export default function RoutingPage() {
             }
             await restoreLoss(selectedLot.id, selectedGroup.id, restoreQuantity, restoreRequest.current.id);
             restoreRequest.current = null;
+            setLotTab("wip");
             setShowRestoreLoss(false);
             setSelectedProcessId("");
             showToast("success", `${restoreQuantity}個をロスから戻しました`);
@@ -340,6 +342,14 @@ export default function RoutingPage() {
 
     return (
         <div className="space-y-5 animate-in fade-in duration-300">
+            <div className="flex gap-1 bg-white rounded-xl p-1 border border-slate-200 shadow-sm w-fit">
+                <button disabled={loading} onClick={() => { if (lotTab !== "wip") { setLotTab("wip"); setSelectedLotId(""); setSelectedProcessId(""); setShowRestoreLoss(false); setShowConfirmLoss(false); } }} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition flex items-center gap-1.5 ${lotTab === "wip" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
+                    <Layers size={14} /> 仕掛中
+                </button>
+                <button disabled={loading} onClick={() => { if (lotTab !== "completed") { setLotTab("completed"); setSelectedLotId(""); setSelectedProcessId(""); setShowRestoreLoss(false); setShowConfirmLoss(false); } }} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition flex items-center gap-1.5 ${lotTab === "completed" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
+                    <Box size={14} /> 完成済
+                </button>
+            </div>
             {/* ロット・工程選択 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
